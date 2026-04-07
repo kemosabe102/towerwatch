@@ -25,7 +25,7 @@ static byte mac[] = ETH_MAC;
 // The Uno has no RTC, so we estimate time from millis() offset.
 // Set BOOT_TIMESTAMP to the Unix epoch time when you flash the sketch.
 // You can get it from: date +%s
-#define BOOT_TIMESTAMP 1709312400UL
+#define BOOT_TIMESTAMP 1775523939UL
 
 static uint32_t bootTimestamp = BOOT_TIMESTAMP;
 static uint32_t lastTestMillis = 0;
@@ -44,10 +44,7 @@ void setup() {
   Serial.println(F("Initializing..."));
 #endif
 
-  // Enable watchdog timer (8-second timeout)
-  wdt_enable(WDTO_8S);
-
-  // --- Initialize Ethernet ---
+  // --- Initialize Ethernet (before watchdog — DHCP can take >8s) ---
 #if DEBUG_SERIAL
   Serial.println(F("Ethernet init..."));
 #endif
@@ -72,6 +69,8 @@ void setup() {
   Ethernet.begin(mac, ip, dns, gw, sn);
 #endif
 
+  // Enable watchdog timer now that slow init is done
+  wdt_enable(WDTO_8S);
   wdt_reset();
 
 #if DEBUG_SERIAL

@@ -31,6 +31,7 @@
 #define PING_COUNT            5        // Pings per burst (for jitter calc)
 #define PING_LOSS_COUNT       10       // Pings for packet-loss measurement
 #define PING_TIMEOUT_MS       3000     // Timeout per ping in ms
+#define PING_TCP_PORT         53       // TCP port used for RTT probes (Google DNS)
 
 // --- SD Card ---
 #define SD_CS_PIN             4        // Chip select for SD card module
