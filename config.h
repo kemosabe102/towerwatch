@@ -48,7 +48,7 @@ const char GRAFANA_HOST[] PROGMEM = "prometheus-prod-67-prod-us-west-0.grafana.n
 #define GRAFANA_PORT 443
 
 // Path for Influx write endpoint
-const char GRAFANA_PATH[] PROGMEM = "/api/v1/push/influx/write";
+const char GRAFANA_PATH[] PROGMEM = "/api/v1/push/influx/write?precision=s";
 
 // Grafana Cloud Basic Auth — loaded from secrets.h (gitignored).
 // See secrets.h for instructions on generating the base64 value.
