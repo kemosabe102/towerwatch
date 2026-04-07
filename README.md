@@ -2,6 +2,73 @@
 
 Continuously monitors latency, jitter, and packet loss on your 5G connection to build an evidence dataset for your cellular provider.
 
+---
+
+## Pre-Deployment Checklist
+
+Complete this checklist at home before going to the remote location. Work through it top to bottom — each section depends on the previous one passing.
+
+### Hardware
+
+- [ ] Ethernet shield is firmly seated on the Arduino (all pins engaged, no tilt)
+- [ ] SD card module is wired to the correct Arduino pins (CS→4, MOSI→11, MISO→12, SCK→13, VCC→5V, GND→GND)
+- [ ] MicroSD card is inserted into the SD module
+- [ ] Ethernet cable is plugged into the shield and into your home router
+- [ ] Arduino is powered via USB (laptop or wall charger)
+
+### Firmware
+
+- [ ] `secrets.h` exists in the project folder on this machine (not committed — check with `ls` or File Explorer)
+- [ ] `BOOT_TIMESTAMP` in `towerwatch.ino` line 28 is set to a recent value (run `date +%s` to confirm it's within the last few days)
+- [ ] Sketch compiles without errors (click ✓ Verify in Arduino IDE)
+- [ ] Sketch uploaded to the Arduino successfully
+
+### Boot Verification (Serial Monitor at 115200 baud)
+
+- [ ] `Ethernet init...` appears without the device restarting in a loop
+- [ ] `IP: x.x.x.x` appears with a valid local IP address (not 0.0.0.0)
+- [ ] `SD init OK` appears
+- [ ] `Ready. Monitoring...` appears
+
+### Cycle Verification (wait up to 30 seconds after boot)
+
+- [ ] `--- Cycle t=XXXXXXXXXX ---` appears with a reasonable Unix timestamp (should be close to current time)
+- [ ] `RTT avg=XX` shows non-zero values (confirms TCP probes are reaching the internet)
+- [ ] `loss=0%` or low packet loss (a little loss is okay, 100% means no connectivity)
+- [ ] `Pushed X rows` appears (confirms Grafana credentials are valid and data is being accepted)
+
+### SD Card Verification
+
+- [ ] Power off the Arduino, remove the SD card, plug it into your laptop
+- [ ] `metrics.csv` exists on the card
+- [ ] Open it — rows should look like: `1744012345,45,32,67,35,0,1`
+- [ ] Timestamp in the first column is a recent Unix time (not from 2024)
+- [ ] Re-insert SD card before continuing
+
+### Grafana Verification
+
+- [ ] Log in to [grafana.com](https://grafana.com) → your stack → Explore
+- [ ] Select your Prometheus data source
+- [ ] Query for `towerwatch` — data points should be visible
+- [ ] Confirm fields: `rtt_avg`, `rtt_min`, `rtt_max`, `jitter`, `pkt_loss`, `connected`
+- [ ] Timestamps on the data points match when the device was running (not hours/days off)
+
+### Outage Simulation
+
+- [ ] With the device running and Serial Monitor open, unplug the Ethernet cable
+- [ ] Confirm Serial Monitor shows connection going DOWN and metrics still cycling (buffering to SD)
+- [ ] Re-plug the Ethernet cable
+- [ ] Confirm Serial Monitor shows connection coming UP and `Pushed X rows` (buffered data flushed)
+- [ ] Check Grafana — the buffered rows from during the outage should now appear
+
+### Soak Test
+
+- [ ] Leave the device running for at least 30 minutes unattended
+- [ ] Return and confirm the Serial Monitor is still cycling (device hasn't crashed or locked up)
+- [ ] Confirm Grafana shows continuous data points with no unexplained gaps
+
+---
+
 ## Hardware
 
 | Component | Notes |
