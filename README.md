@@ -104,22 +104,43 @@ journalctl -u towerwatch -f
 
 ---
 
+## Local Testing (Windows)
+
+The monitoring script is cross-platform. Test the full push pipeline from your dev machine before deploying to the Pi:
+
+```bash
+cd pi
+cp secrets.py.example secrets.py
+# Edit secrets.py with your Grafana Cloud + Loki credentials
+pip install requests dnspython
+python towerwatch.py
+```
+
+For testing, set `SPEEDTEST_INTERVAL_S = 900` in `config.py` (15 min instead of 6 hours) to get speedtest data faster. Download the [Ookla speedtest CLI](https://www.speedtest.net/apps/cli) and extract to `pi/speedtest_bin/`.
+
+Platform differences (ping flags, paths, data partition) are handled automatically. M6 signal polling will fail gracefully (expected — no M6 router on your home network).
+
+**Verify in Grafana Cloud:**
+- Metrics: Explore → `grafanacloud-towerwatch-prom` → query `towerwatch_connected`
+- Logs: Explore → `grafanacloud-towerwatch-logs` → query `{job="towerwatch"} | json | event="service_started"`
+
+---
+
 ## Grafana Dashboard
 
-A pre-built dashboard is included at `grafana/dashboard.json` with 12 panels:
+A pre-built dashboard is included at `grafana/dashboard.json` with 13 panels:
 
 - **Connection Uptime** — headline evidence number
 - **Current Status** — live UP/DOWN indicator
-- **Latency (RTT)** — avg/min/max with shaded band, per target
-- **Packet Loss** — with threshold coloring
-- **Jitter** — with threshold coloring
+- **Speedtest Health** — OK/FAILING indicator
+- **Google / Cloudflare / Gateway** — per-endpoint RTT avg+max and jitter (small multiples, log2 scale)
+- **Packet Loss** — per target with threshold shading
 - **DNS Resolution Time** — per nameserver
 - **TCP Connection Time** — real-world app readiness
 - **HTTP Download Time** — lightweight throughput proxy (every 5 min)
 - **Download/Upload Speed** — Ookla speedtest (every 6 hours)
-- **Speedtest Health** — OK/FAILING indicator
-- **Collection Duration** — meta-health monitoring
 - **M6 Signal Quality** — RSRP, RSRQ, SINR from the router
+- **Towerwatch Event Log** — live Loki log stream
 
 Import: Grafana Cloud → Dashboards → New → Import → Upload JSON → select datasource.
 

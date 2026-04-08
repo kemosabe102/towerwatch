@@ -4,47 +4,60 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Towerwatch is an Arduino Uno R3 firmware that monitors 5G connection quality (latency, jitter, packet loss) via TCP probes and pushes metrics to Grafana Cloud. It buffers data to SD card during outages and flushes when connectivity returns.
+Towerwatch is a 5G connection quality monitor that runs on a Raspberry Pi 3B. It continuously measures latency, jitter, packet loss, DNS resolution, TCP connection time, HTTP download speed, Ookla speedtest throughput, and Netgear M6 signal quality — then pushes metrics to Grafana Cloud (Prometheus via Influx line protocol) and structured logs to Loki.
 
-**Target hardware:** Arduino Uno R3 (ATmega328P, 2KB RAM, 32KB flash) + W5100/W5500 Ethernet Shield + SPI SD card module.
+**Goal:** Build an evidence dataset of poor 5G connection quality to present to a cellular provider.
 
-## Build and Upload
+**Target hardware:** Raspberry Pi 3B with wired Ethernet to a Netgear Nighthawk M6 5G hotspot.
+**Archived:** The original Arduino Uno implementation is preserved in `arduino/` — it was replaced because the Uno has no TLS support and Grafana Cloud requires HTTPS.
 
-This is an Arduino sketch — build and upload via **Arduino IDE**:
+## Running Locally (Windows Testing)
 
-1. Open `towerwatch.ino` (File → Open) — all `.h`/`.cpp` tabs load automatically
-2. Board: **Tools → Board → Arduino AVR Boards → Arduino Uno**
-3. Port: **Tools → Port → COM?** (whichever port the USB-connected Arduino appears on)
-4. Verify (compile): click **✓** button
-5. Upload: click **→** button
+The script is cross-platform. To test from a Windows machine:
 
-No external library dependencies — only built-in Arduino libraries (`Ethernet`, `SD`, `SPI`).
+```bash
+cd pi
+cp secrets.py.example secrets.py   # fill in Grafana + Loki credentials
+pip install requests dnspython
+python towerwatch.py                # Ctrl+C to stop
+```
 
-There is no test framework or linter configured for this project.
+Platform differences handled automatically via `sys.platform`:
+- Ping: `-n`/`-w` (Windows) vs `-c`/`-W` (Linux)
+- Paths: `./data/` (Windows) vs `/opt/towerwatch/data/` (Linux)
+- Speedtest binary: `./speedtest_bin/speedtest.exe` (Windows) vs `/usr/bin/speedtest` (Linux)
+- Data partition: skips `mountpoint` check on Windows
+
+M6 signal polling and speedtest will fail gracefully if unavailable — this is expected on Windows.
 
 ## Architecture
 
-The main loop in `towerwatch.ino` runs a 30-second cycle:
+`pi/towerwatch.py` is a persistent Python process (systemd `Type=simple` on Pi) running a 30-second loop:
 
-1. **`network_test`** — Opens TCP connections to 8.8.8.8:53 (configurable in `config.h`), runs probe bursts, computes RTT stats and packet loss into a `PingResult` struct
-2. **`connection_state`** — State machine tracking up/down transitions and outage durations
-3. **`storage`** — Appends CSV rows to `metrics.csv` on SD card; provides read/flush for the push buffer
-4. **`metrics_push`** — Reads buffered CSV rows from SD, formats as Influx line protocol, POSTs to Grafana Cloud over HTTPS
+1. **ICMP ping** — 10-probe burst to 3 targets (Google, Cloudflare, Gateway), parses RTT avg/min/max, jitter (RFC 3550), packet loss
+2. **TCP connect** — socket handshake timing to 8.8.8.8:443
+3. **DNS resolution** — dnspython with explicit nameservers (bypasses systemd-resolved)
+4. **M6 signal** — polls router admin API for RSRP/RSRQ/SINR/band
+5. **HTTP download** (every 5 min) — timed 500KB fetch from Cloudflare CDN
+6. **Speedtest** (every 6 hours) — Ookla CLI via subprocess with 120s timeout
+7. **Push metrics** — Influx line protocol to Grafana Cloud Prometheus
+8. **Push logs** — structured JSON to Grafana Cloud Loki (fire-and-forget)
+9. **Buffer on failure** — atomic CSV write to writable partition, flush on reconnect
 
-Each module follows the pattern: `*Init()` called once in `setup()`, then per-cycle functions called in `loop()`.
+## Key Files
 
-## Key Constraints
+- `pi/config.py` — All constants: `PROBE_TARGETS` (ip, label) tuples, intervals, Loki config, `LOG_EVENT_*` identifiers
+- `pi/secrets.py` — **Gitignored**. Grafana + Loki credentials. Copy from `secrets.py.example`
+- `pi/install.sh` — One-shot Pi setup: deps, speedtest CLI, data partition, Tailscale, systemd
+- `grafana/dashboard.json` — 13-panel dashboard, import directly into Grafana Cloud
 
-- **2KB RAM limit** — All string literals must use `F()` macro. No `String` class — only `char[]` buffers. Constant data uses `PROGMEM`. Current usage: ~1280 bytes (62%).
-- **SPI bus sharing** — SD card (CS pin 4) and Ethernet shield (CS pin 10) share the SPI bus; only one can be active at a time.
-- **Watchdog timer** — 8-second WDT is enabled after DHCP completes. All blocking operations must call `wdt_reset()` periodically.
-- **No RTC** — Timestamps are estimated from `BOOT_TIMESTAMP` + `millis()`. Must be updated before each deployment flash.
+## Metric Naming
 
-## Configuration
+Influx line protocol fields become Prometheus metrics as `towerwatch_{field_name}`. Target labels are baked into field names (e.g., `rtt_avg_google`, `jitter_cloudflare`) — not Prometheus label selectors. Units are `_ms` throughout (not Prometheus-standard seconds).
 
-- `config.h` — All tuneable constants (network settings, test parameters, Grafana endpoint, intervals, pin assignments)
-- `secrets.h` — **Gitignored**. Contains base64-encoded Grafana Cloud credentials in `PROGMEM`. Must be created manually per machine (see README for format).
+## Observability
 
-## Serial Debugging
-
-Set `DEBUG_SERIAL 1` in `config.h` (default). Monitor at 115200 baud. Set to `0` to save RAM in production.
+- **Metrics**: pushed to Grafana Cloud Prometheus via Influx line protocol (`/api/v1/push/influx/write?precision=s`)
+- **Logs**: pushed directly to Loki HTTP API from Python (no sidecar — Grafana Alloy doesn't run on Pi 3B). Each log entry has a stable `event` field for LogQL filtering (e.g., `| json | event="ping_failed"`)
+- **Log levels**: controlled by `LOKI_PUSH_LEVEL` in config.py. Use `INFO` for home testing, `WARN` in production
+- **Deferred warnings**: boot-time warnings (before network is up) are queued and flushed on first successful metric push
