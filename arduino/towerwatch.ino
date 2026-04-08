@@ -25,7 +25,7 @@ static byte mac[] = ETH_MAC;
 // The Uno has no RTC, so we estimate time from millis() offset.
 // Set BOOT_TIMESTAMP to the Unix epoch time when you flash the sketch.
 // You can get it from: date +%s
-#define BOOT_TIMESTAMP 1775523939UL
+#define BOOT_TIMESTAMP 1775602468UL
 
 static uint32_t bootTimestamp = BOOT_TIMESTAMP;
 static uint32_t lastTestMillis = 0;

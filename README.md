@@ -1,293 +1,166 @@
 # Towerwatch — 5G Cell Tower Network Quality Monitor
 
-Continuously monitors latency, jitter, and packet loss on your 5G connection to build an evidence dataset for your cellular provider.
+Continuously monitors latency, jitter, packet loss, DNS resolution, TCP connection time, throughput, and cellular signal quality on your 5G connection to build an evidence dataset for your cellular provider.
+
+**Platform:** Raspberry Pi 3B (or newer) with wired Ethernet to a Netgear Nighthawk M6 5G hotspot.
 
 ---
 
-## Pre-Deployment Checklist
+## What It Measures
 
-Complete this checklist at home before going to the remote location. Work through it top to bottom — each section depends on the previous one passing.
+| Metric | Method | Interval |
+|--------|--------|----------|
+| RTT avg/min/max | ICMP ping (10 probes) to Google, Cloudflare, carrier gateway | 30s |
+| Jitter | Std deviation of RTT (RFC 3550) | 30s |
+| Packet loss | ICMP loss percentage | 30s |
+| Connection state | Binary up/down with outage tracking | 30s |
+| DNS resolution time | dnspython with explicit nameserver (bypasses cache) | 30s |
+| TCP connection time | Socket connect to 8.8.8.8:443 | 30s |
+| M6 signal quality | RSRP, RSRQ, SINR, band from M6 admin API | 30s |
+| HTTP download time | Timed 500KB fetch from Cloudflare CDN | 5 min |
+| Download/upload speed | Ookla official CLI | 6 hours |
 
-### Hardware
-
-- [ ] Ethernet shield is firmly seated on the Arduino (all pins engaged, no tilt)
-- [ ] SD card module is wired to the correct Arduino pins (CS→4, MOSI→11, MISO→12, SCK→13, VCC→5V, GND→GND)
-- [ ] MicroSD card is inserted into the SD module
-- [ ] Ethernet cable is plugged into the shield and into your home router
-- [ ] Arduino is powered via USB (laptop or wall charger)
-
-### Firmware
-
-- [ ] `secrets.h` exists in the project folder on this machine (not committed — check with `ls` or File Explorer)
-- [ ] `BOOT_TIMESTAMP` in `towerwatch.ino` line 28 is set to a recent value (run `date +%s` to confirm it's within the last few days)
-- [ ] Sketch compiles without errors (click ✓ Verify in Arduino IDE)
-- [ ] Sketch uploaded to the Arduino successfully
-
-### Boot Verification (Serial Monitor at 115200 baud)
-
-- [ ] `Ethernet init...` appears without the device restarting in a loop
-- [ ] `IP: x.x.x.x` appears with a valid local IP address (not 0.0.0.0)
-- [ ] `SD init OK` appears
-- [ ] `Ready. Monitoring...` appears
-
-### Cycle Verification (wait up to 30 seconds after boot)
-
-- [ ] `--- Cycle t=XXXXXXXXXX ---` appears with a reasonable Unix timestamp (should be close to current time)
-- [ ] `RTT avg=XX` shows non-zero values (confirms TCP probes are reaching the internet)
-- [ ] `loss=0%` or low packet loss (a little loss is okay, 100% means no connectivity)
-- [ ] `Pushed X rows` appears (confirms Grafana credentials are valid and data is being accepted)
-
-### SD Card Verification
-
-- [ ] Power off the Arduino, remove the SD card, plug it into your laptop
-- [ ] `metrics.csv` exists on the card
-- [ ] Open it — rows should look like: `1744012345,45,32,67,35,0,1`
-- [ ] Timestamp in the first column is a recent Unix time (not from 2024)
-- [ ] Re-insert SD card before continuing
-
-### Grafana Verification
-
-- [ ] Log in to [grafana.com](https://grafana.com) → your stack → Explore
-- [ ] Select your Prometheus data source
-- [ ] Query for `towerwatch` — data points should be visible
-- [ ] Confirm fields: `rtt_avg`, `rtt_min`, `rtt_max`, `jitter`, `pkt_loss`, `connected`
-- [ ] Timestamps on the data points match when the device was running (not hours/days off)
-
-### Outage Simulation
-
-- [ ] With the device running and Serial Monitor open, unplug the Ethernet cable
-- [ ] Confirm Serial Monitor shows connection going DOWN and metrics still cycling (buffering to SD)
-- [ ] Re-plug the Ethernet cable
-- [ ] Confirm Serial Monitor shows connection coming UP and `Pushed X rows` (buffered data flushed)
-- [ ] Check Grafana — the buffered rows from during the outage should now appear
-
-### Soak Test
-
-- [ ] Leave the device running for at least 30 minutes unattended
-- [ ] Return and confirm the Serial Monitor is still cycling (device hasn't crashed or locked up)
-- [ ] Confirm Grafana shows continuous data points with no unexplained gaps
+All metrics push to Grafana Cloud over HTTPS using Influx line protocol. During outages, data buffers to a local CSV and flushes when connectivity returns.
 
 ---
 
 ## Hardware
 
 | Component | Notes |
-|---|---|
-| Arduino Uno R3 | ATmega328P, 2KB RAM, 32KB flash |
-| Ethernet Shield | W5100 or W5500, stacks directly on top of Uno — no wiring needed |
-| SD Card Module | SPI breakout (~$2-5), with any microSD card >= 1GB, wiped/formatted FAT32 |
-| Ethernet Cable | Cat5e or Cat6, any length. Connects Ethernet shield to router |
-| USB Wall Charger | Any 5V/1A+ phone charger. Powers the Arduino at the deployment location |
-| USB-A to USB-B cable | The square "printer-style" connector — plugs into the Arduino Uno |
+|-----------|-------|
+| Raspberry Pi 3B | Built-in 10/100 Ethernet, 1GB RAM |
+| MicroSD card (32GB) | Samsung or SanDisk recommended for reliability |
+| Heatsink kit | Passive — prevents thermal throttling |
+| 5V/2.5A micro-USB power supply | Must be 2.5A+; underpowered supplies cause random reboots |
+| Ethernet cable | Cat5e/Cat6, connects Pi to M6 router |
+| Case (optional) | Dust/short protection at remote site |
 
-### Router Notes — Netgear Nighthawk M6
+### Router: Netgear Nighthawk M6
 
-The Ethernet port on the M6 is **disabled by default**. Before deploying:
-
-1. Connect to the M6's WiFi on your phone or laptop
-2. Go to `192.168.1.1` in a browser
-3. Navigate to Advanced Settings and enable the Ethernet port
-4. Plug the M6 into wall power (USB-C) and enable Plugged-In Mode so it runs off the outlet instead of battery
+Enable the Ethernet port before deploying:
+1. Connect to M6 WiFi → go to `192.168.1.1`
+2. Advanced Settings → enable Ethernet port
+3. Enable Plugged-In Mode (USB-C power, runs off outlet)
 
 ---
 
-## Wiring
+## Quick Start
 
-### Ethernet Shield
-Stacks directly onto the Uno — no wiring needed. Uses:
-- **Pin 10**: Ethernet chip select (CS)
-- **Pins 11, 12, 13**: SPI bus (shared with SD module)
+### 1. Flash SD Card
 
-### SD Card Module
-Connect to the Arduino with a separate chip select pin:
+- Download [Raspberry Pi OS Lite](https://www.raspberrypi.com/software/) (64-bit, no desktop)
+- Flash with Raspberry Pi Imager
+- In Imager settings: enable SSH, set hostname to `towerwatch`, set password
+- After flashing, create a third partition (1GB, ext4) for persistent data storage
 
-| SD Module Pin | Arduino Pin |
-|---|---|
-| CS | **4** |
-| MOSI | 11 (shared with Ethernet) |
-| MISO | 12 (shared with Ethernet) |
-| SCK | 13 (shared with Ethernet) |
-| VCC | 5V |
-| GND | GND |
+### 2. First Boot
 
----
+```bash
+ssh pi@towerwatch.local
+sudo apt update && sudo apt upgrade -y
+```
 
-## First-Time Setup (do this once at home)
+### 3. Install Towerwatch
 
-### 1. Install Arduino IDE
-Download from [arduino.cc](https://www.arduino.cc/en/software). Install with default options.
-
-### 2. No extra libraries needed
-The sketch uses only built-in Arduino libraries (`Ethernet`, `SD`, `SPI`). No Library Manager installs required.
-
-### 3. Clone the repo
 ```bash
 git clone git@github.com:kemosabe102/towerwatch.git
+cd towerwatch/pi
+cp secrets.py.example secrets.py
+# Edit secrets.py with your Grafana Cloud credentials
+sudo bash install.sh
 ```
 
-### 4. Open the sketch
-File → Open → navigate to `towerwatch.ino`. Multiple tabs will appear — that's normal.
+### 4. Install Tailscale (remote access)
 
-### 5. Set your board and port
-- **Tools → Board → Arduino AVR Boards → Arduino Uno**
-- **Tools → Port → COM?** (plug in the Arduino via USB first — it will appear automatically)
-
-### 6. Pre-compile (warms up the cache for fast uploads later)
-Click the **✓ (Verify)** button. This compiles everything once so future uploads only recompile the changed file. Takes 30-60 seconds the first time.
-
-### 7. Set up Grafana credentials
-Credentials are stored in `secrets.h` which is gitignored and never committed. You must create this file locally on any machine you use to flash the device.
-
-Create `secrets.h` in the project folder with this content:
-```cpp
-#ifndef SECRETS_H
-#define SECRETS_H
-
-#include <avr/pgmspace.h>
-
-// Generate with: echo -n 'YOUR_USER_ID:YOUR_API_KEY' | base64
-const char GRAFANA_BASIC_AUTH[] PROGMEM = "YOUR_BASE64_HERE";
-
-#endif
-```
-
-To generate the base64 value:
 ```bash
-echo -n '3009582:YOUR_API_KEY' | base64
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
 ```
 
-Replace `YOUR_API_KEY` with your Grafana Cloud API token (MetricsPublisher role).
-Your instance ID is `3009582` and your metrics endpoint is:
-`https://prometheus-prod-67-prod-us-west-0.grafana.net`
+### 5. Configure Read-Only Filesystem
 
----
+**Do NOT use `raspi-config` Overlay File System** — there is a confirmed bug in Bookworm that overlays all partitions including the data partition, making it non-persistent.
 
-## Deploying to the Remote Location
-
-Bring with you:
-- The Arduino (already flashed from home is fine)
-- Laptop with this repo cloned and Arduino IDE installed
-- Ethernet cable
-- USB wall charger + USB-A to USB-B cable
-- The SD card (inserted into the SD module)
-
-### Step 1 — Update the timestamp
-
-The Arduino has no real-time clock. Before each power-on deployment, update `BOOT_TIMESTAMP` in `towerwatch.ino` line 28 to the current Unix time so Grafana timestamps are accurate.
-
-Get the current Unix time:
+Instead, manually configure:
 ```bash
-date +%s
+# Create the config file
+echo 'overlayroot=tmpfs:recurse=0' | sudo tee /etc/overlayroot.local.conf
 ```
 
-Add ~30 seconds to account for compile and upload time. Then update line 28:
-```cpp
-#define BOOT_TIMESTAMP 1744XXXXXXUL   // paste your value here
+The `recurse=0` flag prevents the overlay from applying to the data partition.
+
+**Before enabling overlayfs**, verify that `install.sh` has already:
+- Symlinked `/var/lib/tailscale/` → `/opt/towerwatch/data/tailscale-state/`
+- Configured fakehwclock to write to the data partition
+
+### 6. Reboot and Verify
+
+```bash
+sudo reboot
+# After reboot:
+sudo systemctl status towerwatch
+journalctl -u towerwatch -f
 ```
-
-### Step 2 — Upload
-
-1. Plug Arduino into laptop via USB
-2. Confirm board is **Arduino Uno** and port is correct (Tools menu)
-3. Click the **→ (Upload)** button
-4. Wait ~20-30 seconds for upload to complete
-
-### Step 3 — Verify via Serial Monitor (optional but recommended)
-
-Tools → Serial Monitor → set baud rate to **115200**
-
-You should see:
-```
-=== Towerwatch ===
-Initializing...
-Ethernet init...
-IP: 192.168.x.x
-SD init OK
-Ready. Monitoring...
-Interval: 30s
-```
-
-Then every 30 seconds:
-```
---- Cycle t=1744XXXXXX ---
-RTT avg=45 min=32 max=67 jitter=35 loss=0%
-Pushed 1 rows
-Outages: 0 Total downtime: 0s
-Buffer: 0 bytes
-```
-
-If you see the IP address and `SD init OK`, everything is working. Close the Serial Monitor.
-
-### Step 4 — Deploy
-
-1. Unplug USB from laptop
-2. Plug in USB wall charger for power
-3. Plug in Ethernet cable to shield and to M6 router
-4. The device starts monitoring automatically — no button press needed
 
 ---
 
-## Timestamp Accuracy
+## Grafana Dashboard
 
-The Uno has no battery-backed clock. Every time it powers on, it starts counting from `BOOT_TIMESTAMP`. This means:
+A pre-built dashboard is included at `grafana/dashboard.json` with 12 panels:
 
-- If you re-flash right before deploying (Step 1 above), timestamps are accurate to within ~30 seconds
-- If you power-cycle the device without re-flashing, timestamps reset to `BOOT_TIMESTAMP` again — they will be behind by however long the device was off
-- Timestamps drift ~1-2 seconds per day while running
-- For a future upgrade, a DS3231 RTC module (~$2) eliminates all of this
+- **Connection Uptime** — headline evidence number
+- **Current Status** — live UP/DOWN indicator
+- **Latency (RTT)** — avg/min/max with shaded band, per target
+- **Packet Loss** — with threshold coloring
+- **Jitter** — with threshold coloring
+- **DNS Resolution Time** — per nameserver
+- **TCP Connection Time** — real-world app readiness
+- **HTTP Download Time** — lightweight throughput proxy (every 5 min)
+- **Download/Upload Speed** — Ookla speedtest (every 6 hours)
+- **Speedtest Health** — OK/FAILING indicator
+- **Collection Duration** — meta-health monitoring
+- **M6 Signal Quality** — RSRP, RSRQ, SINR from the router
 
-**Rule of thumb:** Re-flash with a fresh timestamp any time you power-cycle the device at the deployment location.
+Import: Grafana Cloud → Dashboards → New → Import → Upload JSON → select datasource.
 
----
+### Alerting
 
-## How It Works
-
-```
-Every 30 seconds:
-  1. Open TCP connections to 8.8.8.8:53 (Google DNS) — 10 probes
-  2. Compute avg/min/max RTT, jitter, packet loss from probe results
-  3. Write CSV row to SD card
-  4. If connected, POST buffered rows to Grafana Cloud
-  5. On successful push, flush SD buffer
-  6. Track connection state transitions (outage start/end)
-```
-
-### During Outages
-When the connection is down, metrics buffer to the SD card as CSV. At ~60 bytes/row and one row per 30 seconds, a 1GB SD card holds years of data. When connectivity returns, buffered data is pushed to Grafana Cloud automatically.
-
-### Metrics Collected
-| Field | Description |
-|---|---|
-| `rtt_avg` | Average round-trip time in ms |
-| `rtt_min` | Minimum RTT in ms |
-| `rtt_max` | Maximum RTT in ms |
-| `jitter` | RTT variance (max - min) in ms |
-| `pkt_loss` | Packet loss percentage (0–100) |
-| `connected` | 1 = up, 0 = down |
+Set up a "no data" alert in Grafana Cloud: if no `towerwatch_connected` data for 2+ hours, send a notification. Critical for knowing if the remote device has gone silent.
 
 ---
 
-## Verification Checklist
+## Pre-Deployment Checklist
 
-| Check | What to look for |
-|---|---|
-| Serial Monitor | `IP: x.x.x.x` and `SD init OK` at boot |
-| Cycle output | RTT/jitter/loss values every 30s |
-| SD card | Remove card, open `metrics.csv` on a computer — rows with timestamp and metrics |
-| Grafana Explore | Query measurement `towerwatch` — data points appearing |
-| Outage test | Unplug Ethernet → see buffering messages → reconnect → see flush |
+Complete at home before going to the remote site:
+
+- [ ] Pi boots and reaches `towerwatch.local` via SSH
+- [ ] `sudo systemctl status towerwatch` shows active
+- [ ] `journalctl -u towerwatch -f` shows metric cycles every 30s
+- [ ] Grafana Cloud Explore shows towerwatch metrics
+- [ ] Speedtest runs successfully (check journalctl for "Speedtest:" log)
+- [ ] Tailscale connected: `tailscale status` shows online
+- [ ] SSH works over Tailscale from another device
+- [ ] Pull power → Pi reboots cleanly → towerwatch restarts → buffer data survives
+- [ ] Tailscale reconnects automatically after reboot (no re-auth needed)
+- [ ] Leave running 24+ hours — check Grafana for continuous data, no gaps
 
 ---
 
 ## Secrets and Credentials
 
-`secrets.h` is gitignored and must be created manually on each machine used to flash the device. It contains the base64-encoded Grafana credentials. See **First-Time Setup → Step 7** above.
+`secrets.py` is gitignored and must be created manually on each device:
 
-To rotate credentials:
-1. Log in to [grafana.com](https://grafana.com) → your stack → Access Policies or API Keys
-2. Delete the old key, create a new one with **MetricsPublisher** role
-3. Re-encode: `echo -n '3009582:YOUR_NEW_API_KEY' | base64`
-4. Update `secrets.h` with the new value
+```bash
+cd towerwatch/pi
+cp secrets.py.example secrets.py
+chmod 600 secrets.py
+# Edit with your Grafana Cloud instance ID and API key
+```
+
+To generate Grafana credentials:
+1. Log in to [grafana.com](https://grafana.com) → your stack → Access Policies
+2. Create a key with **MetricsPublisher** role
+3. Your instance ID is `3009582`
 
 ---
 
@@ -295,34 +168,24 @@ To rotate credentials:
 
 ```
 towerwatch/
-├── towerwatch.ino          # Main sketch: setup(), loop()
-├── config.h                # All configurable constants
-├── secrets.h               # Gitignored — Grafana credentials (create locally)
-├── network_test.h/.cpp     # TCP probe + metric computation
-├── storage.h/.cpp          # SD card CSV read/write/flush
-├── metrics_push.h/.cpp     # Grafana Cloud HTTP push
-├── connection_state.h/.cpp # Up/down state machine
-└── README.md               # This file
+├── pi/                      # Raspberry Pi implementation
+│   ├── towerwatch.py        # Main monitoring script
+│   ├── config.py            # All configurable constants
+│   ├── secrets.py.example   # Credential template
+│   ├── requirements.txt     # Python dependencies
+│   ├── install.sh           # One-shot setup script
+│   └── towerwatch.service   # systemd unit file
+├── grafana/
+│   └── dashboard.json       # Grafana dashboard (12 panels)
+├── arduino/                 # Archived: original Arduino Uno implementation
+│   ├── towerwatch.ino
+│   ├── config.h
+│   └── ...
+└── README.md
 ```
 
 ---
 
-## Memory Budget
+## Arduino (Archived)
 
-The sketch is designed to fit within the Uno's 2048 bytes of RAM:
-- All string literals use `F()` macro (stored in flash, not RAM)
-- No `String` class — only `char[]` buffers
-- SD and Ethernet share SPI bus; only one active at a time
-- Constant data uses `PROGMEM`
-
-Current usage: **29758 bytes flash (92%)**, **1280 bytes RAM (62%)**
-
----
-
-## Future Upgrades
-
-- **DS3231 RTC module** (~$2): Accurate timestamps, survives power cycles
-- **ESP32**: Same code, adds WiFi (no Ethernet cable), more RAM for throughput testing
-- **Grafana dashboard template**: Pre-built dashboard JSON for all metrics
-- **Alerting**: Grafana alerts when packet loss > 5% or latency > 200ms
-- **Multi-target probing**: Probe router + DNS + remote server to isolate tower vs. internet issues
+The original implementation targeted an Arduino Uno R3 + Ethernet Shield. It is preserved in the `arduino/` directory for reference. The Arduino version collects RTT, jitter, and packet loss via TCP probes but cannot push to Grafana Cloud due to the Uno's lack of TLS support. See `arduino/config.h` for its configuration.

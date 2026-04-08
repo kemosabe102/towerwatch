@@ -1,2 +1,12 @@
 # Local secrets — never commit
 secrets.h
+pi/secrets.py
+
+# Python bytecode (may contain compiled secrets)
+__pycache__/
+*.pyc
+
+# Test artifacts (Windows local testing)
+pi/speedtest_bin/
+pi/speedtest.zip
+pi/data/
