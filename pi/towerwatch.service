@@ -2,15 +2,14 @@
 Description=Towerwatch 5G Connection Quality Monitor
 After=network-online.target
 Wants=network-online.target
-RequiresMountsFor=/opt/towerwatch/data
 
 [Service]
 Type=simple
 ExecStart=/usr/bin/python3 /opt/towerwatch/towerwatch.py
 WorkingDirectory=/opt/towerwatch
+Environment=PYTHONUNBUFFERED=1
 Restart=on-failure
 RestartSec=10
-WatchdogSec=120
 
 # Run as dedicated user (created by install.sh)
 User=towerwatch

@@ -27,7 +27,7 @@ DNS_TIMEOUT_S = 5
 # --- Intervals ---
 METRIC_INTERVAL_S = 30       # Main loop: ping, TCP, DNS, push
 HTTP_DOWNLOAD_INTERVAL_S = 300   # 5 minutes
-SPEEDTEST_INTERVAL_S = 21600     # 6 hours
+SPEEDTEST_INTERVAL_S = 900       # 15 min (testing) — change to 21600 for production
 
 # --- HTTP Download Timing (mid-frequency throughput proxy) ---
 HTTP_DOWNLOAD_URL = "https://speed.cloudflare.com/__down?bytes=500000"

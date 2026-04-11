@@ -27,12 +27,12 @@ apt-get install -y -qq python3-pip python3-venv fake-hwclock
 
 # --- Python dependencies ---
 echo "[2/8] Installing Python dependencies..."
-pip3 install --break-system-packages -r "$SCRIPT_DIR/requirements.txt"
+pip3 install --break-system-packages --ignore-installed -r "$SCRIPT_DIR/requirements.txt"
 
 # --- Ookla Speedtest CLI (direct ARM binary, NOT the broken apt repo) ---
 echo "[3/8] Installing Ookla Speedtest CLI..."
 if [ ! -f /usr/bin/speedtest ]; then
-    ARCH=$(dpkg --print-architecture)
+    ARCH=$(uname -m)
     TMPDIR=$(mktemp -d)
     curl -sL "https://install.speedtest.net/app/cli/ookla-speedtest-1.2.0-linux-${ARCH}.tgz" \
         -o "$TMPDIR/speedtest.tgz"
@@ -69,15 +69,18 @@ chown -R towerwatch:towerwatch "$INSTALL_DIR"
 echo "[6/8] Setting up data partition..."
 mkdir -p "$DATA_MOUNT"
 
-# Add fstab entry if not already present
-if ! grep -q "$DATA_DEV" /etc/fstab; then
-    echo "$DATA_DEV $DATA_MOUNT ext4 defaults,noatime 0 2" >> /etc/fstab
-    echo "  Added fstab entry for $DATA_DEV"
-fi
-
-# Mount if not already mounted
-if ! mountpoint -q "$DATA_MOUNT"; then
-    mount "$DATA_MOUNT" || echo "  WARNING: Could not mount $DATA_MOUNT — create partition first"
+if [ -b "$DATA_DEV" ]; then
+    # Add fstab entry if not already present
+    if ! grep -q "$DATA_DEV" /etc/fstab; then
+        echo "$DATA_DEV $DATA_MOUNT ext4 defaults,noatime 0 2" >> /etc/fstab
+        echo "  Added fstab entry for $DATA_DEV"
+    fi
+    # Mount if not already mounted
+    if ! mountpoint -q "$DATA_MOUNT"; then
+        mount "$DATA_MOUNT" || echo "  WARNING: Could not mount $DATA_MOUNT"
+    fi
+else
+    echo "  INFO: $DATA_DEV not found — skipping fstab/mount (data will use root filesystem)"
 fi
 
 # Create data subdirectories

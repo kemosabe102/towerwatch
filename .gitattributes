@@ -1,0 +1,5 @@
+# Enforce Unix line endings for files that run on Linux
+*.sh text eol=lf
+*.txt text eol=lf
+*.service text eol=lf
+*.py text eol=lf
