@@ -10,15 +10,16 @@ Continuously monitors latency, jitter, packet loss, DNS resolution, TCP connecti
 
 | Metric | Method | Interval |
 |--------|--------|----------|
-| RTT avg/min/max | ICMP ping (10 probes) to Google, Cloudflare, carrier gateway | 30s |
-| Jitter | Std deviation of RTT (RFC 3550) | 30s |
-| Packet loss | ICMP loss percentage | 30s |
-| Connection state | Binary up/down with outage tracking | 30s |
-| DNS resolution time | dnspython with explicit nameserver (bypasses cache) | 30s |
-| TCP connection time | Socket connect to 8.8.8.8:443 | 30s |
-| M6 signal quality | RSRP, RSRQ, SINR, band from M6 admin API | 30s |
-| HTTP download time | Timed 500KB fetch from Cloudflare CDN | 5 min |
-| Download/upload speed | Ookla official CLI | 6 hours |
+| RTT avg/min/max | ICMP ping (10 probes) to Google, Cloudflare, carrier gateway | 60s |
+| Jitter | Std deviation of RTT (RFC 3550) | 60s |
+| Packet loss | ICMP loss percentage | 60s |
+| Connection state | Binary up/down with outage tracking | 60s |
+| DNS resolution time | dnspython with explicit nameserver (bypasses cache) | 60s |
+| TCP connection time | Socket connect to 8.8.8.8:443 | 60s |
+| M6 signal quality | RSRP, RSRQ, SINR, band from M6 admin API | 60s |
+| HTTP latency probe | Timed 10KB fetch from Cloudflare CDN | 5 min |
+| HTTP throughput sample | Timed 1MB download from Cloudflare CDN | ~4x/day (random) |
+| Download/upload speed | Ookla official CLI (manual only via SSH) | on demand |
 
 All metrics push to Grafana Cloud over HTTPS using Influx line protocol. During outages, data buffers to a local CSV and flushes when connectivity returns.
 
@@ -130,7 +131,7 @@ pip install requests dnspython
 python towerwatch.py
 ```
 
-For testing, set `SPEEDTEST_INTERVAL_S = 900` in `config.py` (15 min instead of 6 hours) to get speedtest data faster. Download the [Ookla speedtest CLI](https://www.speedtest.net/apps/cli) and extract to `pi/speedtest_bin/`.
+Ookla speedtest is disabled from the automatic schedule (each test uses ~400 MB at 5G speeds). Run manually via SSH when needed. Download the [Ookla speedtest CLI](https://www.speedtest.net/apps/cli) and extract to `pi/speedtest_bin/`.
 
 Platform differences (ping flags, paths, data partition) are handled automatically. M6 signal polling will fail gracefully (expected — no M6 router on your home network).
 
@@ -142,7 +143,7 @@ Platform differences (ping flags, paths, data partition) are handled automatical
 
 ## Grafana Dashboard
 
-A pre-built dashboard is included at `grafana/dashboard.json` with 13 panels:
+A pre-built dashboard is included at `grafana/dashboard.json` with 14 panels:
 
 - **Connection Uptime** — headline evidence number
 - **Current Status** — live UP/DOWN indicator
@@ -211,7 +212,7 @@ towerwatch/
 │   ├── install.sh           # One-shot setup script
 │   └── towerwatch.service   # systemd unit file
 ├── grafana/
-│   └── dashboard.json       # Grafana dashboard (12 panels)
+│   └── dashboard.json       # Grafana dashboard (14 panels)
 ├── arduino/                 # Archived: original Arduino Uno implementation
 │   ├── towerwatch.ino
 │   ├── config.h

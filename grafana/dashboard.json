@@ -231,7 +231,7 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 0,
+        "x": 12,
         "y": 28
       },
       "id": 4,
@@ -596,8 +596,8 @@
         "y": 20
       },
       "id": 8,
-      "title": "HTTP Download Time",
-      "description": "Timed 500KB download from Cloudflare CDN (every 5 min)",
+      "title": "HTTP Latency Probe",
+      "description": "Timed 10KB download from Cloudflare CDN (every 5 min)",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -605,8 +605,8 @@
       },
       "targets": [
         {
-          "expr": "towerwatch_http_download_ms{host=\"towerwatch\"}",
-          "legendFormat": "Download Time",
+          "expr": "towerwatch_http_latency_ms{host=\"towerwatch\"}",
+          "legendFormat": "Latency",
           "refId": "A",
           "datasource": {
             "type": "prometheus",
@@ -675,12 +675,12 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 12,
-        "y": 20
+        "x": 0,
+        "y": 28
       },
       "id": 9,
       "title": "Download / Upload Speed",
-      "description": "Ookla speedtest results (every 6 hours)",
+      "description": "Ookla speedtest results (manual only \u2014 run via SSH)",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -1478,6 +1478,70 @@
           "calcs": [
             "mean",
             "max"
+          ]
+        }
+      }
+    },
+    {
+      "id": 23,
+      "title": "HTTP Throughput Sample",
+      "description": "Estimated throughput from 1MB download (~4x/day at random times)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 20
+      },
+      "targets": [
+        {
+          "expr": "towerwatch_http_throughput_mbps{host=\"towerwatch\"}",
+          "legendFormat": "Throughput",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Mbps",
+          "min": 0,
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 50,
+            "pointSize": 8,
+            "showPoints": "always",
+            "spanNulls": false,
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          },
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#73BF69"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
           ]
         }
       }

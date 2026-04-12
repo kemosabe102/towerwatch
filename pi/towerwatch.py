@@ -11,9 +11,11 @@ Cross-platform: runs on Raspberry Pi (production) and Windows (testing).
 """
 
 import base64
+import gzip
 import json
 import logging
 import os
+import random
 import re
 import socket
 import subprocess
@@ -77,18 +79,15 @@ def update_connection_state(connected: bool, timestamp: int):
 def _build_ping_cmd(target: str) -> list[str]:
     """Build platform-specific ping command."""
     if IS_WINDOWS:
-        # -n count, -w timeout in milliseconds
         return ["ping", "-n", str(config.PING_COUNT),
                 "-w", str(config.PING_TIMEOUT_S * 1000), target]
     else:
-        # -c count, -W timeout in seconds
         return ["ping", "-c", str(config.PING_COUNT),
                 "-W", str(config.PING_TIMEOUT_S), target]
 
 
 def _parse_ping_output(stdout: str) -> dict:
     """Parse ping output into {rtt_avg, rtt_min, rtt_max, jitter, pkt_loss, connected}."""
-    # Parse packet loss — both platforms use "X% loss" or "X% packet loss"
     loss_match = re.search(r"(\d+)%\s*(?:packet )?loss", stdout)
     pkt_loss = int(loss_match.group(1)) if loss_match else 100
 
@@ -96,7 +95,6 @@ def _parse_ping_output(stdout: str) -> dict:
     mdev = 0.0
 
     if IS_WINDOWS:
-        # Windows: "Minimum = 12ms, Maximum = 45ms, Average = 28ms"
         win_match = re.search(
             r"Minimum\s*=\s*(\d+)ms.*Maximum\s*=\s*(\d+)ms.*Average\s*=\s*(\d+)ms",
             stdout, re.DOTALL,
@@ -106,7 +104,6 @@ def _parse_ping_output(stdout: str) -> dict:
             rtt_max = int(win_match.group(2))
             rtt_avg = int(win_match.group(3))
     else:
-        # Linux: "rtt min/avg/max/mdev = 12.3/28.1/45.7/8.2 ms"
         rtt_match = re.search(
             r"rtt min/avg/max/mdev = ([\d.]+)/([\d.]+)/([\d.]+)/([\d.]+)",
             stdout,
@@ -119,10 +116,8 @@ def _parse_ping_output(stdout: str) -> dict:
 
     # Parse individual RTTs for RFC 3550 jitter
     if IS_WINDOWS:
-        # Windows: "Reply from X: bytes=32 time=28ms TTL=117"
         rtts = [float(m) for m in re.findall(r"time[=<](\d+)ms", stdout)]
     else:
-        # Linux: "time=28.1 ms"
         rtts = [float(m) for m in re.findall(r"time=([\d.]+)", stdout)]
 
     if len(rtts) >= 2:
@@ -194,25 +189,56 @@ def measure_dns(nameserver: str) -> float:
 
 
 # ---------------------------------------------------------------------------
-# HTTP Download Timing
+# HTTP Latency Probe (10 KB, frequent — replaces old 500 KB download)
 # ---------------------------------------------------------------------------
-def measure_http_download() -> float:
-    """Timed download of ~500KB CDN asset. Returns elapsed ms, 0 on failure."""
+def measure_http_latency() -> float:
+    """Timed download of ~10KB CDN asset for latency proxy. Returns elapsed ms, 0 on failure."""
     try:
         start = time.perf_counter()
         resp = requests.get(
-            config.HTTP_DOWNLOAD_URL,
-            timeout=config.HTTP_DOWNLOAD_TIMEOUT_S,
+            config.HTTP_LATENCY_URL,
+            timeout=config.HTTP_LATENCY_TIMEOUT_S,
         )
         resp.raise_for_status()
+        _ = resp.content  # Ensure body is fully received
         return round((time.perf_counter() - start) * 1000)
     except Exception as e:
-        log.warning("HTTP download failed: %s", e)
+        log.warning("HTTP latency probe failed: %s", e)
         return 0
 
 
 # ---------------------------------------------------------------------------
-# Speedtest (Ookla official CLI)
+# HTTP Throughput Sample (1 MB, random schedule — replaces scheduled Ookla)
+# ---------------------------------------------------------------------------
+def measure_http_throughput() -> dict:
+    """Timed download of ~1MB CDN asset for throughput estimation.
+    Returns {http_throughput_ms, http_throughput_mbps}, zeros on failure."""
+    try:
+        start = time.perf_counter()
+        resp = requests.get(
+            config.HTTP_THROUGHPUT_URL,
+            timeout=config.HTTP_THROUGHPUT_TIMEOUT_S,
+        )
+        resp.raise_for_status()
+        size_bytes = len(resp.content)
+        elapsed_s = time.perf_counter() - start
+        throughput_mbps = round((size_bytes * 8) / elapsed_s / 1_000_000, 2)
+        elapsed_ms = round(elapsed_s * 1000)
+        log.info("HTTP throughput: %.1f Mbps (%d bytes in %dms)",
+                 throughput_mbps, size_bytes, elapsed_ms)
+        push_log("INFO", f"Throughput: {throughput_mbps} Mbps ({elapsed_ms}ms)",
+                 {"event": config.LOG_EVENT_HTTP_THROUGHPUT_OK,
+                  "throughput_mbps": throughput_mbps, "elapsed_ms": elapsed_ms})
+        return {"http_throughput_ms": elapsed_ms, "http_throughput_mbps": throughput_mbps}
+    except Exception as e:
+        log.warning("HTTP throughput test failed: %s", e)
+        push_log("WARN", f"HTTP throughput test failed: {e}",
+                 {"event": config.LOG_EVENT_HTTP_THROUGHPUT_FAILED, "error": str(e)})
+        return {"http_throughput_ms": 0, "http_throughput_mbps": 0}
+
+
+# ---------------------------------------------------------------------------
+# Speedtest (Ookla official CLI — manual only, not scheduled)
 # ---------------------------------------------------------------------------
 def run_speedtest() -> dict:
     """Run Ookla speedtest CLI. Returns {download_mbps, upload_mbps, success}."""
@@ -287,11 +313,25 @@ def poll_m6_signal() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Grafana Push (Influx Line Protocol over HTTPS)
+# Grafana Push (Influx Line Protocol over HTTPS, batched + gzip)
 # ---------------------------------------------------------------------------
 def _build_auth_header() -> str:
     creds = f"{secrets.GRAFANA_INSTANCE_ID}:{secrets.GRAFANA_API_KEY}"
     return "Basic " + base64.b64encode(creds.encode()).decode()
+
+
+_grafana_session = None
+
+
+def _get_grafana_session() -> requests.Session:
+    global _grafana_session
+    if _grafana_session is None:
+        _grafana_session = requests.Session()
+        _grafana_session.headers.update({
+            "Authorization": _build_auth_header(),
+            "Content-Type": "text/plain",
+        })
+    return _grafana_session
 
 
 def format_influx_line(fields: dict, timestamp: int) -> str:
@@ -306,15 +346,20 @@ def format_influx_line(fields: dict, timestamp: int) -> str:
 
 def push_metrics(lines: list[str]) -> bool:
     """Push Influx line protocol lines to Grafana Cloud. Returns True on success."""
-    body = "\n".join(lines)
+    global _grafana_session
+    body_raw = "\n".join(lines).encode("utf-8")
+    headers = {}
+    if config.PUSH_COMPRESS:
+        body = gzip.compress(body_raw)
+        headers["Content-Encoding"] = "gzip"
+    else:
+        body = body_raw
     try:
-        resp = requests.post(
+        session = _get_grafana_session()
+        resp = session.post(
             config.GRAFANA_PUSH_URL,
             data=body,
-            headers={
-                "Authorization": _build_auth_header(),
-                "Content-Type": "text/plain",
-            },
+            headers=headers,
             timeout=config.GRAFANA_PUSH_TIMEOUT_S,
         )
         if resp.status_code < 300:
@@ -322,11 +367,14 @@ def push_metrics(lines: list[str]) -> bool:
         log.warning("Grafana push HTTP %d: %s", resp.status_code, resp.text[:200])
         push_log("WARN", f"Metric push HTTP {resp.status_code}",
                  {"event": config.LOG_EVENT_METRICS_PUSH_FAIL, "http_status": resp.status_code})
+        if resp.status_code in (401, 403):
+            _grafana_session = None
         return False
     except Exception as e:
         log.warning("Grafana push failed: %s", e)
         push_log("WARN", f"Metric push error: {e}",
                  {"event": config.LOG_EVENT_METRICS_PUSH_FAIL, "error": str(e)})
+        _grafana_session = None
         return False
 
 
@@ -342,7 +390,7 @@ def push_log(level: str, message: str, extra: dict = None):
     if _LOG_LEVELS.get(level, 0) < _LOG_LEVELS.get(config.LOKI_PUSH_LEVEL, 1):
         return
     if not getattr(secrets, "LOKI_URL", None):
-        return  # Loki not configured — skip silently
+        return
     payload = {
         "streams": [{
             "stream": {
@@ -405,7 +453,6 @@ def wait_for_data_partition(timeout: int = 30):
     """Block until the data partition is mounted or timeout. Skips on Windows."""
     data = Path(config.DATA_DIR)
     if IS_WINDOWS:
-        # No separate partition on Windows — just ensure local dir exists
         data.mkdir(parents=True, exist_ok=True)
         log.info("Windows: using local data dir %s", data)
         return
@@ -423,11 +470,39 @@ def wait_for_data_partition(timeout: int = 30):
             except Exception:
                 pass
         time.sleep(1)
-    # Running in dev/test without a separate partition — continue anyway
     log.warning("Data partition not detected at %s — buffering to local dir", data)
     _deferred_warnings.append(("WARN", f"Data partition not detected at {data}",
                                {"event": config.LOG_EVENT_PARTITION_MISSING, "path": str(data)}))
     data.mkdir(parents=True, exist_ok=True)
+
+
+# ---------------------------------------------------------------------------
+# Random throughput schedule
+# ---------------------------------------------------------------------------
+def _build_daily_throughput_schedule() -> list[float]:
+    """Generate random timestamps for today's throughput tests.
+    Divides 24 hours into equal slots, picks a random second in each.
+    Skips slots whose time has already passed."""
+    n = config.HTTP_THROUGHPUT_TESTS_PER_DAY
+    now = time.time()
+    # Start of today (local time)
+    local = time.localtime(now)
+    midnight = time.mktime(time.struct_time((
+        local.tm_year, local.tm_mon, local.tm_mday,
+        0, 0, 0, 0, 0, local.tm_isdst,
+    )))
+    slot_size = 86400 / n
+    schedule = []
+    for i in range(n):
+        slot_start = midnight + i * slot_size
+        slot_end = slot_start + slot_size
+        t = random.uniform(slot_start, slot_end)
+        if t > now:
+            schedule.append(t)
+    schedule.sort()
+    log.info("Throughput schedule: %s",
+             [time.strftime("%H:%M", time.localtime(t)) for t in schedule])
+    return schedule
 
 
 # ---------------------------------------------------------------------------
@@ -440,9 +515,15 @@ def main():
              {"event": config.LOG_EVENT_SERVICE_STARTED, "log_level": config.LOKI_PUSH_LEVEL,
               "platform": sys.platform})
 
-    last_http_download = 0
-    last_speedtest = 0
+    last_http_latency = 0
     _deferred_flushed = False
+
+    # Random throughput schedule for the day
+    throughput_schedule = _build_daily_throughput_schedule()
+    last_schedule_day = time.localtime().tm_yday
+
+    # Batch accumulator for metrics push
+    pending_lines: list[str] = []
 
     while True:
         cycle_start = time.perf_counter()
@@ -475,26 +556,29 @@ def main():
         m6 = poll_m6_signal()
         fields.update(m6)
 
-        # --- 5. HTTP Download Timing (every 5 min) ---
+        # --- 5. HTTP Latency Probe (10KB, every 5 min) ---
         now = time.time()
-        if now - last_http_download >= config.HTTP_DOWNLOAD_INTERVAL_S:
-            fields["http_download_ms"] = measure_http_download()
-            last_http_download = now
+        if now - last_http_latency >= config.HTTP_LATENCY_INTERVAL_S:
+            fields["http_latency_ms"] = measure_http_latency()
+            last_http_latency = now
 
-        # --- 6. Speedtest (every 6 hours, isolated subprocess) ---
-        if now - last_speedtest >= config.SPEEDTEST_INTERVAL_S:
-            st = run_speedtest()
-            fields["download_mbps"] = st["download_mbps"]
-            fields["upload_mbps"] = st["upload_mbps"]
-            fields["speedtest_success"] = st["success"]
-            last_speedtest = now
+        # --- 6. HTTP Throughput Sample (1MB, random schedule) ---
+        today_yday = time.localtime().tm_yday
+        if today_yday != last_schedule_day:
+            throughput_schedule = _build_daily_throughput_schedule()
+            last_schedule_day = today_yday
+
+        if throughput_schedule and now >= throughput_schedule[0]:
+            throughput_schedule.pop(0)
+            th = measure_http_throughput()
+            fields.update(th)
 
         # --- 7. Collection duration ---
         fields["collection_duration_ms"] = round(
             (time.perf_counter() - cycle_start) * 1000
         )
 
-        # --- 8. Format and push ---
+        # --- 8. Accumulate and batch-push ---
         line = format_influx_line(fields, timestamp)
         duration = fields["collection_duration_ms"]
         log.info("Cycle t=%d connected=%s rtt_avg_google=%s duration=%dms",
@@ -504,30 +588,42 @@ def main():
                  {"event": "cycle_complete", "duration_ms": duration,
                   "connected": fields.get("connected")})
 
-        # Try to push current line + any buffered lines
-        buffered = read_and_flush_buffer()
-        all_lines = buffered + [line]
+        pending_lines.append(line)
 
-        if any_connected and push_metrics(all_lines):
-            log.info("Pushed %d lines", len(all_lines))
-            # Flush deferred warnings on first successful push
-            if not _deferred_flushed and _deferred_warnings:
-                flush_deferred_warnings()
-                _deferred_flushed = True
-            if len(buffered) > 0:
-                push_log("INFO", f"Buffer flushed ({len(buffered)} lines)",
-                         {"event": config.LOG_EVENT_BUFFER_FLUSHED, "flushed_count": len(buffered)})
-        else:
-            # Re-buffer everything
-            for l in all_lines:
-                buffer_line(l)
-            if not any_connected:
-                log.info("Offline — buffered (%d lines total)",
-                         len(all_lines))
+        buffered = read_and_flush_buffer()
+        should_push = (
+            len(pending_lines) >= config.PUSH_BATCH_SIZE
+            or len(buffered) > 0
+        )
+
+        if should_push:
+            all_lines = buffered + pending_lines
+            if any_connected and push_metrics(all_lines):
+                log.info("Pushed %d lines (%d batched, %d from buffer)",
+                         len(all_lines), len(pending_lines), len(buffered))
+                pending_lines.clear()
+                if not _deferred_flushed and _deferred_warnings:
+                    flush_deferred_warnings()
+                    _deferred_flushed = True
+                if buffered:
+                    push_log("INFO", f"Buffer flushed ({len(buffered)} lines)",
+                             {"event": config.LOG_EVENT_BUFFER_FLUSHED,
+                              "flushed_count": len(buffered)})
             else:
-                log.warning("Push failed — buffered for retry")
-                push_log("WARN", f"Metrics buffered ({len(all_lines)} lines)",
-                         {"event": config.LOG_EVENT_METRICS_BUFFERED, "buffered_count": len(all_lines)})
+                for l in all_lines:
+                    buffer_line(l)
+                pending_lines.clear()
+                if not any_connected:
+                    log.info("Offline — buffered (%d lines total)", len(all_lines))
+                else:
+                    log.warning("Push failed — buffered for retry")
+                    push_log("WARN", f"Metrics buffered ({len(all_lines)} lines)",
+                             {"event": config.LOG_EVENT_METRICS_BUFFERED,
+                              "buffered_count": len(all_lines)})
+        elif not any_connected:
+            for l in pending_lines:
+                buffer_line(l)
+            pending_lines.clear()
 
         # --- Sleep until next cycle ---
         elapsed = time.perf_counter() - cycle_start
@@ -540,6 +636,7 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         log.info("Stopped by user")
-    except Exception:
-        log.exception("Fatal error")
+    except Exception as e:
+        log.critical("Fatal error: %s", e, exc_info=True)
+        push_log("ERROR", f"Fatal: {e}", {"event": "fatal_error", "error": str(e)})
         raise

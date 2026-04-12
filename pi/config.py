@@ -25,21 +25,24 @@ DNS_QUERY_DOMAIN = "example.com"
 DNS_TIMEOUT_S = 5
 
 # --- Intervals ---
-METRIC_INTERVAL_S = 30       # Main loop: ping, TCP, DNS, push
-HTTP_DOWNLOAD_INTERVAL_S = 300   # 5 minutes
-SPEEDTEST_INTERVAL_S = 900       # 15 min (testing) — change to 21600 for production
+METRIC_INTERVAL_S = 60       # Main loop: ping, TCP, DNS (was 30 — halved for data cap)
 
-# --- HTTP Download Timing (mid-frequency throughput proxy) ---
-HTTP_DOWNLOAD_URL = "https://speed.cloudflare.com/__down?bytes=500000"
-HTTP_DOWNLOAD_TIMEOUT_S = 30
+# --- HTTP Latency Probe (frequent, small file) ---
+HTTP_LATENCY_URL = "https://speed.cloudflare.com/__down?bytes=10000"  # 10 KB
+HTTP_LATENCY_INTERVAL_S = 300   # 5 minutes
+HTTP_LATENCY_TIMEOUT_S = 30
 
-# --- Speedtest (platform-aware binary path) ---
+# --- HTTP Throughput Sample (random schedule, replaces Ookla for routine use) ---
+HTTP_THROUGHPUT_URL = "https://speed.cloudflare.com/__down?bytes=1000000"  # 1 MB
+HTTP_THROUGHPUT_TESTS_PER_DAY = 4  # Spread randomly across 24 hours
+HTTP_THROUGHPUT_TIMEOUT_S = 60
+
+# --- Speedtest (manual only — each test uses ~400 MB at 5G speeds) ---
 if sys.platform == "win32":
     SPEEDTEST_BINARY = "./speedtest_bin/speedtest.exe"
 else:
     SPEEDTEST_BINARY = "/usr/bin/speedtest"
-SPEEDTEST_TIMEOUT_S = 120   # Kill hung speedtest after 2 min
-# Pin to a specific server ID if needed (None = auto-select)
+SPEEDTEST_TIMEOUT_S = 120
 SPEEDTEST_SERVER_ID = None
 
 # --- M6 Signal Metrics ---
@@ -56,6 +59,10 @@ GRAFANA_PUSH_TIMEOUT_S = 10
 INFLUX_MEASUREMENT = "towerwatch"
 INFLUX_HOST_TAG = "towerwatch"
 
+# --- Push Optimization (batching + compression) ---
+PUSH_BATCH_SIZE = 10     # Accumulate N lines before pushing (at 60s = push every 10 min)
+PUSH_COMPRESS = True     # gzip Influx POST body
+
 # --- Local Buffering (platform-aware paths) ---
 if sys.platform == "win32":
     DATA_DIR = "./data"
@@ -71,13 +78,9 @@ LOG_LEVEL = "INFO"  # DEBUG for verbose output
 
 # --- Loki (Structured Log Shipping) ---
 LOKI_PUSH_TIMEOUT_S = 5
-# Minimum level to push to Loki: "DEBUG", "INFO", "WARN", "ERROR"
-# Use DEBUG at home for testing, WARN in production to minimize volume
-LOKI_PUSH_LEVEL = "INFO"
+LOKI_PUSH_LEVEL = "WARN"  # Minimum level to push to Loki (WARN in production, INFO for testing)
 
 # --- Log Event Identifiers (stable machine-readable keys for LogQL filtering) ---
-# Usage: push_log("WARN", "message", {"event": config.LOG_EVENT_PING_FAILED, ...})
-# Query: {job="towerwatch"} | json | event="ping_failed"
 LOG_EVENT_SERVICE_STARTED    = "service_started"
 LOG_EVENT_CONN_DOWN          = "connection_down"
 LOG_EVENT_CONN_RESTORED      = "connection_restored"
@@ -91,3 +94,5 @@ LOG_EVENT_METRICS_PUSH_FAIL  = "metrics_push_failed"
 LOG_EVENT_METRICS_BUFFERED   = "metrics_buffered"
 LOG_EVENT_BUFFER_FLUSHED     = "buffer_flushed"
 LOG_EVENT_PARTITION_MISSING  = "partition_not_detected"
+LOG_EVENT_HTTP_THROUGHPUT_OK     = "http_throughput_complete"
+LOG_EVENT_HTTP_THROUGHPUT_FAILED = "http_throughput_failed"
