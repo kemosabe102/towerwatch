@@ -60,6 +60,18 @@
         "iconColor": "red",
         "name": "Outages",
         "titleFormat": "Connection Down"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "grafanacloud-towerwatch-prom"
+        },
+        "enable": true,
+        "expr": "absent_over_time(towerwatch_connected{host=\"towerwatch\"}[2m])",
+        "hide": false,
+        "iconColor": "dark-purple",
+        "name": "Pi Offline",
+        "titleFormat": "Pi Offline (no data)"
       }
     ]
   },
@@ -87,7 +99,7 @@
       },
       "targets": [
         {
-          "expr": "avg_over_time(towerwatch_connected{host=\"towerwatch\"}[$__range]) * 100",
+          "expr": "clamp_max(sum_over_time(towerwatch_connected{host=\"towerwatch\"}[$__range]) / ($__range_s / 30) * 100, 100)",
           "legendFormat": "Uptime",
           "refId": "A",
           "datasource": {
@@ -271,7 +283,7 @@
             "fillOpacity": 15,
             "pointSize": 5,
             "showPoints": "auto",
-            "spanNulls": true,
+            "spanNulls": 120000,
             "axisBorderShow": false,
             "scaleDistribution": {
               "type": "linear"
@@ -1010,7 +1022,7 @@
           "custom": {
             "lineWidth": 2,
             "fillOpacity": 8,
-            "spanNulls": true,
+            "spanNulls": 120000,
             "scaleDistribution": {
               "type": "log",
               "log": 2
@@ -1180,7 +1192,7 @@
           "custom": {
             "lineWidth": 2,
             "fillOpacity": 8,
-            "spanNulls": true,
+            "spanNulls": 120000,
             "scaleDistribution": {
               "type": "log",
               "log": 2
@@ -1350,7 +1362,7 @@
           "custom": {
             "lineWidth": 2,
             "fillOpacity": 8,
-            "spanNulls": true,
+            "spanNulls": 120000,
             "scaleDistribution": {
               "type": "log",
               "log": 2
