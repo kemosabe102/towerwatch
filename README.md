@@ -72,10 +72,24 @@ sudo bash install.sh
 
 ### 4. Install Tailscale (remote access)
 
+Tailscale creates a private VPN mesh so you can SSH into the Pi from anywhere — no port forwarding needed. The free Personal plan (3 users, 100 devices) is sufficient.
+
 ```bash
+# Install on Pi (sets up apt repo for auto-updates)
 curl -fsSL https://tailscale.com/install.sh | sh
+
+# Set up bind mount so Tailscale state survives overlayfs
+# (install.sh creates the directory; the bind mount unit must be added manually)
+sudo systemctl enable var-lib-tailscale.mount
+sudo systemctl start var-lib-tailscale.mount
+
+# Authenticate — opens a URL to log in
 sudo tailscale up
 ```
+
+Install Tailscale on your local machine too (Windows: `winget install Tailscale.Tailscale`). Log in with the same account. Both devices get stable 100.x.y.z IPs for SSH access from any network.
+
+**Note:** Tailscale IPs are device-specific and not committed to this repo.
 
 ### 5. Configure Read-Only Filesystem
 
@@ -90,7 +104,7 @@ echo 'overlayroot=tmpfs:recurse=0' | sudo tee /etc/overlayroot.local.conf
 The `recurse=0` flag prevents the overlay from applying to the data partition.
 
 **Before enabling overlayfs**, verify that `install.sh` has already:
-- Symlinked `/var/lib/tailscale/` → `/opt/towerwatch/data/tailscale-state/`
+- Bind-mounted `/var/lib/tailscale/` → `/opt/towerwatch/data/tailscale-state/` (via systemd mount unit)
 - Configured fakehwclock to write to the data partition
 
 ### 6. Reboot and Verify

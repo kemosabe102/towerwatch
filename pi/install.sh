@@ -89,16 +89,38 @@ mkdir -p "$DATA_MOUNT/tailscale-state"
 chown -R towerwatch:towerwatch "$DATA_MOUNT/buffer"
 
 # --- Tailscale state directory ---
-# Move to writable partition BEFORE enabling overlayfs
-if [ -d /var/lib/tailscale ] && [ ! -L /var/lib/tailscale ]; then
-    echo "  Moving Tailscale state to data partition..."
-    systemctl stop tailscaled 2>/dev/null || true
-    cp -a /var/lib/tailscale/* "$DATA_MOUNT/tailscale-state/" 2>/dev/null || true
-    rm -rf /var/lib/tailscale
-    ln -sf "$DATA_MOUNT/tailscale-state" /var/lib/tailscale
-    systemctl start tailscaled 2>/dev/null || true
-elif [ -L /var/lib/tailscale ]; then
-    echo "  Tailscale state already symlinked"
+# Bind mount to writable partition (symlinks break systemd StateDirectory)
+if command -v tailscaled &>/dev/null; then
+    # Copy existing state to data partition if needed
+    if [ -d /var/lib/tailscale ] && [ ! -L /var/lib/tailscale ]; then
+        cp -a /var/lib/tailscale/* "$DATA_MOUNT/tailscale-state/" 2>/dev/null || true
+    fi
+    # Remove symlink from old installs
+    if [ -L /var/lib/tailscale ]; then
+        rm -f /var/lib/tailscale
+        mkdir -p /var/lib/tailscale
+    fi
+    # Install bind mount unit
+    cat > /etc/systemd/system/var-lib-tailscale.mount << MOUNTEOF
+[Unit]
+Description=Bind mount Tailscale state to data partition
+After=local-fs.target
+RequiresMountsFor=$DATA_MOUNT
+
+[Mount]
+What=$DATA_MOUNT/tailscale-state
+Where=/var/lib/tailscale
+Type=none
+Options=bind
+
+[Install]
+WantedBy=local-fs.target
+MOUNTEOF
+    systemctl daemon-reload
+    systemctl enable var-lib-tailscale.mount 2>/dev/null
+    echo "  Tailscale bind mount unit installed"
+else
+    echo "  Tailscale not installed yet — skipping state migration"
 fi
 
 # --- fakehwclock: point to writable partition ---
