@@ -32,7 +32,7 @@ M6 signal polling and speedtest will fail gracefully if unavailable — this is 
 
 ## Architecture
 
-`pi/towerwatch.py` is a persistent Python process (systemd `Type=simple` on Pi) running a 30-second loop:
+`pi/towerwatch.py` is a persistent Python process (systemd `Type=simple` on Pi) running a 60-second loop:
 
 1. **ICMP ping** — 10-probe burst to 3 targets (Google, Cloudflare, Gateway), parses RTT avg/min/max, jitter (RFC 3550), packet loss
 2. **TCP connect** — socket handshake timing to 8.8.8.8:443

@@ -141,6 +141,52 @@ Platform differences (ping flags, paths, data partition) are handled automatical
 
 ---
 
+## Deploying Updates to the Pi
+
+The Pi runs a read-only overlay filesystem (overlayroot), so the root partition resets on reboot. A deploy script handles the full process — entering the writable chroot, pulling from git, copying files, and restarting the service.
+
+### Quick Deploy
+
+From your dev machine (Windows or any machine with SSH access):
+
+```bash
+bash deploy.sh admin@100.76.154.81    # Generic script — host is required
+bash deploy.sh admin@towerwatch.local # Or use mDNS on LAN
+bash deploy-local.sh                  # Local wrapper with your default host (not committed)
+```
+
+The script:
+1. SSHes into the Pi
+2. Enters `overlayroot-chroot` (writable view of the real filesystem)
+3. Runs `git pull --ff-only` in `~/towerwatch`
+4. Copies `towerwatch.py` and `config.py` to `/opt/towerwatch/`
+5. Restarts the systemd service and verifies it's running
+
+### Manual Deploy
+
+If you prefer to do it by hand:
+
+```bash
+ssh admin@100.76.154.81
+
+# Enter writable filesystem
+sudo overlayroot-chroot
+cd ~/towerwatch && git pull
+cp pi/towerwatch.py pi/config.py /opt/towerwatch/
+chown towerwatch:towerwatch /opt/towerwatch/towerwatch.py /opt/towerwatch/config.py
+exit
+
+# Restart (must be outside chroot — systemd runs in the overlay)
+sudo systemctl restart towerwatch
+journalctl -u towerwatch -f
+```
+
+### Dashboard Updates
+
+Dashboard changes don't require Pi access — re-import `grafana/dashboard.json` in Grafana Cloud directly (Dashboards → New → Import → Upload JSON).
+
+---
+
 ## Grafana Dashboard
 
 A pre-built dashboard is included at `grafana/dashboard.json` with 14 panels:
@@ -171,7 +217,7 @@ Complete at home before going to the remote site:
 
 - [ ] Pi boots and reaches `towerwatch.local` via SSH
 - [ ] `sudo systemctl status towerwatch` shows active
-- [ ] `journalctl -u towerwatch -f` shows metric cycles every 30s
+- [ ] `journalctl -u towerwatch -f` shows metric cycles every 60s
 - [ ] Grafana Cloud Explore shows towerwatch metrics
 - [ ] Speedtest runs successfully (check journalctl for "Speedtest:" log)
 - [ ] Tailscale connected: `tailscale status` shows online
@@ -211,6 +257,8 @@ towerwatch/
 │   ├── requirements.txt     # Python dependencies
 │   ├── install.sh           # One-shot setup script
 │   └── towerwatch.service   # systemd unit file
+├── deploy.sh                # Generic deploy script (host required as arg)
+├── deploy-local.sh          # Local wrapper with default host (gitignored)
 ├── grafana/
 │   └── dashboard.json       # Grafana dashboard (14 panels)
 ├── arduino/                 # Archived: original Arduino Uno implementation

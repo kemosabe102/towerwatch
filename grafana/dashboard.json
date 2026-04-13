@@ -99,7 +99,7 @@
       },
       "targets": [
         {
-          "expr": "clamp_max(sum_over_time(towerwatch_connected{host=\"towerwatch\"}[$__range]) / ($__range_s / 30) * 100, 100)",
+          "expr": "clamp_max(sum_over_time(towerwatch_connected{host=\"towerwatch\"}[$__range]) / ($__range_s / scalar(towerwatch_metric_interval_s{host=\"towerwatch\"})) * 100, 100)",
           "legendFormat": "Uptime",
           "refId": "A",
           "datasource": {

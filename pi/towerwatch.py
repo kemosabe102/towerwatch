@@ -17,6 +17,7 @@ import logging
 import os
 import random
 import re
+import signal
 import socket
 import subprocess
 import statistics
@@ -86,51 +87,52 @@ def _build_ping_cmd(target: str) -> list[str]:
                 "-W", str(config.PING_TIMEOUT_S), target]
 
 
+def _parse_rtt_stats(stdout: str) -> tuple[int, int, int, float]:
+    """Parse platform-specific RTT summary. Returns (min, avg, max, mdev)."""
+    if IS_WINDOWS:
+        m = re.search(
+            r"Minimum\s*=\s*(\d+)ms.*Maximum\s*=\s*(\d+)ms.*Average\s*=\s*(\d+)ms",
+            stdout, re.DOTALL,
+        )
+        if m:
+            return int(m.group(1)), int(m.group(3)), int(m.group(2)), 0.0
+        return 0, 0, 0, 0.0
+    m = re.search(
+        r"rtt min/avg/max/mdev = ([\d.]+)/([\d.]+)/([\d.]+)/([\d.]+)",
+        stdout,
+    )
+    if m:
+        return (round(float(m.group(1))), round(float(m.group(2))),
+                round(float(m.group(3))), float(m.group(4)))
+    return 0, 0, 0, 0.0
+
+
+def _calc_jitter(rtts: list[float], mdev: float) -> int:
+    """RFC 3550 jitter from individual RTTs, falling back to mdev."""
+    if len(rtts) >= 2:
+        diffs = [abs(rtts[i] - rtts[i - 1]) for i in range(1, len(rtts))]
+        return round(statistics.mean(diffs))
+    return round(mdev)
+
+
 def _parse_ping_output(stdout: str) -> dict:
     """Parse ping output into {rtt_avg, rtt_min, rtt_max, jitter, pkt_loss, connected}."""
     loss_match = re.search(r"(\d+)%\s*(?:packet )?loss", stdout)
     pkt_loss = int(loss_match.group(1)) if loss_match else 100
 
-    rtt_min = rtt_avg = rtt_max = 0
-    mdev = 0.0
+    rtt_min, rtt_avg, rtt_max, mdev = _parse_rtt_stats(stdout)
 
-    if IS_WINDOWS:
-        win_match = re.search(
-            r"Minimum\s*=\s*(\d+)ms.*Maximum\s*=\s*(\d+)ms.*Average\s*=\s*(\d+)ms",
-            stdout, re.DOTALL,
-        )
-        if win_match:
-            rtt_min = int(win_match.group(1))
-            rtt_max = int(win_match.group(2))
-            rtt_avg = int(win_match.group(3))
-    else:
-        rtt_match = re.search(
-            r"rtt min/avg/max/mdev = ([\d.]+)/([\d.]+)/([\d.]+)/([\d.]+)",
-            stdout,
-        )
-        if rtt_match:
-            rtt_min = round(float(rtt_match.group(1)))
-            rtt_avg = round(float(rtt_match.group(2)))
-            rtt_max = round(float(rtt_match.group(3)))
-            mdev = float(rtt_match.group(4))
-
-    # Parse individual RTTs for RFC 3550 jitter
     if IS_WINDOWS:
         rtts = [float(m) for m in re.findall(r"time[=<](\d+)ms", stdout)]
     else:
         rtts = [float(m) for m in re.findall(r"time=([\d.]+)", stdout)]
 
-    if len(rtts) >= 2:
-        diffs = [abs(rtts[i] - rtts[i - 1]) for i in range(1, len(rtts))]
-        jitter = round(statistics.mean(diffs))
-    else:
-        jitter = round(mdev)
-
     return {
         "rtt_avg": rtt_avg, "rtt_min": rtt_min, "rtt_max": rtt_max,
-        "jitter": jitter, "pkt_loss": pkt_loss,
+        "jitter": _calc_jitter(rtts, mdev), "pkt_loss": pkt_loss,
         "connected": pkt_loss < 100,
     }
+
 
 
 def run_ping(target: str) -> dict:
@@ -274,41 +276,49 @@ def run_speedtest() -> dict:
 # ---------------------------------------------------------------------------
 _m6_session = None
 
+_M6_FIELD_MAP = [
+    ('m6_rsrp', ('RSRP', 'rsrp'), int),
+    ('m6_rsrq', ('RSRQ', 'rsrq'), int),
+    ('m6_sinr', ('SINR', 'sinr'), int),
+    ('m6_band', ('curBand', 'band'), lambda v: int(v) if str(v).isdigit() else 0),
+]
+
+
+def _ensure_m6_session() -> requests.Session:
+    """Lazily create the M6 admin session."""
+    global _m6_session
+    if _m6_session is None:
+        _m6_session = requests.Session()
+        _m6_session.auth = ('admin', secrets.M6_ADMIN_PASSWORD)
+    return _m6_session
+
+
+def _extract_m6_fields(data: dict) -> dict:
+    """Extract signal metrics from M6 JSON using field map."""
+    result = {}
+    for metric, keys, convert in _M6_FIELD_MAP:
+        val = next((data[k] for k in keys if k in data), None)
+        if val is not None:
+            result[metric] = convert(val)
+    return result
+
 
 def poll_m6_signal() -> dict:
     """Poll Nighthawk M6 for signal metrics. Returns dict or empty on failure."""
     global _m6_session
     try:
-        if _m6_session is None:
-            _m6_session = requests.Session()
-            _m6_session.auth = ("admin", secrets.M6_ADMIN_PASSWORD)
-
-        resp = _m6_session.get(config.M6_WWAN_URL, timeout=config.M6_TIMEOUT_S)
+        session = _ensure_m6_session()
+        resp = session.get(config.M6_WWAN_URL, timeout=config.M6_TIMEOUT_S)
         if resp.status_code == 401:
             _m6_session = None
-            log.warning("M6 auth expired, will retry next cycle")
-            push_log("WARN", "M6 auth expired",
-                     {"event": config.LOG_EVENT_M6_AUTH_EXPIRED})
+            log.warning('M6 auth expired, will retry next cycle')
+            push_log('WARN', 'M6 auth expired',
+                     {'event': config.LOG_EVENT_M6_AUTH_EXPIRED})
             return {}
         resp.raise_for_status()
-        data = resp.json()
-
-        result = {}
-        for key in ("RSRP", "rsrp"):
-            if key in data:
-                result["m6_rsrp"] = int(data[key])
-        for key in ("RSRQ", "rsrq"):
-            if key in data:
-                result["m6_rsrq"] = int(data[key])
-        for key in ("SINR", "sinr"):
-            if key in data:
-                result["m6_sinr"] = int(data[key])
-        for key in ("curBand", "band"):
-            if key in data:
-                result["m6_band"] = int(data[key]) if str(data[key]).isdigit() else 0
-        return result
+        return _extract_m6_fields(resp.json())
     except Exception as e:
-        log.debug("M6 poll failed: %s", e)
+        log.debug('M6 poll failed: %s', e)
         return {}
 
 
@@ -423,27 +433,38 @@ def flush_deferred_warnings():
 
 
 # ---------------------------------------------------------------------------
-# CSV Buffer (persistent writable partition, atomic writes)
+# CSV Buffer (persistent writable partition, append-only + atomic clear)
 # ---------------------------------------------------------------------------
 def buffer_line(line: str):
-    """Append an Influx line to the buffer file using atomic write pattern."""
+    """Append a single Influx line to the buffer file (O(1) append, not rewrite)."""
     buf = Path(config.BUFFER_FILE)
-    tmp = Path(config.BUFFER_TMP)
     buf.parent.mkdir(parents=True, exist_ok=True)
+    if buf.exists() and buf.stat().st_size >= config.BUFFER_MAX_BYTES:
+        log.warning("Buffer full (%d bytes) — dropping oldest lines to make room",
+                    buf.stat().st_size)
+        lines = buf.read_text().splitlines()
+        # Drop oldest 10% to avoid trimming every cycle
+        keep = lines[max(1, len(lines) // 10):]
+        buf.write_text("\n".join(keep) + "\n")
+    with open(buf, "a") as f:
+        f.write(line + "\n")
+        f.flush()
+        os.fsync(f.fileno())
 
-    existing = buf.read_text() if buf.exists() else ""
-    tmp.write_text(existing + line + "\n")
-    os.replace(str(tmp), str(buf))
 
-
-def read_and_flush_buffer() -> list[str]:
-    """Read all buffered lines, delete buffer. Returns list of lines."""
+def read_buffer() -> list[str]:
+    """Read all buffered lines without deleting the file."""
     buf = Path(config.BUFFER_FILE)
     if not buf.exists() or buf.stat().st_size == 0:
         return []
-    lines = [l.strip() for l in buf.read_text().splitlines() if l.strip()]
-    buf.unlink()
-    return lines
+    return [l.strip() for l in buf.read_text().splitlines() if l.strip()]
+
+
+def clear_buffer():
+    """Delete the buffer file. Call only after a successful push."""
+    buf = Path(config.BUFFER_FILE)
+    if buf.exists():
+        buf.unlink()
 
 
 # ---------------------------------------------------------------------------
@@ -506,6 +527,100 @@ def _build_daily_throughput_schedule() -> list[float]:
 
 
 # ---------------------------------------------------------------------------
+# Graceful shutdown
+# ---------------------------------------------------------------------------
+_shutdown_requested = False
+
+
+def _handle_sigterm(signum, frame):
+    global _shutdown_requested
+    log.info("SIGTERM received — shutting down gracefully")
+    _shutdown_requested = True
+
+
+if not IS_WINDOWS:
+    signal.signal(signal.SIGTERM, _handle_sigterm)
+
+
+# ---------------------------------------------------------------------------
+# Main loop helpers
+# ---------------------------------------------------------------------------
+def _collect_probes(last_http_latency, throughput_schedule, last_schedule_day):
+    """Run all probe sections. Returns (fields, any_connected, last_http_latency, throughput_schedule, last_schedule_day)."""
+    fields = {}
+    now = time.time()
+
+    # ICMP Ping (multi-target)
+    any_connected = False
+    for target_ip, target_label in config.PROBE_TARGETS:
+        ping = run_ping(target_ip)
+        any_connected = any_connected or ping["connected"]
+        for metric, value in ping.items():
+            if metric == "connected":
+                fields[f"connected_{target_label}"] = 1 if value else 0
+            else:
+                fields[f"{metric}_{target_label}"] = value
+    fields["connected"] = 1 if any_connected else 0
+    fields["metric_interval_s"] = config.METRIC_INTERVAL_S
+
+    # TCP + DNS
+    fields["tcp_connect_ms"] = measure_tcp_connect()
+    for ns in config.DNS_TARGETS:
+        ns_label = ns.replace(".", "_")
+        fields[f"dns_resolve_ms_{ns_label}"] = measure_dns(ns)
+
+    # M6 Signal
+    fields.update(poll_m6_signal())
+
+    # HTTP Latency (10KB, every 5 min)
+    if now - last_http_latency >= config.HTTP_LATENCY_INTERVAL_S:
+        fields["http_latency_ms"] = measure_http_latency()
+        last_http_latency = now
+
+    # HTTP Throughput (1MB, random schedule)
+    today_yday = time.localtime().tm_yday
+    if today_yday != last_schedule_day:
+        throughput_schedule = _build_daily_throughput_schedule()
+        last_schedule_day = today_yday
+    if throughput_schedule and now >= throughput_schedule[0]:
+        throughput_schedule.pop(0)
+        fields.update(measure_http_throughput())
+
+    return fields, any_connected, last_http_latency, throughput_schedule, last_schedule_day
+
+
+def _log_cycle(fields, timestamp):
+    """Log cycle summary to console and Loki."""
+    duration = fields["collection_duration_ms"]
+    log.info("Cycle t=%d connected=%s rtt_avg_google=%s duration=%dms",
+             timestamp, fields.get("connected"),
+             fields.get("rtt_avg_google"), duration)
+    push_log("DEBUG", f"Cycle complete in {duration}ms",
+             {"event": "cycle_complete", "duration_ms": duration,
+              "connected": fields.get("connected")})
+
+
+def _maybe_push(cycles_since_push, any_connected, deferred_flushed):
+    """Batch-push buffered metrics if due. Returns (cycles_since_push, deferred_flushed)."""
+    if cycles_since_push < config.PUSH_BATCH_SIZE or not any_connected:
+        return cycles_since_push, deferred_flushed
+    all_lines = read_buffer()
+    if all_lines and push_metrics(all_lines):
+        clear_buffer()
+        log.info("Pushed %d lines", len(all_lines))
+        if not deferred_flushed and _deferred_warnings:
+            flush_deferred_warnings()
+            deferred_flushed = True
+        return 0, deferred_flushed
+    log.warning("Push failed — data safe in buffer (%d lines)",
+                len(all_lines))
+    push_log("WARN", f"Metrics buffered ({len(all_lines)} lines)",
+             {"event": config.LOG_EVENT_METRICS_BUFFERED,
+              "buffered_count": len(all_lines)})
+    return cycles_since_push, deferred_flushed
+
+
+# ---------------------------------------------------------------------------
 # Main loop
 # ---------------------------------------------------------------------------
 def main():
@@ -516,119 +631,32 @@ def main():
               "platform": sys.platform})
 
     last_http_latency = 0
-    _deferred_flushed = False
-
-    # Random throughput schedule for the day
+    deferred_flushed = False
     throughput_schedule = _build_daily_throughput_schedule()
     last_schedule_day = time.localtime().tm_yday
+    cycles_since_push = config.PUSH_BATCH_SIZE if read_buffer() else 0
 
-    # Batch accumulator for metrics push
-    pending_lines: list[str] = []
-
-    while True:
+    while not _shutdown_requested:
         cycle_start = time.perf_counter()
         timestamp = int(time.time())
-        fields = {}
 
-        # --- 1. ICMP Ping (multi-target) ---
-        any_connected = False
-        for target_ip, target_label in config.PROBE_TARGETS:
-            ping = run_ping(target_ip)
-            any_connected = any_connected or ping["connected"]
-            for metric, value in ping.items():
-                if metric == "connected":
-                    fields[f"connected_{target_label}"] = 1 if value else 0
-                else:
-                    fields[f"{metric}_{target_label}"] = value
-        fields["connected"] = 1 if any_connected else 0
+        fields, any_connected, last_http_latency, throughput_schedule, last_schedule_day =             _collect_probes(last_http_latency, throughput_schedule, last_schedule_day)
 
         update_connection_state(any_connected, timestamp)
-
-        # --- 2. TCP Connection Time ---
-        fields["tcp_connect_ms"] = measure_tcp_connect()
-
-        # --- 3. DNS Resolution Time ---
-        for ns in config.DNS_TARGETS:
-            ns_label = ns.replace(".", "_")
-            fields[f"dns_resolve_ms_{ns_label}"] = measure_dns(ns)
-
-        # --- 4. M6 Signal Metrics ---
-        m6 = poll_m6_signal()
-        fields.update(m6)
-
-        # --- 5. HTTP Latency Probe (10KB, every 5 min) ---
-        now = time.time()
-        if now - last_http_latency >= config.HTTP_LATENCY_INTERVAL_S:
-            fields["http_latency_ms"] = measure_http_latency()
-            last_http_latency = now
-
-        # --- 6. HTTP Throughput Sample (1MB, random schedule) ---
-        today_yday = time.localtime().tm_yday
-        if today_yday != last_schedule_day:
-            throughput_schedule = _build_daily_throughput_schedule()
-            last_schedule_day = today_yday
-
-        if throughput_schedule and now >= throughput_schedule[0]:
-            throughput_schedule.pop(0)
-            th = measure_http_throughput()
-            fields.update(th)
-
-        # --- 7. Collection duration ---
         fields["collection_duration_ms"] = round(
             (time.perf_counter() - cycle_start) * 1000
         )
 
-        # --- 8. Accumulate and batch-push ---
-        line = format_influx_line(fields, timestamp)
-        duration = fields["collection_duration_ms"]
-        log.info("Cycle t=%d connected=%s rtt_avg_google=%s duration=%dms",
-                 timestamp, fields.get("connected"),
-                 fields.get("rtt_avg_google"), duration)
-        push_log("DEBUG", f"Cycle complete in {duration}ms",
-                 {"event": "cycle_complete", "duration_ms": duration,
-                  "connected": fields.get("connected")})
+        _log_cycle(fields, timestamp)
+        buffer_line(format_influx_line(fields, timestamp))
+        cycles_since_push += 1
+        cycles_since_push, deferred_flushed = _maybe_push(
+            cycles_since_push, any_connected, deferred_flushed)
 
-        pending_lines.append(line)
-
-        buffered = read_and_flush_buffer()
-        should_push = (
-            len(pending_lines) >= config.PUSH_BATCH_SIZE
-            or len(buffered) > 0
-        )
-
-        if should_push:
-            all_lines = buffered + pending_lines
-            if any_connected and push_metrics(all_lines):
-                log.info("Pushed %d lines (%d batched, %d from buffer)",
-                         len(all_lines), len(pending_lines), len(buffered))
-                pending_lines.clear()
-                if not _deferred_flushed and _deferred_warnings:
-                    flush_deferred_warnings()
-                    _deferred_flushed = True
-                if buffered:
-                    push_log("INFO", f"Buffer flushed ({len(buffered)} lines)",
-                             {"event": config.LOG_EVENT_BUFFER_FLUSHED,
-                              "flushed_count": len(buffered)})
-            else:
-                for l in all_lines:
-                    buffer_line(l)
-                pending_lines.clear()
-                if not any_connected:
-                    log.info("Offline — buffered (%d lines total)", len(all_lines))
-                else:
-                    log.warning("Push failed — buffered for retry")
-                    push_log("WARN", f"Metrics buffered ({len(all_lines)} lines)",
-                             {"event": config.LOG_EVENT_METRICS_BUFFERED,
-                              "buffered_count": len(all_lines)})
-        elif not any_connected:
-            for l in pending_lines:
-                buffer_line(l)
-            pending_lines.clear()
-
-        # --- Sleep until next cycle ---
         elapsed = time.perf_counter() - cycle_start
-        sleep_time = max(0, config.METRIC_INTERVAL_S - elapsed)
-        time.sleep(sleep_time)
+        time.sleep(max(0, config.METRIC_INTERVAL_S - elapsed))
+
+    log.info("Shutdown complete — buffered data will be pushed on next start")
 
 
 if __name__ == "__main__":
@@ -640,3 +668,7 @@ if __name__ == "__main__":
         log.critical("Fatal error: %s", e, exc_info=True)
         push_log("ERROR", f"Fatal: {e}", {"event": "fatal_error", "error": str(e)})
         raise
+    finally:
+        buffered = read_buffer()
+        if buffered:
+            log.info("Exiting with %d lines in buffer — will push on next start", len(buffered))

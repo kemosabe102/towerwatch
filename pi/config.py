@@ -62,6 +62,7 @@ INFLUX_HOST_TAG = "towerwatch"
 # --- Push Optimization (batching + compression) ---
 PUSH_BATCH_SIZE = 10     # Accumulate N lines before pushing (at 60s = push every 10 min)
 PUSH_COMPRESS = True     # gzip Influx POST body
+BUFFER_MAX_BYTES = 512 * 1024  # 512 KB — cap buffer to avoid filling 1 GB data partition
 
 # --- Local Buffering (platform-aware paths) ---
 if sys.platform == "win32":
