@@ -33,16 +33,14 @@ set -euo pipefail
 REPO_DIR="$1"
 INSTALL_DIR="$2"
 
-# Step 1: Pull latest code (inside writable chroot)
+# Step 1: Pull latest code
 echo "[1/3] Pulling latest code..."
-sudo overlayroot-chroot bash -c "
-    cd $REPO_DIR && git pull --ff-only
-    cp pi/towerwatch.py pi/config.py $INSTALL_DIR/
-    chown towerwatch:towerwatch $INSTALL_DIR/towerwatch.py $INSTALL_DIR/config.py
-    echo '  Files copied to $INSTALL_DIR'
-"
+cd "$REPO_DIR" && git pull --ff-only
+sudo cp pi/towerwatch.py pi/config.py "$INSTALL_DIR/"
+sudo chown towerwatch:towerwatch "$INSTALL_DIR/towerwatch.py" "$INSTALL_DIR/config.py"
+echo "  Files copied to $INSTALL_DIR"
 
-# Step 2: Restart service (outside chroot — systemd runs in the overlay)
+# Step 2: Restart service
 echo "[2/3] Restarting towerwatch service..."
 sudo systemctl restart towerwatch
 

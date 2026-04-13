@@ -157,10 +157,9 @@ bash deploy-local.sh                  # Local wrapper with your default host (no
 
 The script:
 1. SSHes into the Pi
-2. Enters `overlayroot-chroot` (writable view of the real filesystem)
-3. Runs `git pull --ff-only` in `~/towerwatch`
-4. Copies `towerwatch.py` and `config.py` to `/opt/towerwatch/`
-5. Restarts the systemd service and verifies it's running
+2. Runs `git pull --ff-only` in `~/towerwatch`
+3. Copies `towerwatch.py` and `config.py` to `/opt/towerwatch/`
+4. Restarts the systemd service and verifies it's running
 
 ### Manual Deploy
 
@@ -168,15 +167,9 @@ If you prefer to do it by hand:
 
 ```bash
 ssh admin@100.76.154.81
-
-# Enter writable filesystem
-sudo overlayroot-chroot
-cd ~/towerwatch && git pull
-cp pi/towerwatch.py pi/config.py /opt/towerwatch/
-chown towerwatch:towerwatch /opt/towerwatch/towerwatch.py /opt/towerwatch/config.py
-exit
-
-# Restart (must be outside chroot — systemd runs in the overlay)
+cd ~/towerwatch && git pull --ff-only
+sudo cp pi/towerwatch.py pi/config.py /opt/towerwatch/
+sudo chown towerwatch:towerwatch /opt/towerwatch/towerwatch.py /opt/towerwatch/config.py
 sudo systemctl restart towerwatch
 journalctl -u towerwatch -f
 ```
