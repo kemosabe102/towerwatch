@@ -61,3 +61,13 @@ Influx line protocol fields become Prometheus metrics as `towerwatch_{field_name
 - **Logs**: pushed directly to Loki HTTP API from Python (no sidecar — Grafana Alloy doesn't run on Pi 3B). Each log entry has a stable `event` field for LogQL filtering (e.g., `| json | event="ping_failed"`)
 - **Log levels**: controlled by `LOKI_PUSH_LEVEL` in config.py. Use `INFO` for home testing, `WARN` in production
 - **Deferred warnings**: boot-time warnings (before network is up) are queued and flushed on first successful metric push
+
+## Deployment
+
+- **Pi code:** `git push && bash deploy-local.sh` — pulls on Pi, copies `pi/*.py` to `/opt/towerwatch/`, restarts service
+- **Dashboard:** import `grafana/dashboard.json` manually in Grafana Cloud (Settings → JSON Model → paste → save)
+- **Secrets:** edit directly on Pi at `/opt/towerwatch/secrets.py` — never committed
+
+## Data Budget
+
+The Pi connects via cellular hotspot with a **2 GB/month cap**. Current monitoring uses ~233 MB/month (~12%). Any change that adds network traffic (new probes, larger downloads, higher frequencies, lower batch sizes) must be evaluated against this cap. Ookla speedtest is manual-only (~40 MB/run) for this reason.
