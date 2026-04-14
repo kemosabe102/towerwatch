@@ -60,7 +60,7 @@ INFLUX_MEASUREMENT = "towerwatch"
 INFLUX_HOST_TAG = "towerwatch"
 
 # --- Push Optimization (batching + compression) ---
-PUSH_BATCH_SIZE = 10     # Accumulate N lines before pushing (at 60s = push every 10 min)
+PUSH_BATCH_SIZE = 2      # Accumulate N lines before pushing (at 60s = push every 2 min)
 PUSH_COMPRESS = True     # gzip Influx POST body
 BUFFER_MAX_BYTES = 512 * 1024  # 512 KB — cap buffer to avoid filling 1 GB data partition
 
@@ -97,3 +97,7 @@ LOG_EVENT_BUFFER_FLUSHED     = "buffer_flushed"
 LOG_EVENT_PARTITION_MISSING  = "partition_not_detected"
 LOG_EVENT_HTTP_THROUGHPUT_OK     = "http_throughput_complete"
 LOG_EVENT_HTTP_THROUGHPUT_FAILED = "http_throughput_failed"
+LOG_EVENT_HEARTBEAT              = "service_heartbeat"
+
+# --- Heartbeat ---
+HEARTBEAT_INTERVAL_S = 3600  # Emit a WARN-level heartbeat to Loki once per hour

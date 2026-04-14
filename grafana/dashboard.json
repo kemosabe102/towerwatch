@@ -75,7 +75,7 @@
       }
     ]
   },
-  "description": "5G connection quality monitoring \u2014 latency, jitter, packet loss, and uptime",
+  "description": "5G connection quality monitoring — latency, jitter, packet loss, and uptime",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -85,7 +85,7 @@
     {
       "gridPos": {
         "h": 4,
-        "w": 8,
+        "w": 12,
         "x": 0,
         "y": 0
       },
@@ -153,8 +153,8 @@
     {
       "gridPos": {
         "h": 4,
-        "w": 8,
-        "x": 8,
+        "w": 12,
+        "x": 12,
         "y": 0
       },
       "id": 2,
@@ -277,10 +277,10 @@
           "min": 0,
           "max": 100,
           "custom": {
-            "drawStyle": "bars",
-            "lineInterpolation": "smooth",
+            "drawStyle": "line",
+            "lineInterpolation": "stepAfter",
             "lineWidth": 2,
-            "fillOpacity": 15,
+            "fillOpacity": 0,
             "pointSize": 5,
             "showPoints": "auto",
             "spanNulls": 120000,
@@ -289,9 +289,8 @@
               "type": "linear"
             },
             "thresholdsStyle": {
-              "mode": "area"
-            },
-            "barAlignment": 0
+              "mode": "off"
+            }
           },
           "thresholds": {
             "mode": "absolute",
@@ -302,20 +301,20 @@
               },
               {
                 "color": "yellow",
-                "value": 1
+                "value": 10
               },
               {
                 "color": "orange",
-                "value": 5
+                "value": 25
               },
               {
                 "color": "red",
-                "value": 20
+                "value": 50
               }
             ]
           },
           "color": {
-            "mode": "thresholds"
+            "mode": "fixed"
           }
         },
         "overrides": [
@@ -680,7 +679,7 @@
       },
       "id": 9,
       "title": "Download / Upload Speed",
-      "description": "Ookla speedtest results (manual only \u2014 run via SSH)",
+      "description": "Ookla speedtest results (manual only — run via SSH)",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -775,87 +774,10 @@
     },
     {
       "gridPos": {
-        "h": 4,
-        "w": 8,
-        "x": 16,
-        "y": 0
-      },
-      "id": 10,
-      "title": "Speedtest Health",
-      "description": "1 = speedtest succeeded, 0 = failed/timed out",
-      "type": "stat",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "grafanacloud-towerwatch-prom"
-      },
-      "targets": [
-        {
-          "expr": "last_over_time(towerwatch_speedtest_success{host=\"towerwatch\"}[12h])",
-          "legendFormat": "Speedtest",
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "FAILING",
-                  "color": "red"
-                },
-                "1": {
-                  "text": "OK",
-                  "color": "green"
-                }
-              }
-            }
-          ],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          },
-          "color": {
-            "mode": "thresholds"
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "orientation": "auto",
-        "textMode": "auto",
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "auto"
-      }
-    },
-    {
-      "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 12,
-        "y": 28
+        "x": 0,
+        "y": 36
       },
       "id": 12,
       "title": "M6 Signal Quality",
@@ -955,7 +877,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 36
+        "y": 44
       },
       "options": {
         "showLabels": false,
@@ -1485,7 +1407,7 @@
     {
       "id": 23,
       "title": "HTTP Throughput Sample",
-      "description": "Estimated throughput from 1MB download (~4x/day at random times)",
+      "description": "Estimated throughput from 1MB download (~4x/day at random times). May appear empty for several hours.",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -1571,7 +1493,7 @@
     ]
   },
   "timezone": "",
-  "title": "Towerwatch \u2014 5G Connection Quality",
+  "title": "Towerwatch — 5G Connection Quality",
   "uid": "",
   "version": 0,
   "refresh": "30s"

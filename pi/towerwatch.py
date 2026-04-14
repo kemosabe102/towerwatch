@@ -53,6 +53,8 @@ _connected = True
 _outage_start = 0
 _outage_count = 0
 _total_outage_s = 0
+_start_ts = time.time()
+_last_heartbeat_ts = 0
 
 
 def update_connection_state(connected: bool, timestamp: int):
@@ -620,6 +622,18 @@ def _maybe_push(cycles_since_push, any_connected, deferred_flushed):
     return cycles_since_push, deferred_flushed
 
 
+
+def _maybe_heartbeat():
+    """Emit a periodic heartbeat log to Loki so the Event Log panel stays populated."""
+    global _last_heartbeat_ts
+    now = time.time()
+    if now - _last_heartbeat_ts >= config.HEARTBEAT_INTERVAL_S:
+        uptime_h = round((now - _start_ts) / 3600, 1)
+        push_log("WARN", "Service heartbeat",
+                 {"event": config.LOG_EVENT_HEARTBEAT, "uptime_h": uptime_h})
+        _last_heartbeat_ts = now
+
+
 # ---------------------------------------------------------------------------
 # Main loop
 # ---------------------------------------------------------------------------
@@ -652,6 +666,8 @@ def main():
         cycles_since_push += 1
         cycles_since_push, deferred_flushed = _maybe_push(
             cycles_since_push, any_connected, deferred_flushed)
+
+        _maybe_heartbeat()
 
         elapsed = time.perf_counter() - cycle_start
         time.sleep(max(0, config.METRIC_INTERVAL_S - elapsed))
