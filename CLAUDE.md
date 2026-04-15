@@ -9,7 +9,6 @@ Towerwatch is a 5G connection quality monitor that runs on a Raspberry Pi 3B. It
 **Goal:** Build an evidence dataset of poor 5G connection quality to present to a cellular provider.
 
 **Target hardware:** Raspberry Pi 3B with wired Ethernet to a Netgear Nighthawk M6 5G hotspot.
-**Archived:** The original Arduino Uno implementation is preserved in `arduino/` — it was replaced because the Uno has no TLS support and Grafana Cloud requires HTTPS.
 
 ## Running Locally (Windows Testing)
 

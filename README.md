@@ -26,7 +26,6 @@ A continuous network-quality probe for a Raspberry Pi. Ships latency, jitter, pa
 11. [Data budget](#data-budget)
 12. [Optional: cellular-router signal probe](#optional-cellular-router-signal-probe)
 13. [For AI assistants](#for-ai-assistants)
-14. [Archived: Arduino implementation](#archived-arduino-implementation)
 
 ---
 
@@ -82,7 +81,6 @@ towerwatch/
 ├── deploy-local.sh         # Thin wrapper with a default host (gitignored)
 ├── grafana/
 │   └── dashboard.json      # Importable Grafana Cloud dashboard
-├── arduino/                # Archived; see bottom of README
 ├── CLAUDE.md               # Instructions for AI assistants working in this repo
 └── README.md
 ```
@@ -277,9 +275,3 @@ For an M6 specifically: connect to its Wi-Fi, visit `http://192.168.1.1`, enable
 ## For AI assistants
 
 If you're an AI agent working in this repo, read **`CLAUDE.md`** first. It contains the authoritative working instructions: delegation patterns, data-budget guardrails, deployment conventions, and the metric-naming invariants that must not be "cleaned up." This README is for humans onboarding to the project; `CLAUDE.md` is for you.
-
----
-
-## Archived: Arduino implementation
-
-`arduino/` contains the original Arduino Uno + Ethernet Shield version, kept for reference only. It was replaced because the Uno lacks TLS and Grafana Cloud requires HTTPS.
