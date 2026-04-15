@@ -67,6 +67,7 @@ Influx line protocol fields become Prometheus metrics as `towerwatch_{field_name
 - **Pi code:** `git push && bash deploy-local.sh` — pulls on Pi, copies `pi/*.py` to `/opt/towerwatch/`, restarts service
 - **Dashboard:** import `grafana/dashboard.json` manually in Grafana Cloud (Settings → JSON Model → paste → save)
 - **Secrets:** edit directly on Pi at `/opt/towerwatch/secrets.py` — never committed
+- **Outage annotations token (one-time):** Grafana Cloud UI → Administration → Service accounts → create `towerwatch-annotations` with role `Editor` (or custom role with `annotations:write`) → Add service account token → paste into `GRAFANA_ANNOTATION_TOKEN` in `/opt/towerwatch/secrets.py`. Also confirm `GRAFANA_ANNOTATIONS_URL` in `config.py` points to your `<stack>.grafana.net` (the user-facing URL, not the `prometheus-prod-*` push endpoint).
 
 ## Data Budget
 

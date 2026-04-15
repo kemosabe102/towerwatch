@@ -81,6 +81,16 @@ LOG_LEVEL = "INFO"  # DEBUG for verbose output
 LOKI_PUSH_TIMEOUT_S = 5
 LOKI_PUSH_LEVEL = "WARN"  # Minimum level to push to Loki (WARN in production, INFO for testing)
 
+# --- Outage Annotations (sticky region annotations in Grafana) ---
+# When a push-gap of >=OUTAGE_GAP_THRESHOLD_S is detected on recovery, POST a region
+# annotation to Grafana so the outage renders as a durable band across all panels.
+# Your stack hostname is shown in the Grafana Cloud UI top-left; it looks like
+# "<stackname>.grafana.net" (NOT the prometheus-prod-*.grafana.net push endpoint above).
+GRAFANA_ANNOTATIONS_URL = "https://towerwatch.grafana.net/api/annotations"
+GRAFANA_ANNOTATIONS_TIMEOUT_S = 5
+OUTAGE_GAP_THRESHOLD_S = 600  # 10 min — shorter gaps are normal batch/push lag
+OUTAGE_ANNOTATION_TAGS = ["towerwatch", "outage", "auto"]
+
 # --- Log Event Identifiers (stable machine-readable keys for LogQL filtering) ---
 LOG_EVENT_SERVICE_STARTED    = "service_started"
 LOG_EVENT_CONN_DOWN          = "connection_down"
@@ -98,6 +108,8 @@ LOG_EVENT_PARTITION_MISSING  = "partition_not_detected"
 LOG_EVENT_HTTP_THROUGHPUT_OK     = "http_throughput_complete"
 LOG_EVENT_HTTP_THROUGHPUT_FAILED = "http_throughput_failed"
 LOG_EVENT_HEARTBEAT              = "service_heartbeat"
+LOG_EVENT_OUTAGE_RECORDED        = "outage_recorded"
+LOG_EVENT_ANNOTATION_FAILED      = "annotation_push_failed"
 
 # --- Heartbeat ---
 HEARTBEAT_INTERVAL_S = 3600  # Emit a WARN-level heartbeat to Loki once per hour

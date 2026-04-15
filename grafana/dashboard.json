@@ -67,11 +67,26 @@
           "uid": "grafanacloud-towerwatch-prom"
         },
         "enable": true,
-        "expr": "absent_over_time(towerwatch_connected{host=\"towerwatch\"}[2m])",
+        "expr": "absent_over_time(towerwatch_connected{host=\"towerwatch\"}[10m])",
         "hide": false,
         "iconColor": "dark-purple",
         "name": "Pi Offline",
-        "titleFormat": "Pi Offline (no data)"
+        "titleFormat": "Pi Offline (no data ≥10 min)"
+      },
+      {
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": false,
+        "iconColor": "dark-red",
+        "name": "Recorded Outages",
+        "target": {
+          "type": "tags",
+          "matchAny": false,
+          "tags": ["towerwatch", "outage"]
+        }
       }
     ]
   },
@@ -99,7 +114,7 @@
       },
       "targets": [
         {
-          "expr": "clamp_max(sum_over_time(towerwatch_connected{host=\"towerwatch\"}[$__range]) / ($__range_s / scalar(towerwatch_metric_interval_s{host=\"towerwatch\"})) * 100, 100)",
+          "expr": "clamp_max(sum_over_time(towerwatch_connected{host=\"towerwatch\"}[$__range]) / count_over_time(towerwatch_connected{host=\"towerwatch\"}[$__range]) * 100, 100)",
           "legendFormat": "Uptime",
           "refId": "A",
           "datasource": {

@@ -55,6 +55,7 @@ _outage_count = 0
 _total_outage_s = 0
 _start_ts = time.time()
 _last_heartbeat_ts = 0
+_last_successful_push_ts = time.time()
 
 
 def update_connection_state(connected: bool, timestamp: int):
@@ -434,6 +435,39 @@ def flush_deferred_warnings():
     _deferred_warnings.clear()
 
 
+def push_annotation(time_ms: int, time_end_ms: int, text: str):
+    """POST a region annotation to Grafana's annotations API.
+
+    Fire-and-forget: failures log to Loki but never block the monitor.
+    Requires GRAFANA_ANNOTATION_TOKEN in secrets.py (service account with
+    annotations:write permission).
+    """
+    token = getattr(secrets, "GRAFANA_ANNOTATION_TOKEN", "")
+    if not token:
+        return
+    payload = {
+        "time": time_ms,
+        "timeEnd": time_end_ms,
+        "tags": config.OUTAGE_ANNOTATION_TAGS,
+        "text": text,
+    }
+    try:
+        r = requests.post(
+            config.GRAFANA_ANNOTATIONS_URL,
+            json=payload,
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=config.GRAFANA_ANNOTATIONS_TIMEOUT_S,
+        )
+        if r.status_code >= 300:
+            push_log("WARN", f"Annotation POST failed: HTTP {r.status_code}",
+                     {"event": config.LOG_EVENT_ANNOTATION_FAILED,
+                      "status": r.status_code})
+    except Exception as e:
+        push_log("WARN", f"Annotation POST exception: {e}",
+                 {"event": config.LOG_EVENT_ANNOTATION_FAILED,
+                  "error": str(e)})
+
+
 # ---------------------------------------------------------------------------
 # CSV Buffer (persistent writable partition, append-only + atomic clear)
 # ---------------------------------------------------------------------------
@@ -604,12 +638,24 @@ def _log_cycle(fields, timestamp):
 
 def _maybe_push(cycles_since_push, any_connected, deferred_flushed):
     """Batch-push buffered metrics if due. Returns (cycles_since_push, deferred_flushed)."""
+    global _last_successful_push_ts
     if cycles_since_push < config.PUSH_BATCH_SIZE or not any_connected:
         return cycles_since_push, deferred_flushed
     all_lines = read_buffer()
     if all_lines and push_metrics(all_lines):
         clear_buffer()
         log.info("Pushed %d lines", len(all_lines))
+        now = time.time()
+        gap = now - _last_successful_push_ts
+        if gap >= config.OUTAGE_GAP_THRESHOLD_S:
+            gap_min = int(gap / 60)
+            push_annotation(int(_last_successful_push_ts * 1000),
+                            int(now * 1000),
+                            f"Pi offline for {gap_min} min")
+            push_log("WARN", f"Outage recorded: {int(gap)}s ({gap_min} min)",
+                     {"event": config.LOG_EVENT_OUTAGE_RECORDED,
+                      "gap_seconds": int(gap)})
+        _last_successful_push_ts = now
         if not deferred_flushed and _deferred_warnings:
             flush_deferred_warnings()
             deferred_flushed = True
