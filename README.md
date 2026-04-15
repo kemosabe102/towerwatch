@@ -203,7 +203,7 @@ Install Tailscale on your dev machine too, log in with the same account, and `ss
 
 Recommended for unattended remote deployments — the root partition resets on every reboot, so a stray write or SD-card glitch can't corrupt the system. The data partition stays writable so the buffer and Tailscale state persist.
 
-> **Do not use `raspi-config` → Overlay File System on Bookworm.** There is a confirmed bug that overlays *all* partitions including the data partition, making it non-persistent. Configure manually instead:
+> **Do not use `raspi-config` → Overlay File System on Bookworm.** A confirmed bug ([raspberrypi/bookworm-feedback#137](https://github.com/raspberrypi/bookworm-feedback/issues/137), see also [RPi-Distro/raspi-config#266](https://github.com/RPi-Distro/raspi-config/issues/266)) overlays *all* partitions including the data partition, making it non-persistent. Configure manually instead:
 
 ```bash
 echo 'overlayroot=tmpfs:recurse=0' | sudo tee /etc/overlayroot.local.conf
