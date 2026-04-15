@@ -18,7 +18,7 @@ set -euo pipefail
 
 if [ $# -lt 1 ]; then
     echo "Usage: bash deploy.sh <user@host> [repo_dir] [install_dir]"
-    echo "  Example: bash deploy.sh admin@100.76.154.81"
+    echo "  Example: bash deploy.sh pi@towerwatch.local"
     exit 1
 fi
 

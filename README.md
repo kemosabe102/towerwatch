@@ -1,268 +1,285 @@
-# Towerwatch — 5G Cell Tower Network Quality Monitor
+# Towerwatch — Cellular/Broadband Network Quality Monitor
 
-Continuously monitors latency, jitter, packet loss, DNS resolution, TCP connection time, throughput, and cellular signal quality on your 5G connection to build an evidence dataset for your cellular provider.
+A continuous network-quality probe for a Raspberry Pi. Ships latency, jitter, packet loss, DNS/TCP/HTTP timings, throughput, and (optionally) cellular-radio signal metrics to Grafana Cloud. Buffers to disk during outages and flushes on reconnect. Designed to build a long-running evidence dataset for your ISP or cellular provider.
 
-**Platform:** Raspberry Pi 3B (or newer) with wired Ethernet to a Netgear Nighthawk M6 5G hotspot.
+> **At a glance**
+> - **Runtime:** Python 3 on Raspberry Pi OS (also runs on Windows/macOS for dev).
+> - **Outputs:** Prometheus metrics (Influx line protocol) + structured JSON logs (Loki), both to Grafana Cloud over HTTPS.
+> - **Cadence:** 60 s main loop. Pushes batched every ~2 min.
+> - **Offline behaviour:** atomic CSV buffer on a dedicated data partition, capped at 512 KB, flushed on reconnect.
+> - **Data cost:** ~230 MB/month at defaults — tune `config.py` if you're on a metered connection.
 
 ---
 
-## What It Measures
+## Contents
+
+1. [Architecture](#architecture)
+2. [What it measures](#what-it-measures)
+3. [Repository layout](#repository-layout)
+4. [Hardware](#hardware)
+5. [Quick start](#quick-start)
+6. [Configuration](#configuration)
+7. [Remote access (Tailscale)](#remote-access-tailscale)
+8. [Read-only root filesystem](#read-only-root-filesystem)
+9. [Deploying updates](#deploying-updates)
+10. [Grafana dashboard & alerting](#grafana-dashboard--alerting)
+11. [Data budget](#data-budget)
+12. [Optional: cellular-router signal probe](#optional-cellular-router-signal-probe)
+13. [For AI assistants](#for-ai-assistants)
+14. [Archived: Arduino implementation](#archived-arduino-implementation)
+
+---
+
+## Architecture
+
+`pi/towerwatch.py` is a long-running Python process managed by systemd (`Type=simple`). Each 60 s tick runs:
+
+1. **ICMP ping** — 10-probe burst per target; parses RTT avg/min/max, jitter (RFC 3550), loss %.
+2. **TCP connect** — socket handshake timing to a known endpoint.
+3. **DNS resolution** — `dnspython` against explicit nameservers (bypasses `systemd-resolved`).
+4. **Router signal** — optional; polls a router admin API for radio metrics (RSRP/RSRQ/SINR/band).
+5. **HTTP latency** — timed small (10 KB) fetch from a fast CDN. Every 5 min.
+6. **HTTP throughput** — timed 1 MB fetch, ~4x/day on a random schedule.
+7. **Ookla speedtest** — manual only (~400 MB/run at 5G speeds).
+8. **Push metrics** — Influx line protocol to Grafana Cloud Prometheus, gzipped, batched.
+9. **Push logs** — structured JSON to Grafana Cloud Loki (fire-and-forget).
+10. **Buffer on failure** — atomic CSV write to the data partition; flush on reconnect. Gaps ≥ 10 min also POST a sticky region annotation to Grafana.
+
+Metric names are flattened: `towerwatch_{field}_{target_label}` (e.g. `towerwatch_rtt_avg_google`). Units are `_ms` throughout (not Prometheus-standard seconds).
+
+---
+
+## What it measures
 
 | Metric | Method | Interval |
-|--------|--------|----------|
-| RTT avg/min/max | ICMP ping (10 probes) to Google, Cloudflare, carrier gateway | 60s |
-| Jitter | Std deviation of RTT (RFC 3550) | 60s |
-| Packet loss | ICMP loss percentage | 60s |
-| Connection state | Binary up/down with outage tracking | 60s |
-| DNS resolution time | dnspython with explicit nameserver (bypasses cache) | 60s |
-| TCP connection time | Socket connect to 8.8.8.8:443 | 60s |
-| M6 signal quality | RSRP, RSRQ, SINR, band from M6 admin API | 60s |
-| HTTP latency probe | Timed 10KB fetch from Cloudflare CDN | 5 min |
-| HTTP throughput sample | Timed 1MB download from Cloudflare CDN | ~4x/day (random) |
-| Download/upload speed | Ookla official CLI (manual only via SSH) | on demand |
+|---|---|---|
+| RTT avg/min/max | ICMP ping, 10 probes per target | 60 s |
+| Jitter | Std deviation of RTT (RFC 3550) | 60 s |
+| Packet loss | ICMP loss % | 60 s |
+| Connection state | Binary up/down with outage tracking | 60 s |
+| DNS resolution time | `dnspython` with explicit nameservers | 60 s |
+| TCP connection time | Socket connect to `8.8.8.8:443` | 60 s |
+| HTTP latency | Timed 10 KB fetch | 5 min |
+| HTTP throughput sample | Timed 1 MB fetch | ~4x/day (random) |
+| Download/upload speed | Ookla CLI | manual |
+| Router signal (optional) | RSRP, RSRQ, SINR, band via router admin API | 60 s |
 
-All metrics push to Grafana Cloud over HTTPS using Influx line protocol. During outages, data buffers to a local CSV and flushes when connectivity returns.
+---
+
+## Repository layout
+
+```
+towerwatch/
+├── pi/
+│   ├── towerwatch.py       # Main monitoring loop
+│   ├── config.py           # All tunable constants (intervals, targets, URLs)
+│   ├── secrets.py.example  # Credential template — copy to secrets.py
+│   ├── requirements.txt    # Python dependencies
+│   ├── install.sh          # One-shot Pi setup (systemd, data partition, deps)
+│   ├── towerwatch.service  # systemd unit
+│   └── probes/             # Per-probe modules (ping, dns, tcp, http, m6, ookla)
+├── deploy.sh               # Generic deploy: ssh HOST, git pull, copy, restart
+├── deploy-local.sh         # Thin wrapper with a default host (gitignored)
+├── grafana/
+│   └── dashboard.json      # Importable Grafana Cloud dashboard
+├── arduino/                # Archived; see bottom of README
+├── CLAUDE.md               # Instructions for AI assistants working in this repo
+└── README.md
+```
+
+Agents editing this repo: start at `pi/config.py` (constants), then `pi/towerwatch.py` (loop), then `pi/probes/` (individual collectors).
 
 ---
 
 ## Hardware
 
+Any Raspberry Pi with wired Ethernet will work. This project was developed on a Pi 3B.
+
 | Component | Notes |
-|-----------|-------|
-| Raspberry Pi 3B | Built-in 10/100 Ethernet, 1GB RAM |
-| MicroSD card (32GB) | Samsung or SanDisk recommended for reliability |
-| Heatsink kit | Passive — prevents thermal throttling |
-| 5V/2.5A micro-USB power supply | Must be 2.5A+; underpowered supplies cause random reboots |
-| Ethernet cable | Cat5e/Cat6, connects Pi to M6 router |
-| Case (optional) | Dust/short protection at remote site |
+|---|---|
+| Raspberry Pi (3B or newer) | Wired Ethernet is strongly preferred over Wi-Fi for stable probes. |
+| MicroSD card (16 GB+) | Any reputable brand; A-class rating helps but isn't required. |
+| Power supply | Use the official PSU for your Pi model. Under-spec supplies cause random reboots. |
+| Heatsink / case | Recommended if running 24/7 in a warm location. |
+| Ethernet cable | Cat5e or better to the router under test. |
 
-### Router: Netgear Nighthawk M6
-
-Enable the Ethernet port before deploying:
-1. Connect to M6 WiFi → go to `192.168.1.1`
-2. Advanced Settings → enable Ethernet port
-3. Enable Plugged-In Mode (USB-C power, runs off outlet)
+The probes don't care what's on the other end of the cable — 5G hotspot, fixed-wireless modem, fibre ONT, or LAN uplink. The cellular-specific signal probe (`pi/probes/m6.py`) is optional and disables itself cleanly if the router isn't reachable.
 
 ---
 
-## Quick Start
+## Quick start
 
-### 1. Flash SD Card
+### 1. Flash the SD card
 
-- Download [Raspberry Pi OS Lite](https://www.raspberrypi.com/software/) (64-bit, no desktop)
-- Flash with Raspberry Pi Imager
-- In Imager settings: enable SSH, set hostname to `towerwatch`, set password
-- After flashing, create a third partition (1GB, ext4) for persistent data storage
+- Flash **Raspberry Pi OS Lite (64-bit)** with Raspberry Pi Imager.
+- In Imager's advanced settings: enable SSH, set a hostname, set a user/password.
+- After flashing, create a **third partition** (~1 GB, ext4, label `twdata`) on the card for persistent buffer storage. `install.sh` expects this at `/dev/mmcblk0p3`.
 
-### 2. First Boot
+### 2. First boot
 
 ```bash
-ssh pi@towerwatch.local
+ssh <user>@<hostname>.local
 sudo apt update && sudo apt upgrade -y
 ```
 
-### 3. Install Towerwatch
+### 3. Install
 
 ```bash
-git clone git@github.com:kemosabe102/towerwatch.git
+git clone <your-fork-url> towerwatch
 cd towerwatch/pi
 cp secrets.py.example secrets.py
-# Edit secrets.py with your Grafana Cloud credentials
+# Edit secrets.py — see "Configuration" below
 sudo bash install.sh
 ```
 
-### 4. Install Tailscale (remote access)
+`install.sh` installs Python deps, the Ookla Speedtest CLI, mounts the data partition at `/opt/towerwatch/data`, installs the systemd unit, and starts the service.
 
-Tailscale creates a private VPN mesh so you can SSH into the Pi from anywhere — no port forwarding needed. The free Personal plan (3 users, 100 devices) is sufficient.
-
-```bash
-# Install on Pi (sets up apt repo for auto-updates)
-curl -fsSL https://tailscale.com/install.sh | sh
-
-# Set up bind mount so Tailscale state survives overlayfs
-# (install.sh creates the directory; the bind mount unit must be added manually)
-sudo systemctl enable var-lib-tailscale.mount
-sudo systemctl start var-lib-tailscale.mount
-
-# Authenticate — opens a URL to log in
-sudo tailscale up
-```
-
-Install Tailscale on your local machine too (Windows: `winget install Tailscale.Tailscale`). Log in with the same account. Both devices get stable 100.x.y.z IPs for SSH access from any network.
-
-**Note:** Tailscale IPs are device-specific and not committed to this repo.
-
-### 5. Configure Read-Only Filesystem
-
-**Do NOT use `raspi-config` Overlay File System** — there is a confirmed bug in Bookworm that overlays all partitions including the data partition, making it non-persistent.
-
-Instead, manually configure:
-```bash
-# Create the config file
-echo 'overlayroot=tmpfs:recurse=0' | sudo tee /etc/overlayroot.local.conf
-```
-
-The `recurse=0` flag prevents the overlay from applying to the data partition.
-
-**Before enabling overlayfs**, verify that `install.sh` has already:
-- Bind-mounted `/var/lib/tailscale/` → `/opt/towerwatch/data/tailscale-state/` (via systemd mount unit)
-- Configured fakehwclock to write to the data partition
-
-### 6. Reboot and Verify
+### 4. Verify
 
 ```bash
-sudo reboot
-# After reboot:
 sudo systemctl status towerwatch
 journalctl -u towerwatch -f
 ```
 
----
+In Grafana Cloud:
+- Metrics: Explore → your Prometheus datasource → query `towerwatch_connected`.
+- Logs: Explore → your Loki datasource → `{job="towerwatch"} | json | event="service_started"`.
 
-## Local Testing (Windows)
+### Local dev (Windows/macOS/Linux)
 
-The monitoring script is cross-platform. Test the full push pipeline from your dev machine before deploying to the Pi:
+The script is cross-platform. Paths, ping flags, and the data partition check are gated on `sys.platform`.
 
 ```bash
 cd pi
 cp secrets.py.example secrets.py
-# Edit secrets.py with your Grafana Cloud + Loki credentials
-pip install requests dnspython
+pip install -r requirements.txt
 python towerwatch.py
 ```
 
-Ookla speedtest is disabled from the automatic schedule (each test uses ~400 MB at 5G speeds). Run manually via SSH when needed. Download the [Ookla speedtest CLI](https://www.speedtest.net/apps/cli) and extract to `pi/speedtest_bin/`.
-
-Platform differences (ping flags, paths, data partition) are handled automatically. M6 signal polling will fail gracefully (expected — no M6 router on your home network).
-
-**Verify in Grafana Cloud:**
-- Metrics: Explore → `grafanacloud-towerwatch-prom` → query `towerwatch_connected`
-- Logs: Explore → `grafanacloud-towerwatch-logs` → query `{job="towerwatch"} | json | event="service_started"`
+Optional: drop the Ookla CLI binary in `pi/speedtest_bin/` for manual speedtests. The cellular signal probe fails gracefully off-network.
 
 ---
 
-## Deploying Updates to the Pi
+## Configuration
 
-The Pi runs a read-only overlay filesystem (overlayroot), so the root partition resets on reboot. A deploy script handles the full process — entering the writable chroot, pulling from git, copying files, and restarting the service.
+All tuning lives in two files:
 
-### Quick Deploy
+- **`pi/config.py`** — non-secret constants: probe targets, intervals, push URLs, buffer paths, log event names. Read the top of the file; it's the source of truth.
+- **`pi/secrets.py`** — gitignored. Created from `secrets.py.example`. Contains:
+  - Grafana Cloud Prometheus creds (`GRAFANA_INSTANCE_ID`, `GRAFANA_API_KEY`)
+  - Loki creds (`LOKI_URL`, `LOKI_USER`, `LOKI_TOKEN`) — Loki has a **different** instance ID from Prometheus
+  - Optional: router admin password, Grafana annotation service-account token
 
-From your dev machine (Windows or any machine with SSH access):
+To generate Grafana Cloud credentials: log in to grafana.com → your stack → **Access Policies** → create a token with the `MetricsPublisher` role (also usable for Loki writes in the same stack).
+
+To enable sticky outage annotations: create a service account in your Grafana stack with the `annotations:write` permission, mint a token, and paste it into `GRAFANA_ANNOTATION_TOKEN`. Also set `GRAFANA_ANNOTATIONS_URL` in `config.py` to `https://<your-stack>.grafana.net/api/annotations` (the user-facing stack URL, **not** the `prometheus-prod-*` push endpoint).
+
+### Invariants worth knowing
+
+- Metric units are `_ms`, not seconds. Don't "fix" this — dashboards depend on it.
+- Target labels are baked into field names (e.g. `rtt_avg_google`), not Prometheus label selectors. This is deliberate; dashboards query by metric name.
+- The buffer is capped at 512 KB (`BUFFER_MAX_BYTES`) to avoid filling the 1 GB data partition.
+- `LOKI_PUSH_LEVEL` defaults to `WARN` in production. `INFO` is for local dev only; `INFO` in production will flood Loki.
+
+---
+
+## Remote access (Tailscale)
+
+Optional. Tailscale gives the Pi a stable private IP reachable from anywhere, without port forwarding. The free Personal plan is enough.
 
 ```bash
-bash deploy.sh admin@100.76.154.81    # Generic script — host is required
-bash deploy.sh admin@towerwatch.local # Or use mDNS on LAN
-bash deploy-local.sh                  # Local wrapper with your default host (not committed)
+# On the Pi
+curl -fsSL https://tailscale.com/install.sh | sh
+
+# So Tailscale state survives an overlayfs root (see next section)
+sudo systemctl enable --now var-lib-tailscale.mount
+
+sudo tailscale up   # opens an auth URL
 ```
 
-The script:
-1. SSHes into the Pi
-2. Runs `git pull --ff-only` in `~/towerwatch`
-3. Copies `towerwatch.py` and `config.py` to `/opt/towerwatch/`
-4. Restarts the systemd service and verifies it's running
+Install Tailscale on your dev machine too, log in with the same account, and `ssh <user>@<tailscale-ip>` from anywhere.
 
-### Manual Deploy
+---
 
-If you prefer to do it by hand:
+## Read-only root filesystem
+
+Recommended for unattended remote deployments — the root partition resets on every reboot, so a stray write or SD-card glitch can't corrupt the system. The data partition stays writable so the buffer and Tailscale state persist.
+
+> **Do not use `raspi-config` → Overlay File System on Bookworm.** There is a confirmed bug that overlays *all* partitions including the data partition, making it non-persistent. Configure manually instead:
 
 ```bash
-ssh admin@100.76.154.81
+echo 'overlayroot=tmpfs:recurse=0' | sudo tee /etc/overlayroot.local.conf
+sudo reboot
+```
+
+`recurse=0` is the critical flag — without it the data partition gets overlaid too.
+
+Before enabling overlayroot, confirm `install.sh` has already:
+- Bind-mounted `/var/lib/tailscale/` → `/opt/towerwatch/data/tailscale-state/`
+- Configured `fake-hwclock` to write to the data partition
+
+---
+
+## Deploying updates
+
+From any machine with SSH to the Pi:
+
+```bash
+bash deploy.sh <user>@<host-or-tailscale-ip>
+# e.g. bash deploy.sh pi@towerwatch.local
+```
+
+The script SSHes in, `git pull --ff-only`s the repo, copies `pi/*.py` to `/opt/towerwatch/`, and restarts the systemd unit.
+
+`deploy-local.sh` is a gitignored wrapper that hardcodes your host.
+
+### Manual deploy
+
+```bash
+ssh <user>@<host>
 cd ~/towerwatch && git pull --ff-only
-sudo cp pi/towerwatch.py pi/config.py /opt/towerwatch/
-sudo chown towerwatch:towerwatch /opt/towerwatch/towerwatch.py /opt/towerwatch/config.py
+sudo cp pi/towerwatch.py pi/config.py pi/probes/*.py /opt/towerwatch/
 sudo systemctl restart towerwatch
 journalctl -u towerwatch -f
 ```
 
-### Dashboard Updates
+### Dashboard updates
 
-Dashboard changes don't require Pi access — re-import `grafana/dashboard.json` in Grafana Cloud directly (Dashboards → New → Import → Upload JSON).
-
----
-
-## Grafana Dashboard
-
-A pre-built dashboard is included at `grafana/dashboard.json` with 14 panels:
-
-- **Connection Uptime** — headline evidence number
-- **Current Status** — live UP/DOWN indicator
-- **Speedtest Health** — OK/FAILING indicator
-- **Google / Cloudflare / Gateway** — per-endpoint RTT avg+max and jitter (small multiples, log2 scale)
-- **Packet Loss** — per target with threshold shading
-- **DNS Resolution Time** — per nameserver
-- **TCP Connection Time** — real-world app readiness
-- **HTTP Download Time** — lightweight throughput proxy (every 5 min)
-- **Download/Upload Speed** — Ookla speedtest (every 6 hours)
-- **M6 Signal Quality** — RSRP, RSRQ, SINR from the router
-- **Towerwatch Event Log** — live Loki log stream
-
-Import: Grafana Cloud → Dashboards → New → Import → Upload JSON → select datasource.
-
-### Alerting
-
-Set up a "no data" alert in Grafana Cloud: if no `towerwatch_connected` data for 2+ hours, send a notification. Critical for knowing if the remote device has gone silent.
+Re-import `grafana/dashboard.json` in Grafana Cloud (Dashboards → New → Import → Upload JSON). No Pi access required.
 
 ---
 
-## Pre-Deployment Checklist
+## Grafana dashboard & alerting
 
-Complete at home before going to the remote site:
+`grafana/dashboard.json` is an importable dashboard with panels for connection uptime, per-target RTT/jitter/loss (log2 scale, small multiples), DNS and TCP timings, HTTP download time, Ookla speedtest, router signal, and a live Loki event-log stream.
 
-- [ ] Pi boots and reaches `towerwatch.local` via SSH
-- [ ] `sudo systemctl status towerwatch` shows active
-- [ ] `journalctl -u towerwatch -f` shows metric cycles every 60s
-- [ ] Grafana Cloud Explore shows towerwatch metrics
-- [ ] Speedtest runs successfully (check journalctl for "Speedtest:" log)
-- [ ] Tailscale connected: `tailscale status` shows online
-- [ ] SSH works over Tailscale from another device
-- [ ] Pull power → Pi reboots cleanly → towerwatch restarts → buffer data survives
-- [ ] Tailscale reconnects automatically after reboot (no re-auth needed)
-- [ ] Leave running 24+ hours — check Grafana for continuous data, no gaps
+**Suggested alert:** a "no data" rule on `towerwatch_connected` — if no samples for 2+ hours, notify. This catches the case where the device itself has gone silent (power, SD-card failure, ISP outage exceeding the buffer).
 
 ---
 
-## Secrets and Credentials
+## Data budget
 
-`secrets.py` is gitignored and must be created manually on each device:
-
-```bash
-cd towerwatch/pi
-cp secrets.py.example secrets.py
-chmod 600 secrets.py
-# Edit with your Grafana Cloud instance ID and API key
-```
-
-To generate Grafana credentials:
-1. Log in to [grafana.com](https://grafana.com) → your stack → Access Policies
-2. Create a key with **MetricsPublisher** role
-3. Your instance ID is `3009582`
+If your connection is metered, treat this as a hard constraint. At defaults the probes use roughly **230 MB/month** (batched + gzipped pushes dominate). Anything that increases traffic — new probes, larger download samples, higher frequencies, smaller batches — should be evaluated against your cap. Ookla is manual-only for this reason (~400 MB per 5G run).
 
 ---
 
-## File Structure
+## Optional: cellular-router signal probe
 
-```
-towerwatch/
-├── pi/                      # Raspberry Pi implementation
-│   ├── towerwatch.py        # Main monitoring script
-│   ├── config.py            # All configurable constants
-│   ├── secrets.py.example   # Credential template
-│   ├── requirements.txt     # Python dependencies
-│   ├── install.sh           # One-shot setup script
-│   └── towerwatch.service   # systemd unit file
-├── deploy.sh                # Generic deploy script (host required as arg)
-├── deploy-local.sh          # Local wrapper with default host (gitignored)
-├── grafana/
-│   └── dashboard.json       # Grafana dashboard (14 panels)
-├── arduino/                 # Archived: original Arduino Uno implementation
-│   ├── towerwatch.ino
-│   ├── config.h
-│   └── ...
-└── README.md
-```
+`pi/probes/m6.py` polls the admin API of a **Netgear Nighthawk M6** 5G/LTE hotspot for RSRP, RSRQ, SINR, and current band. If you have a different router, either:
+
+- Disable the probe by clearing `M6_ADMIN_URL` in `config.py`, or
+- Write a sibling module in `pi/probes/` that exposes the same metric shape.
+
+For an M6 specifically: connect to its Wi-Fi, visit `http://192.168.1.1`, enable the Ethernet port and Plugged-In Mode in Advanced Settings, then set the admin password in `secrets.py`.
 
 ---
 
-## Arduino (Archived)
+## For AI assistants
 
-The original implementation targeted an Arduino Uno R3 + Ethernet Shield. It is preserved in the `arduino/` directory for reference. The Arduino version collects RTT, jitter, and packet loss via TCP probes but cannot push to Grafana Cloud due to the Uno's lack of TLS support. See `arduino/config.h` for its configuration.
+If you're an AI agent working in this repo, read **`CLAUDE.md`** first. It contains the authoritative working instructions: delegation patterns, data-budget guardrails, deployment conventions, and the metric-naming invariants that must not be "cleaned up." This README is for humans onboarding to the project; `CLAUDE.md` is for you.
+
+---
+
+## Archived: Arduino implementation
+
+`arduino/` contains the original Arduino Uno + Ethernet Shield version, kept for reference only. It was replaced because the Uno lacks TLS and Grafana Cloud requires HTTPS.

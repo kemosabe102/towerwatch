@@ -353,7 +353,7 @@ Stable machine-readable keys used in the `event` field of Loki JSON payloads. Us
 | `LOKI_URL` | Loki | Full push endpoint URL (different instance) |
 | `LOKI_USER` | Loki | Numeric Loki instance ID |
 | `LOKI_TOKEN` | Loki | Same API token as Prometheus |
-| `M6_ADMIN_PASSWORD` | M6 router | Default: `attadmin` |
+| `M6_ADMIN_PASSWORD` | Cellular router | Router admin login password |
 
 ---
 
@@ -429,7 +429,7 @@ One-shot Pi setup. Must run as root.
 
 ### deploy.sh (`deploy.sh`, 47 lines)
 
-Pushes code updates from dev machine to Pi via SSH. Default target: `admin@100.76.154.81` (Tailscale).
+Pushes code updates from dev machine to Pi via SSH. Target is the first positional argument (`user@host` — typically a Tailscale IP or `.local` mDNS name).
 
 1. **Pull + copy** (inside `overlayroot-chroot`): `git pull --ff-only`, copy files to `/opt/towerwatch/`
 2. **Restart** (outside chroot): `systemctl restart towerwatch`
