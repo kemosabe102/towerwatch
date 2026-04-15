@@ -4,11 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Towerwatch is a 5G connection quality monitor that runs on a Raspberry Pi 3B. It continuously measures latency, jitter, packet loss, DNS resolution, TCP connection time, HTTP download speed, Ookla speedtest throughput, and Netgear M6 signal quality — then pushes metrics to Grafana Cloud (Prometheus via Influx line protocol) and structured logs to Loki.
+Towerwatch is a network quality monitor that runs on a Raspberry Pi. It continuously measures latency, jitter, packet loss, DNS resolution, TCP connection time, HTTP latency/throughput, Ookla speedtest throughput, and (optionally) cellular-router signal metrics — then pushes metrics to Grafana Cloud (Prometheus via Influx line protocol) and structured logs to Loki.
 
-**Goal:** Build an evidence dataset of poor 5G connection quality to present to a cellular provider.
+**Typical goal:** Build a long-running evidence dataset of connection quality to present to an ISP or cellular provider.
 
-**Target hardware:** Raspberry Pi 3B with wired Ethernet to a Netgear Nighthawk M6 5G hotspot.
+**Target hardware:** Any Raspberry Pi with wired Ethernet to the router under test. Developed on a Pi 3B against a Netgear Nighthawk M6 5G hotspot; the cellular-signal probe (`pi/probes/m6.py`) is optional and disables itself cleanly if the router isn't reachable.
 
 ## Running Locally (Windows Testing)
 
@@ -27,7 +27,7 @@ Platform differences handled automatically via `sys.platform`:
 - Speedtest binary: `./speedtest_bin/speedtest.exe` (Windows) vs `/usr/bin/speedtest` (Linux)
 - Data partition: skips `mountpoint` check on Windows
 
-M6 signal polling and speedtest will fail gracefully if unavailable — this is expected on Windows.
+Router signal polling and speedtest will fail gracefully if unavailable — this is expected on Windows.
 
 ## Architecture
 
@@ -36,12 +36,13 @@ M6 signal polling and speedtest will fail gracefully if unavailable — this is 
 1. **ICMP ping** — 10-probe burst to 3 targets (Google, Cloudflare, Gateway), parses RTT avg/min/max, jitter (RFC 3550), packet loss
 2. **TCP connect** — socket handshake timing to 8.8.8.8:443
 3. **DNS resolution** — dnspython with explicit nameservers (bypasses systemd-resolved)
-4. **M6 signal** — polls router admin API for RSRP/RSRQ/SINR/band
-5. **HTTP download** (every 5 min) — timed 500KB fetch from Cloudflare CDN
-6. **Speedtest** (every 6 hours) — Ookla CLI via subprocess with 120s timeout
-7. **Push metrics** — Influx line protocol to Grafana Cloud Prometheus
-8. **Push logs** — structured JSON to Grafana Cloud Loki (fire-and-forget)
-9. **Buffer on failure** — atomic CSV write to writable partition, flush on reconnect
+4. **Router signal** (optional) — polls router admin API for RSRP/RSRQ/SINR/band
+5. **HTTP latency** (every 5 min) — timed 10 KB fetch from a fast CDN
+6. **HTTP throughput** (~4x/day, random schedule) — timed 1 MB fetch
+7. **Ookla speedtest** — manual only (~400 MB/run at 5G speeds)
+8. **Push metrics** — Influx line protocol to Grafana Cloud Prometheus (batched, gzipped)
+9. **Push logs** — structured JSON to Grafana Cloud Loki (fire-and-forget)
+10. **Buffer on failure** — atomic CSV write to writable partition, flush on reconnect. Gaps ≥ 10 min also POST a sticky region annotation to Grafana.
 
 ## Key Files
 
@@ -57,17 +58,17 @@ Influx line protocol fields become Prometheus metrics as `towerwatch_{field_name
 ## Observability
 
 - **Metrics**: pushed to Grafana Cloud Prometheus via Influx line protocol (`/api/v1/push/influx/write?precision=s`)
-- **Logs**: pushed directly to Loki HTTP API from Python (no sidecar — Grafana Alloy doesn't run on Pi 3B). Each log entry has a stable `event` field for LogQL filtering (e.g., `| json | event="ping_failed"`)
-- **Log levels**: controlled by `LOKI_PUSH_LEVEL` in config.py. Use `INFO` for home testing, `WARN` in production
+- **Logs**: pushed directly to Loki HTTP API from Python (no sidecar — Grafana Alloy is too heavy for older Pis). Each log entry has a stable `event` field for LogQL filtering (e.g., `| json | event="ping_failed"`)
+- **Log levels**: controlled by `LOKI_PUSH_LEVEL` in config.py. Use `INFO` for local dev only, `WARN` in production (`INFO` in production will flood Loki)
 - **Deferred warnings**: boot-time warnings (before network is up) are queued and flushed on first successful metric push
 
 ## Deployment
 
-- **Pi code:** `git push && bash deploy-local.sh` — pulls on Pi, copies `pi/*.py` to `/opt/towerwatch/`, restarts service
+- **Pi code:** `git push && bash deploy.sh <user>@<host>` (or a `deploy-local.sh` wrapper) — SSHes in, `git pull --ff-only`s the repo, copies `pi/*.py` to `/opt/towerwatch/`, restarts the systemd unit
 - **Dashboard:** import `grafana/dashboard.json` manually in Grafana Cloud (Settings → JSON Model → paste → save)
 - **Secrets:** edit directly on Pi at `/opt/towerwatch/secrets.py` — never committed
 - **Outage annotations token (one-time):** Grafana Cloud UI → Administration → Service accounts → create `towerwatch-annotations` with role `Editor` (or custom role with `annotations:write`) → Add service account token → paste into `GRAFANA_ANNOTATION_TOKEN` in `/opt/towerwatch/secrets.py`. Also confirm `GRAFANA_ANNOTATIONS_URL` in `config.py` points to your `<stack>.grafana.net` (the user-facing URL, not the `prometheus-prod-*` push endpoint).
 
 ## Data Budget
 
-The Pi connects via cellular hotspot with a **2 GB/month cap**. Current monitoring uses ~233 MB/month (~12%). Any change that adds network traffic (new probes, larger downloads, higher frequencies, lower batch sizes) must be evaluated against this cap. Ookla speedtest is manual-only (~40 MB/run) for this reason.
+Towerwatch is designed to run over metered connections (e.g. a cellular hotspot). At defaults the probes use roughly **230 MB/month** (batched + gzipped pushes dominate). Any change that adds network traffic — new probes, larger downloads, higher frequencies, lower batch sizes — must be evaluated against the operator's cap before merging. Ookla speedtest is manual-only (~400 MB/run at 5G speeds) for this reason.
