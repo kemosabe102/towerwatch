@@ -16,3 +16,7 @@ deploy-local.sh
 
 # Claude Code local config/skills
 .claude/
+
+# CI build artifact (stamped by ci.sh, not source)
+pi/version.txt
+ci-tmp/
