@@ -44,6 +44,10 @@ VERSION_STAMP="$(cat pi/version.txt)"
 echo "=== Towerwatch Deploy to $PI_HOST ==="
 echo "    Version: $VERSION_STAMP"
 
+# SCP version.txt to the Pi repo — it's gitignored so git pull won't deliver it.
+echo "[0/3] Uploading version.txt..."
+scp pi/version.txt "$PI_HOST:$REPO_DIR/pi/version.txt"
+
 ssh "$PI_HOST" bash -s "$REPO_DIR" "$INSTALL_DIR" << 'REMOTE'
 set -euo pipefail
 REPO_DIR="$1"
