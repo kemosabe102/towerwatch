@@ -6,6 +6,22 @@ Agent-facing guide. The user-facing README is imported below and is the source o
 
 ---
 
+## Post-change workflow (required after any code change)
+
+Every code change goes through **CI then CD**, in that order, run from the dev machine:
+
+1. `./ci.sh` — fast mode (≤15s): `py_compile` + import check + clean-tree check + stamps `pi/version.txt` with `<short-hash> <iso-date>`.
+2. `./ci.sh full` — fast + a 30s smoke run. Run before deploying.
+3. `./cd.sh <user@host>` — SSHes to the Pi, `git pull --ff-only`, copies `pi/*.py`, `pi/probes/*.py`, and `pi/version.txt` into `/opt/towerwatch/`, then restarts the service. **Refuses to deploy** unless `pi/version.txt` exists and is at least as new as every `.py` under `pi/`.
+
+Failure modes to expect:
+- **Dirty working tree** blocks stamping. Commit or stash first (or `./ci.sh fast --allow-dirty` for local experiments — do not deploy the result).
+- **`cd.sh` says version.txt is stale**: a `.py` changed after the last stamp. Re-run `./ci.sh`.
+
+`deploy.sh` still exists as a thin shim that calls `cd.sh` — old muscle memory keeps working.
+
+`BUILD_VERSION` / `BUILD_DATE` are loaded by `config.py` from `version.txt`; they appear in the `service_restarted` WARN log and in outage-annotation text. Don't re-derive them from `git` on the Pi — version authority lives on the dev machine.
+
 ## Editing entry points
 
 Work the code in this order:

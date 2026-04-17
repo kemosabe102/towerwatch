@@ -1,6 +1,48 @@
 """Towerwatch configuration constants."""
 
+import subprocess
 import sys
+from pathlib import Path
+
+
+# --- Build version (stamped by ci.sh into version.txt; git fallback for dev) -----
+# Authoritative at deploy time: ci.sh writes "<short-hash> <iso-date>" into pi/version.txt
+# before cd.sh ships the tree. On the Pi the file lives at /opt/towerwatch/version.txt.
+# If the file is missing we try `git rev-parse` for local dev; if that fails too, we
+# mark the build as "dev"/"unknown" rather than crash.
+def _load_build_version() -> tuple[str, str]:
+    candidates = [
+        Path(__file__).parent / "version.txt",            # repo-local (Windows dev)
+        Path("/opt/towerwatch/version.txt"),              # Pi install path
+    ]
+    for p in candidates:
+        try:
+            if p.is_file():
+                raw = p.read_text(encoding="utf-8").strip()
+                if raw:
+                    parts = raw.split(None, 1)
+                    version = parts[0]
+                    build_date = parts[1] if len(parts) > 1 else "unknown"
+                    return version, build_date
+        except OSError:
+            continue
+    # Fallback: ask git directly (works in-repo when version.txt hasn't been written yet).
+    try:
+        repo_root = Path(__file__).resolve().parents[1]
+        version = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=repo_root, stderr=subprocess.DEVNULL, timeout=2,
+        ).decode().strip()
+        build_date = subprocess.check_output(
+            ["git", "log", "-1", "--format=%cI"],
+            cwd=repo_root, stderr=subprocess.DEVNULL, timeout=2,
+        ).decode().strip()
+        return version or "dev", build_date or "unknown"
+    except (subprocess.SubprocessError, FileNotFoundError, OSError):
+        return "dev", "unknown"
+
+
+BUILD_VERSION, BUILD_DATE = _load_build_version()
 
 # --- Probe Targets (multi-target for evidence isolation) ---
 # Each tuple: (ip, label). Labels become Prometheus tag values — must be stable strings.
@@ -69,10 +111,12 @@ if sys.platform == "win32":
     DATA_DIR = "./data"
     BUFFER_FILE = "./data/buffer/metrics.csv"
     BUFFER_TMP = "./data/buffer/metrics.csv.tmp"
+    LAST_PUSH_MARKER_FILE = "./data/last_push_ts"
 else:
     DATA_DIR = "/opt/towerwatch/data"
     BUFFER_FILE = "/opt/towerwatch/data/buffer/metrics.csv"
     BUFFER_TMP = "/opt/towerwatch/data/buffer/metrics.csv.tmp"
+    LAST_PUSH_MARKER_FILE = "/opt/towerwatch/data/last_push_ts"
 
 # --- Logging ---
 LOG_LEVEL = "INFO"  # DEBUG for verbose output
@@ -93,6 +137,7 @@ OUTAGE_ANNOTATION_TAGS = ["towerwatch", "outage", "auto"]
 
 # --- Log Event Identifiers (stable machine-readable keys for LogQL filtering) ---
 LOG_EVENT_SERVICE_STARTED    = "service_started"
+LOG_EVENT_SERVICE_RESTARTED  = "service_restarted"
 LOG_EVENT_CONN_DOWN          = "connection_down"
 LOG_EVENT_CONN_RESTORED      = "connection_restored"
 LOG_EVENT_PING_FAILED        = "ping_failed"

@@ -53,9 +53,9 @@ _connected = True
 _outage_start = 0
 _outage_count = 0
 _total_outage_s = 0
-_start_ts = time.time()
+_start_ts = time.monotonic()  # monotonic: uptime math must not regress when fake-hwclock jumps
 _last_heartbeat_ts = 0
-_last_successful_push_ts = time.time()
+_last_successful_push_ts = time.time()  # wall clock: compared against buffered-sample timestamps
 
 
 def update_connection_state(connected: bool, timestamp: int):
@@ -435,20 +435,30 @@ def flush_deferred_warnings():
     _deferred_warnings.clear()
 
 
-def push_annotation(time_ms: int, time_end_ms: int, text: str):
+def push_annotation(time_ms: int, time_end_ms: int, text: str,
+                    reason: str | None = None, version: str | None = None):
     """POST a region annotation to Grafana's annotations API.
 
     Fire-and-forget: failures log to Loki but never block the monitor.
     Requires GRAFANA_ANNOTATION_TOKEN in secrets.py (service account with
     annotations:write permission).
+
+    `reason` (e.g. "network_unreachable", "process_restart") is appended to
+    tags so Grafana can filter/color by it. `version` is appended to the
+    text so deploy boundaries are visible at a glance.
     """
     token = getattr(secrets, "GRAFANA_ANNOTATION_TOKEN", "")
     if not token:
         return
+    tags = list(config.OUTAGE_ANNOTATION_TAGS)
+    if reason:
+        tags.append(f"reason:{reason}")
+    if version and version != "dev":
+        tags.append(f"version:{version}")
     payload = {
         "time": time_ms,
         "timeEnd": time_end_ms,
-        "tags": config.OUTAGE_ANNOTATION_TAGS,
+        "tags": tags,
         "text": text,
     }
     try:
@@ -636,6 +646,31 @@ def _log_cycle(fields, timestamp):
               "connected": fields.get("connected")})
 
 
+def _persist_last_push_ts(ts: float):
+    """Write the last-successful-push timestamp atomically to the data partition.
+
+    Read on startup to distinguish process-restart gaps from network-outage gaps.
+    Best-effort — IO failures are swallowed because this is a hint, not critical data.
+    """
+    try:
+        marker = Path(config.LAST_PUSH_MARKER_FILE)
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        tmp = marker.with_suffix(marker.suffix + ".tmp")
+        tmp.write_text(f"{ts:.0f}\n", encoding="utf-8")
+        os.replace(tmp, marker)
+    except OSError:
+        pass
+
+
+def _load_last_push_ts() -> float | None:
+    """Read the persisted last-push timestamp. Returns None if missing/unreadable."""
+    try:
+        raw = Path(config.LAST_PUSH_MARKER_FILE).read_text(encoding="utf-8").strip()
+        return float(raw) if raw else None
+    except (OSError, ValueError):
+        return None
+
+
 def _maybe_push(cycles_since_push, any_connected, deferred_flushed):
     """Batch-push buffered metrics if due. Returns (cycles_since_push, deferred_flushed)."""
     global _last_successful_push_ts
@@ -648,14 +683,24 @@ def _maybe_push(cycles_since_push, any_connected, deferred_flushed):
         now = time.time()
         gap = now - _last_successful_push_ts
         if gap >= config.OUTAGE_GAP_THRESHOLD_S:
+            # Mid-run gap: the service was up to observe it, so by definition
+            # this is a network-side problem (not a restart).
             gap_min = int(gap / 60)
+            reason = "network_unreachable"
+            text = (f"Outage: {gap_min} min — {reason} "
+                    f"(v {config.BUILD_VERSION})")
             push_annotation(int(_last_successful_push_ts * 1000),
                             int(now * 1000),
-                            f"Pi offline for {gap_min} min")
+                            text,
+                            reason=reason,
+                            version=config.BUILD_VERSION)
             push_log("WARN", f"Outage recorded: {int(gap)}s ({gap_min} min)",
                      {"event": config.LOG_EVENT_OUTAGE_RECORDED,
-                      "gap_seconds": int(gap)})
+                      "gap_seconds": int(gap),
+                      "reason": reason,
+                      "version": config.BUILD_VERSION})
         _last_successful_push_ts = now
+        _persist_last_push_ts(now)
         if not deferred_flushed and _deferred_warnings:
             flush_deferred_warnings()
             deferred_flushed = True
@@ -674,7 +719,7 @@ def _maybe_heartbeat():
     global _last_heartbeat_ts
     now = time.time()
     if now - _last_heartbeat_ts >= config.HEARTBEAT_INTERVAL_S:
-        uptime_h = round((now - _start_ts) / 3600, 1)
+        uptime_h = round((time.monotonic() - _start_ts) / 3600, 1)
         push_log("WARN", "Service heartbeat",
                  {"event": config.LOG_EVENT_HEARTBEAT, "uptime_h": uptime_h})
         _last_heartbeat_ts = now
@@ -684,11 +729,49 @@ def _maybe_heartbeat():
 # Main loop
 # ---------------------------------------------------------------------------
 def main():
+    global _last_successful_push_ts
     log.info("=== Towerwatch %s ===", "(Windows)" if IS_WINDOWS else "(Raspberry Pi)")
     wait_for_data_partition()
+
+    # Emit service_restarted at WARN so it survives LOKI_PUSH_LEVEL=WARN and shows
+    # up as a deploy marker in the event-log panel. Keep service_started too for
+    # backwards compat with any saved Grafana queries.
+    push_log("WARN", "Service restarted",
+             {"event": config.LOG_EVENT_SERVICE_RESTARTED,
+              "version": config.BUILD_VERSION,
+              "build_date": config.BUILD_DATE,
+              "platform": sys.platform})
     push_log("INFO", "Service started",
              {"event": config.LOG_EVENT_SERVICE_STARTED, "log_level": config.LOKI_PUSH_LEVEL,
               "platform": sys.platform})
+
+    # One-shot restart metric — visible as a point on graph panels, not just Loki.
+    buffer_line(format_influx_line({"service_restart": 1}, int(time.time())))
+
+    # Load persisted last-push marker and check for a cross-restart gap. If one
+    # is found, classify it: buffer has lines → we were up but network was down
+    # (network_unreachable); buffer empty → process wasn't running (process_restart).
+    loaded_last_push = _load_last_push_ts()
+    if loaded_last_push is not None:
+        _last_successful_push_ts = loaded_last_push
+        startup_now = time.time()
+        startup_gap = startup_now - loaded_last_push
+        if startup_gap >= config.OUTAGE_GAP_THRESHOLD_S:
+            buf_has_lines = bool(read_buffer())
+            reason = "network_unreachable" if buf_has_lines else "process_restart"
+            gap_min = int(startup_gap / 60)
+            text = (f"Outage: {gap_min} min — {reason}, "
+                    f"resumed at v {config.BUILD_VERSION}")
+            push_annotation(int(loaded_last_push * 1000),
+                            int(startup_now * 1000),
+                            text,
+                            reason=reason,
+                            version=config.BUILD_VERSION)
+            push_log("WARN", f"Outage recorded on startup: {int(startup_gap)}s ({gap_min} min)",
+                     {"event": config.LOG_EVENT_OUTAGE_RECORDED,
+                      "gap_seconds": int(startup_gap),
+                      "reason": reason,
+                      "version": config.BUILD_VERSION})
 
     last_http_latency = 0
     deferred_flushed = False

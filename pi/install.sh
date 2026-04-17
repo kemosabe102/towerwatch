@@ -55,6 +55,13 @@ echo "[5/8] Installing towerwatch to $INSTALL_DIR..."
 mkdir -p "$INSTALL_DIR"
 cp "$SCRIPT_DIR/towerwatch.py" "$INSTALL_DIR/"
 cp "$SCRIPT_DIR/config.py" "$INSTALL_DIR/"
+# version.txt is stamped by ci.sh on the dev machine; cd.sh copies it during
+# deploy. On a fresh install it may not exist yet — fall back to a marker.
+if [ -f "$SCRIPT_DIR/version.txt" ]; then
+    cp "$SCRIPT_DIR/version.txt" "$INSTALL_DIR/"
+else
+    echo "dev unknown" > "$INSTALL_DIR/version.txt"
+fi
 
 if [ -f "$SCRIPT_DIR/secrets.py" ]; then
     cp "$SCRIPT_DIR/secrets.py" "$INSTALL_DIR/"
