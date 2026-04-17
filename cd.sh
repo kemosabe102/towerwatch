@@ -62,6 +62,9 @@ sudo chown towerwatch:towerwatch \
     "$INSTALL_DIR/version.txt"
 echo "  Files copied to $INSTALL_DIR (version: $(cat $INSTALL_DIR/version.txt))"
 
+# Step 1.5: Clean up legacy metrics buffer (replaced by Loki log buffer)
+sudo rm -f "$INSTALL_DIR/data/buffer/metrics.csv" "$INSTALL_DIR/data/buffer/metrics.csv.tmp"
+
 # Step 2: Restart service
 echo "[2/3] Restarting towerwatch service..."
 sudo systemctl restart towerwatch

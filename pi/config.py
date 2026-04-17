@@ -104,19 +104,19 @@ INFLUX_HOST_TAG = "towerwatch"
 # --- Push Optimization (batching + compression) ---
 PUSH_BATCH_SIZE = 2      # Accumulate N lines before pushing (at 60s = push every 2 min)
 PUSH_COMPRESS = True     # gzip Influx POST body
-BUFFER_MAX_BYTES = 512 * 1024  # 512 KB — cap buffer to avoid filling 1 GB data partition
 
 # --- Local Buffering (platform-aware paths) ---
+LOKI_BUFFER_MAX_BYTES = 256 * 1024  # 256 KB — ~500 WARN entries, ~8h of outage
 if sys.platform == "win32":
     DATA_DIR = "./data"
-    BUFFER_FILE = "./data/buffer/metrics.csv"
-    BUFFER_TMP = "./data/buffer/metrics.csv.tmp"
+    LOKI_BUFFER_FILE = "./data/buffer/loki.jsonl"
     LAST_PUSH_MARKER_FILE = "./data/last_push_ts"
+    LAST_ALIVE_MARKER_FILE = "./data/last_alive_ts"
 else:
     DATA_DIR = "/opt/towerwatch/data"
-    BUFFER_FILE = "/opt/towerwatch/data/buffer/metrics.csv"
-    BUFFER_TMP = "/opt/towerwatch/data/buffer/metrics.csv.tmp"
+    LOKI_BUFFER_FILE = "/opt/towerwatch/data/buffer/loki.jsonl"
     LAST_PUSH_MARKER_FILE = "/opt/towerwatch/data/last_push_ts"
+    LAST_ALIVE_MARKER_FILE = "/opt/towerwatch/data/last_alive_ts"
 
 # --- Logging ---
 LOG_LEVEL = "INFO"  # DEBUG for verbose output
@@ -147,8 +147,7 @@ LOG_EVENT_SPEEDTEST_TIMEOUT  = "speedtest_timeout"
 LOG_EVENT_SPEEDTEST_FAILED   = "speedtest_failed"
 LOG_EVENT_M6_AUTH_EXPIRED    = "m6_auth_expired"
 LOG_EVENT_METRICS_PUSH_FAIL  = "metrics_push_failed"
-LOG_EVENT_METRICS_BUFFERED   = "metrics_buffered"
-LOG_EVENT_BUFFER_FLUSHED     = "buffer_flushed"
+LOG_EVENT_LOG_BUFFER_FLUSHED = "log_buffer_flushed"
 LOG_EVENT_PARTITION_MISSING  = "partition_not_detected"
 LOG_EVENT_HTTP_THROUGHPUT_OK     = "http_throughput_complete"
 LOG_EVENT_HTTP_THROUGHPUT_FAILED = "http_throughput_failed"

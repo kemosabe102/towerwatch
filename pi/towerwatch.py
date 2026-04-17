@@ -5,7 +5,7 @@ Towerwatch — 5G Cell Tower Network Quality Monitor
 Continuously monitors latency, jitter, packet loss, DNS resolution,
 TCP connection time, throughput, and M6 signal quality. Pushes metrics
 to Grafana Cloud over HTTPS. Pushes structured logs to Loki.
-Buffers metrics locally during outages.
+Buffers logs locally during outages for delivery on reconnect.
 
 Cross-platform: runs on Raspberry Pi (production) and Windows (testing).
 """
@@ -395,16 +395,11 @@ def push_metrics(lines: list[str]) -> bool:
 # Loki Log Shipping (direct HTTP push, no sidecar)
 # ---------------------------------------------------------------------------
 _LOG_LEVELS = {"DEBUG": 0, "INFO": 1, "WARN": 2, "ERROR": 3}
-_deferred_warnings = []  # Warnings from before network is up
 
 
-def push_log(level: str, message: str, extra: dict = None):
-    """Push a structured log entry to Grafana Cloud Loki."""
-    if _LOG_LEVELS.get(level, 0) < _LOG_LEVELS.get(config.LOKI_PUSH_LEVEL, 1):
-        return
-    if not getattr(secrets, "LOKI_URL", None):
-        return
-    payload = {
+def _build_loki_payload(level: str, message: str, extra: dict = None) -> dict:
+    """Build a Loki push payload dict."""
+    return {
         "streams": [{
             "stream": {
                 "job": "towerwatch",
@@ -417,6 +412,29 @@ def push_log(level: str, message: str, extra: dict = None):
             ]],
         }]
     }
+
+
+def _buffer_log_entry(payload: dict):
+    """Append a Loki payload (as JSON line) to the log buffer file. fsync'd."""
+    buf = Path(config.LOKI_BUFFER_FILE)
+    buf.parent.mkdir(parents=True, exist_ok=True)
+    if buf.exists() and buf.stat().st_size >= config.LOKI_BUFFER_MAX_BYTES:
+        lines = buf.read_text(encoding="utf-8").splitlines()
+        keep = lines[max(1, len(lines) // 10):]
+        buf.write_text("\n".join(keep) + "\n", encoding="utf-8")
+    with open(buf, "a", encoding="utf-8") as f:
+        f.write(json.dumps(payload) + "\n")
+        f.flush()
+        os.fsync(f.fileno())
+
+
+def push_log(level: str, message: str, extra: dict = None):
+    """Push a structured log entry to Grafana Cloud Loki. Buffers to disk on failure."""
+    if _LOG_LEVELS.get(level, 0) < _LOG_LEVELS.get(config.LOKI_PUSH_LEVEL, 1):
+        return
+    if not getattr(secrets, "LOKI_URL", None):
+        return
+    payload = _build_loki_payload(level, message, extra)
     try:
         requests.post(
             secrets.LOKI_URL,
@@ -425,14 +443,42 @@ def push_log(level: str, message: str, extra: dict = None):
             timeout=config.LOKI_PUSH_TIMEOUT_S,
         )
     except Exception:
-        pass  # Log push failure must never crash the monitor
+        try:
+            _buffer_log_entry(payload)
+        except Exception:
+            pass  # Buffer write failure must never crash the monitor
 
 
-def flush_deferred_warnings():
-    """Push any warnings that were deferred from before network was available."""
-    for level, msg, extra in _deferred_warnings:
-        push_log(level, msg, extra)
-    _deferred_warnings.clear()
+def _flush_log_buffer():
+    """Flush buffered Loki entries after connectivity returns."""
+    buf = Path(config.LOKI_BUFFER_FILE)
+    if not buf.exists() or buf.stat().st_size == 0:
+        return
+    lines = [l.strip() for l in buf.read_text(encoding="utf-8").splitlines() if l.strip()]
+    if not lines:
+        buf.unlink()
+        return
+    delivered = 0
+    for line in lines:
+        try:
+            payload = json.loads(line)
+            requests.post(
+                secrets.LOKI_URL,
+                json=payload,
+                auth=(secrets.LOKI_USER, secrets.LOKI_TOKEN),
+                timeout=config.LOKI_PUSH_TIMEOUT_S,
+            )
+            delivered += 1
+        except Exception:
+            break  # Network went away again — keep remaining entries
+    if delivered == len(lines):
+        buf.unlink()
+        log.info("Log buffer flushed: %d entries delivered", delivered)
+        push_log("WARN", f"Log buffer flushed: {delivered} entries",
+                 {"event": config.LOG_EVENT_LOG_BUFFER_FLUSHED, "count": delivered})
+    elif delivered > 0:
+        remaining = lines[delivered:]
+        buf.write_text("\n".join(remaining) + "\n", encoding="utf-8")
 
 
 def push_annotation(time_ms: int, time_end_ms: int, text: str,
@@ -478,39 +524,7 @@ def push_annotation(time_ms: int, time_end_ms: int, text: str,
                   "error": str(e)})
 
 
-# ---------------------------------------------------------------------------
-# CSV Buffer (persistent writable partition, append-only + atomic clear)
-# ---------------------------------------------------------------------------
-def buffer_line(line: str):
-    """Append a single Influx line to the buffer file (O(1) append, not rewrite)."""
-    buf = Path(config.BUFFER_FILE)
-    buf.parent.mkdir(parents=True, exist_ok=True)
-    if buf.exists() and buf.stat().st_size >= config.BUFFER_MAX_BYTES:
-        log.warning("Buffer full (%d bytes) — dropping oldest lines to make room",
-                    buf.stat().st_size)
-        lines = buf.read_text().splitlines()
-        # Drop oldest 10% to avoid trimming every cycle
-        keep = lines[max(1, len(lines) // 10):]
-        buf.write_text("\n".join(keep) + "\n")
-    with open(buf, "a") as f:
-        f.write(line + "\n")
-        f.flush()
-        os.fsync(f.fileno())
 
-
-def read_buffer() -> list[str]:
-    """Read all buffered lines without deleting the file."""
-    buf = Path(config.BUFFER_FILE)
-    if not buf.exists() or buf.stat().st_size == 0:
-        return []
-    return [l.strip() for l in buf.read_text().splitlines() if l.strip()]
-
-
-def clear_buffer():
-    """Delete the buffer file. Call only after a successful push."""
-    buf = Path(config.BUFFER_FILE)
-    if buf.exists():
-        buf.unlink()
 
 
 # ---------------------------------------------------------------------------
@@ -538,8 +552,12 @@ def wait_for_data_partition(timeout: int = 30):
                 pass
         time.sleep(1)
     log.warning("Data partition not detected at %s — buffering to local dir", data)
-    _deferred_warnings.append(("WARN", f"Data partition not detected at {data}",
-                               {"event": config.LOG_EVENT_PARTITION_MISSING, "path": str(data)}))
+    try:
+        _buffer_log_entry(_build_loki_payload(
+            "WARN", f"Data partition not detected at {data}",
+            {"event": config.LOG_EVENT_PARTITION_MISSING, "path": str(data)}))
+    except Exception:
+        pass
     data.mkdir(parents=True, exist_ok=True)
 
 
@@ -671,46 +689,63 @@ def _load_last_push_ts() -> float | None:
         return None
 
 
-def _maybe_push(cycles_since_push, any_connected, deferred_flushed):
-    """Batch-push buffered metrics if due. Returns (cycles_since_push, deferred_flushed)."""
+def _touch_last_alive():
+    """Update the last-alive marker every cycle. Best-effort, no fsync (advisory)."""
+    try:
+        p = Path(config.LAST_ALIVE_MARKER_FILE)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(f"{time.time():.0f}\n", encoding="utf-8")
+    except OSError:
+        pass
+
+
+def _load_last_alive_ts() -> float | None:
+    """Read the last-alive timestamp. Returns None if missing/unreadable."""
+    try:
+        raw = Path(config.LAST_ALIVE_MARKER_FILE).read_text(encoding="utf-8").strip()
+        return float(raw) if raw else None
+    except (OSError, ValueError):
+        return None
+
+
+def _record_outage_annotation(start_ts: float, end_ts: float, reason: str):
+    """POST a region annotation for an outage gap and log it."""
+    gap_s = int(end_ts - start_ts)
+    gap_min = int(gap_s / 60)
+    text = (f"Outage: {gap_min} min — {reason} "
+            f"(v {config.BUILD_VERSION})")
+    push_annotation(int(start_ts * 1000), int(end_ts * 1000),
+                    text, reason=reason, version=config.BUILD_VERSION)
+    push_log("WARN", f"Outage recorded: {gap_s}s ({gap_min} min)",
+             {"event": config.LOG_EVENT_OUTAGE_RECORDED,
+              "gap_seconds": gap_s, "reason": reason,
+              "version": config.BUILD_VERSION})
+
+
+_metric_batch: list[str] = []
+
+
+def _batch_and_push(line: str, any_connected: bool):
+    """Accumulate metrics in memory; push when batch is full. Drop on failure."""
     global _last_successful_push_ts
-    if cycles_since_push < config.PUSH_BATCH_SIZE or not any_connected:
-        return cycles_since_push, deferred_flushed
-    all_lines = read_buffer()
-    if all_lines and push_metrics(all_lines):
-        clear_buffer()
-        log.info("Pushed %d lines", len(all_lines))
-        now = time.time()
-        gap = now - _last_successful_push_ts
-        if gap >= config.OUTAGE_GAP_THRESHOLD_S:
-            # Mid-run gap: the service was up to observe it, so by definition
-            # this is a network-side problem (not a restart).
-            gap_min = int(gap / 60)
-            reason = "network_unreachable"
-            text = (f"Outage: {gap_min} min — {reason} "
-                    f"(v {config.BUILD_VERSION})")
-            push_annotation(int(_last_successful_push_ts * 1000),
-                            int(now * 1000),
-                            text,
-                            reason=reason,
-                            version=config.BUILD_VERSION)
-            push_log("WARN", f"Outage recorded: {int(gap)}s ({gap_min} min)",
-                     {"event": config.LOG_EVENT_OUTAGE_RECORDED,
-                      "gap_seconds": int(gap),
-                      "reason": reason,
-                      "version": config.BUILD_VERSION})
-        _last_successful_push_ts = now
-        _persist_last_push_ts(now)
-        if not deferred_flushed and _deferred_warnings:
-            flush_deferred_warnings()
-            deferred_flushed = True
-        return 0, deferred_flushed
-    log.warning("Push failed — data safe in buffer (%d lines)",
-                len(all_lines))
-    push_log("WARN", f"Metrics buffered ({len(all_lines)} lines)",
-             {"event": config.LOG_EVENT_METRICS_BUFFERED,
-              "buffered_count": len(all_lines)})
-    return cycles_since_push, deferred_flushed
+    _metric_batch.append(line)
+    if len(_metric_batch) < config.PUSH_BATCH_SIZE:
+        return
+    batch = _metric_batch[:]
+    _metric_batch.clear()
+    if not any_connected:
+        return
+    if not push_metrics(batch):
+        log.warning("Metric push failed — batch dropped (%d lines)", len(batch))
+        return
+    log.info("Pushed %d lines", len(batch))
+    now = time.time()
+    gap = now - _last_successful_push_ts
+    if gap >= config.OUTAGE_GAP_THRESHOLD_S:
+        _record_outage_annotation(_last_successful_push_ts, now, "network_unreachable")
+    _last_successful_push_ts = now
+    _persist_last_push_ts(now)
+    _flush_log_buffer()
 
 
 
@@ -745,45 +780,36 @@ def main():
              {"event": config.LOG_EVENT_SERVICE_STARTED, "log_level": config.LOKI_PUSH_LEVEL,
               "platform": sys.platform})
 
-    # One-shot restart metric — visible as a point on graph panels, not just Loki.
-    buffer_line(format_influx_line({"service_restart": 1}, int(time.time())))
+    # One-shot restart metric — will be pushed with the first batch.
+    _metric_batch.append(format_influx_line({"service_restart": 1}, int(time.time())))
 
-    # Load persisted last-push marker and check for a cross-restart gap. If one
-    # is found, classify it: buffer has lines → we were up but network was down
-    # (network_unreachable); buffer empty → process wasn't running (process_restart).
+    # Load persisted markers and check for a cross-restart gap. Use last_alive_ts
+    # to distinguish: process was running (network outage) vs process was dead (restart).
     loaded_last_push = _load_last_push_ts()
+    loaded_last_alive = _load_last_alive_ts()
     if loaded_last_push is not None:
         _last_successful_push_ts = loaded_last_push
         startup_now = time.time()
         startup_gap = startup_now - loaded_last_push
         if startup_gap >= config.OUTAGE_GAP_THRESHOLD_S:
-            buf_has_lines = bool(read_buffer())
-            reason = "network_unreachable" if buf_has_lines else "process_restart"
-            gap_min = int(startup_gap / 60)
-            text = (f"Outage: {gap_min} min — {reason}, "
-                    f"resumed at v {config.BUILD_VERSION}")
-            push_annotation(int(loaded_last_push * 1000),
-                            int(startup_now * 1000),
-                            text,
-                            reason=reason,
-                            version=config.BUILD_VERSION)
-            push_log("WARN", f"Outage recorded on startup: {int(startup_gap)}s ({gap_min} min)",
-                     {"event": config.LOG_EVENT_OUTAGE_RECORDED,
-                      "gap_seconds": int(startup_gap),
-                      "reason": reason,
-                      "version": config.BUILD_VERSION})
+            if loaded_last_alive and (startup_now - loaded_last_alive) < config.OUTAGE_GAP_THRESHOLD_S:
+                reason = "network_unreachable"
+            else:
+                reason = "process_restart"
+            _record_outage_annotation(loaded_last_push, startup_now, reason)
+
+    _flush_log_buffer()
 
     last_http_latency = 0
-    deferred_flushed = False
     throughput_schedule = _build_daily_throughput_schedule()
     last_schedule_day = time.localtime().tm_yday
-    cycles_since_push = config.PUSH_BATCH_SIZE if read_buffer() else 0
 
     while not _shutdown_requested:
         cycle_start = time.perf_counter()
         timestamp = int(time.time())
 
-        fields, any_connected, last_http_latency, throughput_schedule, last_schedule_day =             _collect_probes(last_http_latency, throughput_schedule, last_schedule_day)
+        fields, any_connected, last_http_latency, throughput_schedule, last_schedule_day = \
+            _collect_probes(last_http_latency, throughput_schedule, last_schedule_day)
 
         update_connection_state(any_connected, timestamp)
         fields["collection_duration_ms"] = round(
@@ -791,17 +817,15 @@ def main():
         )
 
         _log_cycle(fields, timestamp)
-        buffer_line(format_influx_line(fields, timestamp))
-        cycles_since_push += 1
-        cycles_since_push, deferred_flushed = _maybe_push(
-            cycles_since_push, any_connected, deferred_flushed)
+        _touch_last_alive()
+        _batch_and_push(format_influx_line(fields, timestamp), any_connected)
 
         _maybe_heartbeat()
 
         elapsed = time.perf_counter() - cycle_start
         time.sleep(max(0, config.METRIC_INTERVAL_S - elapsed))
 
-    log.info("Shutdown complete — buffered data will be pushed on next start")
+    log.info("Shutdown complete")
 
 
 if __name__ == "__main__":
@@ -813,7 +837,3 @@ if __name__ == "__main__":
         log.critical("Fatal error: %s", e, exc_info=True)
         push_log("ERROR", f"Fatal: {e}", {"event": "fatal_error", "error": str(e)})
         raise
-    finally:
-        buffered = read_buffer()
-        if buffered:
-            log.info("Exiting with %d lines in buffer — will push on next start", len(buffered))
