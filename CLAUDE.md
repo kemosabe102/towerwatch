@@ -6,6 +6,10 @@ Agent-facing guide. The user-facing README is imported below and is the source o
 
 ---
 
+## Bench harness and ops docs
+
+`pi/bench/` contains the failure-mode test harness for pre-deployment validation. See `docs/bench-tests.md` for the per-test research catalog (injection methods, pass criteria) and `docs/runbook.md` for the symptom-indexed ops runbook for the remote-deployment phase. Run `python pi/bench/run.py --list` for available tests; run on the Pi over SSH.
+
 ## Post-change workflow (required after any code change)
 
 Every code change goes through **CI then CD**, in that order, run from the dev machine:

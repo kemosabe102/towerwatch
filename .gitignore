@@ -20,3 +20,8 @@ deploy-local.sh
 # CI build artifact (stamped by ci.sh, not source)
 pi/version.txt
 ci-tmp/
+
+# Bench harness runtime artifacts (live on Pi at /opt/towerwatch/data/bench/)
+pi/bench/reports/
+pi/bench/snapshots/
+pi/bench/state.json

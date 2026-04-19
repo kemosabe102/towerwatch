@@ -157,3 +157,10 @@ LOG_EVENT_ANNOTATION_FAILED      = "annotation_push_failed"
 
 # --- Heartbeat ---
 HEARTBEAT_INTERVAL_S = 3600  # Emit a WARN-level heartbeat to Loki once per hour
+
+# --- Bench harness (read base URL derived from existing public stack hostname) ---
+GRAFANA_READ_BASE_URL = "https://towerwatch.grafana.net"
+if sys.platform == "win32":
+    BENCH_REPORT_DIR = "./data/bench/reports"
+else:
+    BENCH_REPORT_DIR = "/opt/towerwatch/data/bench/reports"
