@@ -1,5 +1,6 @@
 """Towerwatch configuration constants."""
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -93,9 +94,10 @@ M6_WWAN_URL = "http://192.168.1.1/api/wwanadv.json"
 M6_TIMEOUT_S = 5
 
 # --- Grafana Cloud (metrics use _ms suffix throughout, not Prometheus-standard seconds) ---
-GRAFANA_PUSH_URL = (
+GRAFANA_PUSH_URL = os.environ.get(
+    "GRAFANA_PUSH_URL_OVERRIDE",
     "https://prometheus-prod-67-prod-us-west-0.grafana.net"
-    "/api/v1/push/influx/write?precision=s"
+    "/api/v1/push/influx/write?precision=s",
 )
 GRAFANA_PUSH_TIMEOUT_S = 10
 INFLUX_MEASUREMENT = "towerwatch"
