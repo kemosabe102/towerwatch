@@ -93,7 +93,7 @@ def _make_observer(secrets) -> GrafanaObserver:
     stack_base = GRAFANA_ANNOTATIONS_URL.replace("/api/annotations", "")
     return GrafanaObserver(
         stack_base_url=stack_base,
-        api_key=secrets.GRAFANA_API_KEY,
+        api_key=getattr(secrets, "GRAFANA_ANNOTATION_TOKEN", secrets.GRAFANA_API_KEY),
         annotation_token=getattr(secrets, "GRAFANA_ANNOTATION_TOKEN", ""),
     )
 
