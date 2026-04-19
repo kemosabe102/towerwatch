@@ -459,9 +459,15 @@ def _flush_log_buffer():
         buf.unlink()
         return
     delivered = 0
+    consumed = 0  # lines consumed from the buffer (delivered OR discarded as corrupt)
     for line in lines:
         try:
             payload = json.loads(line)
+        except json.JSONDecodeError:
+            # Corrupt line — drop it and keep going, else one bad line bricks the buffer forever.
+            consumed += 1
+            continue
+        try:
             requests.post(
                 secrets.LOKI_URL,
                 json=payload,
@@ -469,15 +475,16 @@ def _flush_log_buffer():
                 timeout=config.LOKI_PUSH_TIMEOUT_S,
             )
             delivered += 1
+            consumed += 1
         except Exception:
             break  # Network went away again — keep remaining entries
-    if delivered == len(lines):
+    if consumed == len(lines):
         buf.unlink()
         log.info("Log buffer flushed: %d entries delivered", delivered)
         push_log("WARN", f"Log buffer flushed: {delivered} entries",
                  {"event": config.LOG_EVENT_LOG_BUFFER_FLUSHED, "count": delivered})
-    elif delivered > 0:
-        remaining = lines[delivered:]
+    elif consumed > 0:
+        remaining = lines[consumed:]
         buf.write_text("\n".join(remaining) + "\n", encoding="utf-8")
 
 
