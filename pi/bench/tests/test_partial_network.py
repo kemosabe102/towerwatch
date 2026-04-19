@@ -9,13 +9,13 @@ import time
 from ..harness.snapshot import snapshot_iptables, restore_iptables
 from .base import BenchTest
 
-BLOCK_DURATION_S = 180
+BLOCK_DURATION_S = 120
 
 
 class Test(BenchTest):
     name = "partial_network"
     description = "Block TCP 443 (HTTPS push); ICMP probes unaffected, push fails, buffer grows"
-    timeout_s = 600
+    timeout_s = 420
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -35,7 +35,7 @@ class Test(BenchTest):
         entry = self.obs.poll_loki_event(
             event_name="metrics_push_failed",
             start_ns=self._inject_start_ns,
-            timeout_s=300,
+            timeout_s=180,
             poll_interval_s=30,
         )
         self.log.info("metrics_push_failed confirmed", event="bench_observe")

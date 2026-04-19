@@ -13,7 +13,7 @@ from .base import BenchTest
 
 DROPIN_NAME = "prom5xx"
 LOCAL_PORT = 19999
-INJECT_DURATION_S = 180
+INJECT_DURATION_S = 120
 
 
 def _serve_503(stop_event):
@@ -40,7 +40,7 @@ def _serve_503(stop_event):
 class Test(BenchTest):
     name = "prom_5xx"
     description = "Redirect Prom push to local 503 responder; metrics_push_failed, no crash"
-    timeout_s = 600
+    timeout_s = 420
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -62,7 +62,7 @@ class Test(BenchTest):
         entry = self.obs.poll_loki_event(
             event_name="metrics_push_failed",
             start_ns=self._inject_start_ns,
-            timeout_s=300,
+            timeout_s=180,
             poll_interval_s=30,
         )
         return {"push_fail_entry": entry}

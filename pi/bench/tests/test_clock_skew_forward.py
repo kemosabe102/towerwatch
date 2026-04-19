@@ -11,13 +11,13 @@ from ..harness.observe import ObserveError
 from .base import BenchTest
 
 SKEW_S = 7200   # +2 hours
-OBSERVE_DURATION_S = 180  # 3 probe cycles while clock is skewed
+OBSERVE_DURATION_S = 120  # 2 probe cycles while clock is skewed
 
 
 class Test(BenchTest):
     name = "clock_skew_forward"
     description = "Step clock +2h; no spurious outage annotation should be created"
-    timeout_s = 600
+    timeout_s = 420
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -37,7 +37,7 @@ class Test(BenchTest):
         self._skewed = False
 
         # Wait for any annotation that might have been generated
-        time.sleep(120)
+        time.sleep(90)
 
         # No annotation should have been posted during the skew window
         inject_end_ms = int(time.time() * 1000)

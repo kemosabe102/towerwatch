@@ -15,7 +15,7 @@ from .base import BenchTest
 
 DROPIN_NAME = "loki429"
 LOCAL_PORT = 19998
-INJECT_DURATION_S = 180
+INJECT_DURATION_S = 120
 
 
 def _serve_429(stop_event):
@@ -42,7 +42,7 @@ class Test(BenchTest):
     name = "loki_429"
     description = "Redirect Loki push to local 429; expected-failure: silent swallow (no error event)"
     expected_failure = True   # Bug present → test passes; bug fixed → test fails (flip to FAIL)
-    timeout_s = 600
+    timeout_s = 420
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

@@ -11,13 +11,13 @@ from ..harness.snapshot import snapshot_tc, restore_tc
 from .base import BenchTest
 
 IFACE = "eth0"
-INJECT_DURATION_S = 180   # 3 min of degraded traffic — enough for 3 probe cycles
+INJECT_DURATION_S = 120   # 2 probe cycles of degraded traffic
 
 
 class Test(BenchTest):
     name = "latency_injection"
     description = "tc netem 500ms delay + 5% loss on eth0; RTT/jitter/loss metrics rise"
-    timeout_s = 600
+    timeout_s = 420
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -40,7 +40,7 @@ class Test(BenchTest):
         result = self.obs.poll_prom_metric_present(
             promql='towerwatch_rtt_avg_ms_google > 400',
             start_s=int(self._inject_start_s),
-            timeout_s=300,
+            timeout_s=180,
             poll_interval_s=30,
         )
         self.log.info("Elevated RTT confirmed in Prom", event="bench_observe")

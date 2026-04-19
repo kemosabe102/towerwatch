@@ -18,14 +18,14 @@ import time
 from ..harness.snapshot import snapshot_iptables, restore_iptables
 from .base import BenchTest
 
-OUTAGE_DURATION_S = 720   # 12 min — comfortably above the 10-min annotation threshold
-ANNOTATION_TIMEOUT_S = 1200  # 20 min polling timeout after restore
+OUTAGE_DURATION_S = 620   # 10m20s — just above the 10-min annotation threshold
+ANNOTATION_TIMEOUT_S = 600  # 10 min polling timeout after restore
 
 
 class Test(BenchTest):
     name = "full_network_loss"
     description = "DROP all egress 12 min; connection_down, buffer flush, outage annotation >= 10 min"
-    timeout_s = 1800  # 30 min hard cap (12 min outage + 18 min observation)
+    timeout_s = 1350  # ~22 min hard cap (620s outage + 600s observation + slack)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

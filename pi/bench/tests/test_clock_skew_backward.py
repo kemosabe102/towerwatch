@@ -11,14 +11,14 @@ from ..harness.observe import ObserveError
 from .base import BenchTest
 
 SKEW_S = -1800   # −30 minutes
-OBSERVE_DURATION_S = 180
+OBSERVE_DURATION_S = 120
 
 
 class Test(BenchTest):
     name = "clock_skew_backward"
     description = "Step clock −30 min; expected-failure: negative gap → bogus annotation math"
     expected_failure = True
-    timeout_s = 600
+    timeout_s = 420
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -34,7 +34,7 @@ class Test(BenchTest):
     def observe(self) -> dict:
         restore_clock()
         self._skewed = False
-        time.sleep(120)
+        time.sleep(90)
 
         # After a negative skew, check whether a nonsensical annotation was created
         # (timeEnd < time, or duration < 0). If one exists, the bug is confirmed → expected_failure.

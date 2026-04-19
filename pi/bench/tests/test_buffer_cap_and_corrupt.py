@@ -23,7 +23,7 @@ BUFFER_MAX = 256 * 1024  # 256 KB per config.py
 class Test(BenchTest):
     name = "buffer_cap_and_corrupt"
     description = "Fill Loki buffer >256 KB + inject corrupt line; 10% trim, corrupt line skipped"
-    timeout_s = 600
+    timeout_s = 420
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -50,7 +50,7 @@ class Test(BenchTest):
 
         subprocess.run(["systemctl", "start", "towerwatch"], check=True)
         # Give the service time to detect overflow and flush
-        time.sleep(180)
+        time.sleep(120)
 
     def observe(self) -> dict:
         # Service should still be running (no crash on corrupt line)
@@ -63,7 +63,7 @@ class Test(BenchTest):
         entry = self.obs.poll_loki_event(
             event_name="log_buffer_flushed",
             start_ns=self._inject_start_ns,
-            timeout_s=300,
+            timeout_s=180,
             poll_interval_s=30,
         )
         self.log.info("log_buffer_flushed confirmed", event="bench_observe")

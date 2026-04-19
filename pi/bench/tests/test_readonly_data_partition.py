@@ -10,13 +10,13 @@ import time
 from .base import BenchTest
 
 DATA_MOUNT = "/opt/towerwatch/data"
-INJECT_DURATION_S = 300  # 5 min
+INJECT_DURATION_S = 120  # 2 probe cycles
 
 
 class Test(BenchTest):
     name = "readonly_data_partition"
     description = "Remount data partition read-only; service survives, write-fail events emitted"
-    timeout_s = 600
+    timeout_s = 450
 
     def inject(self) -> None:
         if sys.platform == "win32":
