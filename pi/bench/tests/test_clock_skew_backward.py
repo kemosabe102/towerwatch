@@ -1,7 +1,8 @@
 """Test 8: clock_skew_backward — step clock −30 min.
 
-EXPECTED FAILURE: negative push-gap causes nonsensical annotation region math.
-Passes while the bug is present; fails (flips to FAIL) once gap-clamping lands.
+Verifies the gap-clamping guardrail: after a backward clock step, the
+startup-gap check (startup_now - last_push >= OUTAGE_GAP_THRESHOLD_S)
+goes negative and no bogus annotation is posted.
 """
 
 import time
@@ -16,8 +17,7 @@ OBSERVE_DURATION_S = 120
 
 class Test(BenchTest):
     name = "clock_skew_backward"
-    description = "Step clock −30 min; expected-failure: negative gap → bogus annotation math"
-    expected_failure = True
+    description = "Step clock −30 min; verify no bogus (negative-duration) annotation is posted"
     timeout_s = 420
 
     def __init__(self, *args, **kwargs):
@@ -36,8 +36,7 @@ class Test(BenchTest):
         self._skewed = False
         time.sleep(90)
 
-        # After a negative skew, check whether a nonsensical annotation was created
-        # (timeEnd < time, or duration < 0). If one exists, the bug is confirmed → expected_failure.
+        # Pass: no annotation with negative/zero duration was posted during the skew window.
         inject_end_ms = int(time.time() * 1000)
         anns = self.obs.get_annotations(self._inject_start_ms, inject_end_ms)
         bogus = [
@@ -45,11 +44,10 @@ class Test(BenchTest):
             if a.get("timeEnd", 0) < a.get("time", 0)
                or (a.get("timeEnd", 0) - a.get("time", 0)) < 0
         ]
-        if not bogus:
-            # Bug is NOT present — annotation math is already clamped. Raise so base flips to fail.
-            raise ObserveError("No bogus annotation found — gap-clamping may already be in place")
-
-        return {"bogus_annotation_confirmed": True, "example": bogus[0]}
+        if bogus:
+            raise ObserveError(f"Bogus annotation posted despite gap-clamp guard: {bogus[0]}")
+        self.log.info("No bogus annotation — gap-clamp guardrail holds", event="bench_observe")
+        return {"bogus_annotations": 0, "checked_annotation_count": len(anns)}
 
     def restore(self) -> None:
         if self._skewed:
