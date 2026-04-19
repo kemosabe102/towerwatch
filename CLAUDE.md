@@ -59,9 +59,10 @@ Router signal polling and speedtest fail gracefully off-network — that's expec
 
 ## Deploy gotchas
 
-- **Secrets live on the Pi at `/opt/towerwatch/secrets.py`** — never committed, never copied back by `deploy.sh`. Editing `secrets.py.example` in the repo does NOT update the running service.
+- **`cd.sh` deploys secrets:** `pi/secrets.py` is SCP'd to `/opt/towerwatch/secrets.py` on every deploy. Keep `pi/secrets.py` up to date on the dev machine — it is the source of truth for credentials. `/opt/towerwatch/` is owned by `towerwatch:towerwatch`; `cd.sh` stages via `/tmp` then `sudo mv` to work around the permission boundary.
 - **`deploy-local.sh` is a gitignored wrapper** that hardcodes the host. Use `deploy.sh <user>@<host>` in docs and suggestions.
-- **Outage-annotation token is a one-time bootstrap:** Grafana Cloud → Administration → Service accounts → create one with `annotations:write` → paste into `GRAFANA_ANNOTATION_TOKEN` on the Pi. `GRAFANA_ANNOTATIONS_URL` in `config.py` must point at `<stack>.grafana.net` (user-facing URL), not the `prometheus-prod-*` push endpoint.
+- **Outage-annotation token needs `datasources:read`:** The `GRAFANA_ANNOTATION_TOKEN` service account is used by both towerwatch (annotations write) and the bench harness (datasource resolution + Loki/Prom reads). It needs `annotations:read`, `annotations:write`, and `datasources:read` in the Grafana service account permissions.
+- **`GRAFANA_API_KEY` is push-only:** it authenticates Prometheus/Loki write endpoints, not the Grafana stack API. Do not use it for read queries.
 
 ## Deferred boot warnings
 
