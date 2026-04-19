@@ -107,12 +107,16 @@ if command -v tailscaled &>/dev/null; then
         rm -f /var/lib/tailscale
         mkdir -p /var/lib/tailscale
     fi
-    # Install bind mount unit
+    # Install bind mount unit.
+    # WantedBy=multi-user.target (not local-fs.target) avoids an ordering cycle:
+    # the data partition mount is Before=local-fs.target, so making the bind
+    # mount WantedBy=local-fs.target creates a cycle systemd breaks by dropping
+    # the job, leaving Tailscale stateless on reboot.
     cat > /etc/systemd/system/var-lib-tailscale.mount << MOUNTEOF
 [Unit]
 Description=Bind mount Tailscale state to data partition
-After=local-fs.target
-RequiresMountsFor=$DATA_MOUNT
+After=opt-towerwatch-data.mount
+Requires=opt-towerwatch-data.mount
 
 [Mount]
 What=$DATA_MOUNT/tailscale-state
@@ -121,8 +125,15 @@ Type=none
 Options=bind
 
 [Install]
-WantedBy=local-fs.target
+WantedBy=multi-user.target
 MOUNTEOF
+    # tailscaled must start after the bind mount is active
+    mkdir -p /etc/systemd/system/tailscaled.service.d
+    cat > /etc/systemd/system/tailscaled.service.d/after-state-mount.conf << 'DROPIN'
+[Unit]
+After=var-lib-tailscale.mount
+Requires=var-lib-tailscale.mount
+DROPIN
     systemctl daemon-reload
     systemctl enable var-lib-tailscale.mount 2>/dev/null
     echo "  Tailscale bind mount unit installed"
@@ -160,8 +171,55 @@ if ! grep -q "RuntimeWatchdogSec" /etc/systemd/system.conf; then
     echo "  Enabled hardware watchdog (15s)"
 fi
 
+# --- Tailscale watchdog ---
+echo "[8/9] Installing Tailscale watchdog timer..."
+if command -v tailscaled &>/dev/null; then
+    cat > /etc/systemd/system/tailscale-watchdog.service << 'EOF'
+[Unit]
+Description=Tailscale watchdog — restart tailscaled if tunnel is down
+After=network-online.target tailscaled.service
+Requires=tailscaled.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/tailscale-watchdog.sh
+EOF
+    cat > /etc/systemd/system/tailscale-watchdog.timer << 'EOF'
+[Unit]
+Description=Run Tailscale watchdog every 5 minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=5min
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target
+EOF
+    cat > /usr/local/bin/tailscale-watchdog.sh << 'EOF'
+#!/bin/bash
+# Restart tailscaled if it is not running or if the tunnel is down.
+# "tailscale status" exits non-zero when stopped/not-running.
+if ! systemctl is-active --quiet tailscaled; then
+    echo "tailscale-watchdog: tailscaled not active — starting"
+    systemctl start tailscaled
+    exit 0
+fi
+if ! tailscale status --json 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); sys.exit(0 if d.get('BackendState') == 'Running' else 1)"; then
+    echo "tailscale-watchdog: tunnel not Running — restarting tailscaled"
+    systemctl restart tailscaled
+fi
+EOF
+    chmod +x /usr/local/bin/tailscale-watchdog.sh
+    systemctl daemon-reload
+    systemctl enable --now tailscale-watchdog.timer
+    echo "  Tailscale watchdog timer enabled (runs every 5 min)"
+else
+    echo "  Tailscale not installed yet — skipping watchdog (re-run install.sh after tailscale up)"
+fi
+
 # --- Install and enable systemd service ---
-echo "[8/8] Installing systemd service..."
+echo "[9/9] Installing systemd service..."
 cp "$SCRIPT_DIR/towerwatch.service" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable towerwatch.service
