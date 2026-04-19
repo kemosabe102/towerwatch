@@ -38,7 +38,7 @@ class Test(BenchTest):
         self.log.info("Querying Prom for elevated RTT", event="bench_observe")
         # Poll for rtt_avg_google > 400ms (value is in ms per invariant)
         result = self.obs.poll_prom_metric_present(
-            promql='towerwatch_rtt_avg_ms_google > 400',
+            promql='towerwatch_rtt_avg_google > 400',
             start_s=int(self._inject_start_s),
             timeout_s=180,
             poll_interval_s=30,

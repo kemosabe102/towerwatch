@@ -48,7 +48,7 @@ class Test(BenchTest):
                 # Verify metric goes absent
                 try:
                     self.obs.assert_prom_metric_absent(
-                        f'towerwatch_rtt_avg_ms_{label}',
+                        f'towerwatch_rtt_avg_{label}',
                         int(time.time()) - BLOCK_DURATION_S,
                         int(time.time()),
                     )

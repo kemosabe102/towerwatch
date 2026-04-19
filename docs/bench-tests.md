@@ -120,7 +120,7 @@ Run with `python pi/bench/run.py --list` to see all tests and timeouts.
 
 **Mechanism:** `iptables -I OUTPUT -d <ip> -j DROP` per target, cycling through all three with restore between sub-cases.
 
-**Pass criteria:** `towerwatch_rtt_avg_ms_<label>` absent in Prom during block; other two targets unaffected.
+**Pass criteria:** `towerwatch_rtt_avg_<label>` absent in Prom during block; other two targets unaffected.
 
 ---
 
@@ -156,7 +156,7 @@ Three sub-cases injected via systemd drop-in `Environment=` overrides:
 - `tc netem` — kernel-level, precise, reversible with `tc qdisc del`. **Chosen.**
 - Rate-limiting via token bucket filter (TBF) — tests throughput, not RTT; wrong scope here.
 
-**Pass criteria:** `towerwatch_rtt_avg_ms_google > 400` in Prom within observation window; no `connection_down` annotation.
+**Pass criteria:** `towerwatch_rtt_avg_google > 400` in Prom within observation window; no `connection_down` annotation.
 
 ---
 
