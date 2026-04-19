@@ -48,8 +48,8 @@ echo "    Version: $VERSION_STAMP"
 echo "[0/3] Uploading version.txt and secrets.py..."
 scp pi/version.txt "$PI_HOST:$REPO_DIR/pi/version.txt"
 if [[ -f pi/secrets.py ]]; then
-    scp pi/secrets.py "$PI_HOST:$INSTALL_DIR/secrets.py"
-    ssh "$PI_HOST" "sudo chown towerwatch:towerwatch $INSTALL_DIR/secrets.py && sudo chmod 600 $INSTALL_DIR/secrets.py"
+    scp pi/secrets.py "$PI_HOST:/tmp/towerwatch-secrets.py"
+    ssh "$PI_HOST" "sudo mv /tmp/towerwatch-secrets.py $INSTALL_DIR/secrets.py && sudo chown towerwatch:towerwatch $INSTALL_DIR/secrets.py && sudo chmod 600 $INSTALL_DIR/secrets.py"
 else
     echo "  WARNING: pi/secrets.py not found locally — skipping secrets deploy."
     echo "           Ensure /opt/towerwatch/secrets.py is up to date on the Pi."
