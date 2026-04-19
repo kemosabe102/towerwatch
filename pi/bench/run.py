@@ -53,16 +53,15 @@ TEST_MODULES = [
 
 
 def _load_secrets():
-    try:
-        import pi.secrets as s
-        return s
-    except ImportError:
-        pass
-    # Fallback: secrets.py in the pi/ subdirectory (dev: ~/towerwatch/pi/secrets.py)
+    # Priority: /opt/towerwatch (Pi install, authoritative) → pi/ sibling (dev repo)
+    # pi.secrets (repo import) is NOT tried first — the repo may have a stale copy
+    # with empty GRAFANA_ANNOTATION_TOKEN from initial setup.
     for candidate in [
-        Path(__file__).resolve().parents[1],   # pi/bench/../ = pi/
-        Path("/opt/towerwatch"),               # Pi install path
+        Path("/opt/towerwatch"),               # Pi install path (authoritative)
+        Path(__file__).resolve().parents[1],   # pi/bench/../ = pi/ (dev repo)
     ]:
+        if not (candidate / "secrets.py").exists():
+            continue
         sys.path.insert(0, str(candidate))
         try:
             import secrets as s

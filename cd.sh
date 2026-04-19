@@ -44,9 +44,16 @@ VERSION_STAMP="$(cat pi/version.txt)"
 echo "=== Towerwatch Deploy to $PI_HOST ==="
 echo "    Version: $VERSION_STAMP"
 
-# SCP version.txt to the Pi repo — it's gitignored so git pull won't deliver it.
-echo "[0/3] Uploading version.txt..."
+# SCP gitignored files the Pi needs but git pull won't deliver.
+echo "[0/3] Uploading version.txt and secrets.py..."
 scp pi/version.txt "$PI_HOST:$REPO_DIR/pi/version.txt"
+if [[ -f pi/secrets.py ]]; then
+    scp pi/secrets.py "$PI_HOST:$INSTALL_DIR/secrets.py"
+    ssh "$PI_HOST" "sudo chown towerwatch:towerwatch $INSTALL_DIR/secrets.py && sudo chmod 600 $INSTALL_DIR/secrets.py"
+else
+    echo "  WARNING: pi/secrets.py not found locally — skipping secrets deploy."
+    echo "           Ensure /opt/towerwatch/secrets.py is up to date on the Pi."
+fi
 
 ssh "$PI_HOST" bash -s "$REPO_DIR" "$INSTALL_DIR" << 'REMOTE'
 set -euo pipefail
