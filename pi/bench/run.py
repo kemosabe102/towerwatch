@@ -57,13 +57,20 @@ def _load_secrets():
         import pi.secrets as s
         return s
     except ImportError:
+        pass
+    # Fallback: secrets.py in the pi/ subdirectory (dev: ~/towerwatch/pi/secrets.py)
+    for candidate in [
+        Path(__file__).resolve().parents[1],   # pi/bench/../ = pi/
+        Path("/opt/towerwatch"),               # Pi install path
+    ]:
+        sys.path.insert(0, str(candidate))
         try:
-            sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
             import secrets as s
             return s
         except ImportError:
-            print("ERROR: secrets.py not found. Copy secrets.py.example → secrets.py and fill values.")
-            sys.exit(1)
+            sys.path.pop(0)
+    print("ERROR: secrets.py not found. Copy secrets.py.example → secrets.py and fill values.")
+    sys.exit(1)
 
 
 def _load_tests(skip: list[str] = None) -> list:
