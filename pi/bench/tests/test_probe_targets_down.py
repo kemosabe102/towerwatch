@@ -40,25 +40,29 @@ class Test(BenchTest):
                 self.log.info(f"Blocking target {label} ({ip})", event="bench_inject")
                 rules = snapshot_iptables("probe_down", f"pre_{label}")
                 self._rules_files.append(rules)
+                block_start = int(time.time())
                 subprocess.run([
                     "iptables", "-I", "OUTPUT", "-d", ip, "-j", "DROP"
                 ], check=True)
                 time.sleep(BLOCK_DURATION_S)
+                block_end = int(time.time())
+                # Restore egress before querying Grafana — gateway block also kills DNS.
+                restore_iptables(rules)
 
-                # Verify metric goes absent
+                # Query the *second half* of the blocked window so any metric pushed
+                # just before the block (timestamp < block_start) can't linger in-range.
+                query_start = block_start + 60
                 try:
                     self.obs.assert_prom_metric_absent(
                         f'towerwatch_rtt_avg_{label}',
-                        int(time.time()) - BLOCK_DURATION_S,
-                        int(time.time()),
+                        query_start,
+                        block_end,
                     )
                     evidence[label] = "absent_confirmed"
                 except Exception as e:
                     evidence[label] = f"FAIL: {e}"
 
-                # Restore before next sub-case
-                restore_iptables(rules)
-                time.sleep(30)  # Let metrics resume
+                time.sleep(30)  # Let metrics resume before next sub-case
 
             status = "pass" if all(v == "absent_confirmed" for v in evidence.values()) else "fail"
         except Exception as e:
