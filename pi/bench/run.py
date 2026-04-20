@@ -28,6 +28,7 @@ from pi.bench.harness.logger import BenchLogger
 from pi.bench.harness.observe import GrafanaObserver, ObserveError
 from pi.bench.harness.report import Report
 from pi.bench.harness.service import daemon_reload, service_active
+from pi.bench.harness.snapshot import restore_all
 from pi.bench.harness.state import (
     arm_sentinel, clear_sentinel, clear_state,
     read_sentinel, read_state, sentinel_present, write_state,
@@ -97,28 +98,7 @@ def cmd_restore(args):
     info = read_sentinel()
     print(f"Sentinel found: {info}")
     print("Running restore-all sequence...")
-    # Try to restore iptables from any snapshot we find
-    snap_dir = BENCH_DIR / "snapshots"
-    if snap_dir.exists():
-        for rules_file in snap_dir.glob("*.rules"):
-            print(f"  Restoring iptables from {rules_file.name}")
-            try:
-                with rules_file.open() as fh:
-                    subprocess.run(["iptables-restore"], stdin=fh, check=True)
-                break
-            except Exception as e:
-                print(f"  WARNING: {e}")
-    # Remove any bench drop-ins
-    dropin_dir = Path("/etc/systemd/system/towerwatch.service.d")
-    for f in dropin_dir.glob("bench-*.conf") if dropin_dir.exists() else []:
-        print(f"  Removing drop-in: {f.name}")
-        f.unlink()
-    daemon_reload(check=False)
-    # Remove netem qdisc
-    subprocess.run(["tc", "qdisc", "del", "dev", "eth0", "root"], check=False,
-                   capture_output=True)
-    # Re-enable NTP
-    subprocess.run(["timedatectl", "set-ntp", "true"], check=False)
+    restore_all()
     clear_sentinel()
     clear_state()
     print("Restore complete. Sentinel cleared.")

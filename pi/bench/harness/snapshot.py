@@ -116,3 +116,41 @@ def restore_file(src: Path, snapshot: Path) -> None:
         shutil.copy2(snapshot, src)
     elif src.exists():
         src.unlink()  # Original didn't exist; remove what the test created
+
+
+# ---------------------------------------------------------------------------
+# Composite restore_all — restores all bench state
+# ---------------------------------------------------------------------------
+
+def restore_all(run_id: str = None) -> None:
+    """Restore iptables, drop-ins, qdisc, and NTP from bench state.
+    
+    Args:
+        run_id: Unused; kept for signature compatibility.
+    """
+    # Restore iptables: glob SNAPSHOTS_DIR for *.rules, try first one found
+    if SNAPSHOTS_DIR.exists():
+        for rules_file in SNAPSHOTS_DIR.glob("*.rules"):
+            try:
+                with rules_file.open() as fh:
+                    subprocess.run(["iptables-restore"], stdin=fh, check=True)
+                break  # Success; stop after first
+            except Exception:
+                pass  # Try next file
+    
+    # Remove bench drop-ins
+    if DROPIN_DIR.exists():
+        for f in DROPIN_DIR.glob("bench-*.conf"):
+            try:
+                f.unlink()
+            except FileNotFoundError:
+                pass
+    
+    # Reload systemd daemon
+    _run("systemctl", "daemon-reload", check=False)
+    
+    # Remove netem qdisc
+    _run("tc", "qdisc", "del", "dev", "eth0", "root", check=False)
+    
+    # Re-enable NTP
+    _run("timedatectl", "set-ntp", "true", check=False)

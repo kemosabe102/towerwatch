@@ -16,6 +16,7 @@ import subprocess
 import time
 
 from ..harness.snapshot import snapshot_iptables, restore_iptables
+from ..harness.inject import inject_iptables
 from .base import BenchTest
 
 ORDER = 12
@@ -40,9 +41,7 @@ class Test(BenchTest):
             event="bench_inject",
             outage_duration_s=OUTAGE_DURATION_S,
         )
-        subprocess.run([
-            "iptables", "-I", "OUTPUT", "-j", "REJECT"
-        ], check=True)
+        inject_iptables("-I", "OUTPUT", "-j", "REJECT")
         time.sleep(OUTAGE_DURATION_S)
         # Restore network before observe so Grafana reads can succeed
         restore_iptables(self._rules_file)

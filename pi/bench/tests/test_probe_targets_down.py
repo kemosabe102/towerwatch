@@ -7,6 +7,7 @@ import subprocess
 import time
 
 from ..harness.snapshot import snapshot_iptables, restore_iptables
+from ..harness.inject import inject_iptables
 from .base import BenchTest
 
 ORDER = 2
@@ -43,9 +44,7 @@ class Test(BenchTest):
                 rules = snapshot_iptables("probe_down", f"pre_{label}")
                 self._rules_files.append(rules)
                 block_start = int(time.time())
-                subprocess.run([
-                    "iptables", "-I", "OUTPUT", "-d", ip, "-j", "DROP"
-                ], check=True)
+                inject_iptables("-I", "OUTPUT", "-d", ip, "-j", "DROP")
                 time.sleep(BLOCK_DURATION_S)
                 block_end = int(time.time())
                 # Restore egress before querying Grafana — gateway block also kills DNS.

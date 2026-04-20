@@ -7,6 +7,7 @@ import subprocess
 import time
 
 from ..harness.snapshot import snapshot_iptables, restore_iptables
+from ..harness.inject import inject_iptables
 from .base import BenchTest
 
 ORDER = 4
@@ -25,10 +26,7 @@ class Test(BenchTest):
 
     def inject(self) -> None:
         self._rules_file = snapshot_iptables("partial_net", "pre")
-        subprocess.run([
-            "iptables", "-I", "OUTPUT",
-            "-p", "tcp", "--dport", "443", "-j", "REJECT"
-        ], check=True)
+        inject_iptables("-I", "OUTPUT", "-p", "tcp", "--dport", "443", "-j", "REJECT")
         self.log.info(f"TCP 443 blocked for {BLOCK_DURATION_S}s", event="bench_inject")
         time.sleep(BLOCK_DURATION_S)
         # Restore network before observe so Grafana reads can succeed.

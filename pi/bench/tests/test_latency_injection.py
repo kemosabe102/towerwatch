@@ -8,6 +8,7 @@ import subprocess
 import time
 
 from ..harness.snapshot import snapshot_tc, restore_tc
+from ..harness.inject import inject_tc
 from .base import BenchTest
 
 ORDER = 1
@@ -28,11 +29,11 @@ class Test(BenchTest):
     def inject(self) -> None:
         self._tc_snapshot = snapshot_tc(run_id="latency", label="pre", iface=IFACE)
         self.log.info(f"Injecting 500ms netem delay on {IFACE}", event="bench_inject")
-        subprocess.run([
-            "tc", "qdisc", "add", "dev", IFACE, "root",
+        inject_tc(
+            "qdisc", "add", "dev", IFACE, "root",
             "netem", "delay", "500ms", "50ms", "distribution", "normal",
             "loss", "5%",
-        ], check=True)
+        )
         self.log.info(f"Waiting {INJECT_DURATION_S}s for probe data to accumulate", event="bench_inject")
         time.sleep(INJECT_DURATION_S)
 
