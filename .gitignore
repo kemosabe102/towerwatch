@@ -25,3 +25,4 @@ ci-tmp/
 pi/bench/reports/
 pi/bench/snapshots/
 pi/bench/state.json
+.worktrees/
