@@ -245,6 +245,7 @@ def measure_http_throughput() -> dict:
 # ---------------------------------------------------------------------------
 # Speedtest (Ookla official CLI — manual only, not scheduled)
 # ---------------------------------------------------------------------------
+# MANUAL-ONLY: invoked via REPL, not scheduled in _collect_probes.
 def run_speedtest() -> dict:
     """Run Ookla speedtest CLI. Returns {download_mbps, upload_mbps, success}."""
     cmd = [config.SPEEDTEST_BINARY, "--format=json", "--accept-license"]

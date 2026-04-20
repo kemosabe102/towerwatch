@@ -6,7 +6,7 @@ A continuous network-quality probe for a Raspberry Pi. Ships latency, jitter, pa
 > - **Runtime:** Python 3 on Raspberry Pi OS (also runs on Windows/macOS for dev).
 > - **Outputs:** Prometheus metrics (Influx line protocol) + structured JSON logs (Loki), both to Grafana Cloud over HTTPS.
 > - **Cadence:** 60 s main loop. Pushes batched every ~2 min.
-> - **Offline behaviour:** atomic CSV buffer on a dedicated data partition, capped at 512 KB, flushed on reconnect.
+> - **Offline behaviour:** atomic CSV buffer on a dedicated data partition, capped at 256 KB, flushed on reconnect.
 > - **Data cost:** ~230 MB/month at defaults — tune `config.py` if you're on a metered connection.
 
 ---
@@ -176,7 +176,7 @@ To enable sticky outage annotations: create a service account in your Grafana st
 
 - Metric units are `_ms`, not seconds. Don't "fix" this — dashboards depend on it.
 - Target labels are baked into field names (e.g. `rtt_avg_google`), not Prometheus label selectors. This is deliberate; dashboards query by metric name.
-- The buffer is capped at 512 KB (`BUFFER_MAX_BYTES`) to avoid filling the 1 GB data partition.
+- The buffer is capped at 256 KB (`LOKI_BUFFER_MAX_BYTES`) to avoid filling the 1 GB data partition.
 - `LOKI_PUSH_LEVEL` defaults to `WARN` in production. `INFO` is for local dev only; `INFO` in production will flood Loki.
 
 ---
@@ -257,7 +257,7 @@ Re-import `grafana/dashboard.json` in Grafana Cloud (Dashboards → New → Impo
 
 ## Data budget
 
-If your connection is metered, treat this as a hard constraint. At defaults the probes use roughly **230 MB/month** (batched + gzipped pushes dominate). Anything that increases traffic — new probes, larger download samples, higher frequencies, smaller batches — should be evaluated against your cap. Ookla is manual-only for this reason (~400 MB per 5G run).
+If your connection is metered, treat this as a hard constraint. At defaults the probes use roughly **230 MB/month** (batched + gzipped pushes dominate). Anything that increases traffic — new probes, larger download samples, higher frequencies, smaller batches — should be evaluated against your cap. Ookla is manual-only for this reason (~400 MB per 5G run). To run manually, call `run_speedtest()` directly from a REPL or one-off script — it is not scheduled in the main loop.
 
 ---
 

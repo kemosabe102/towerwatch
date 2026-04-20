@@ -39,7 +39,7 @@ Work the code in this order:
 - **Metric units are `_ms`, not seconds.** Prometheus convention says seconds; dashboards query `_ms`. Don't normalise.
 - **Target labels are baked into field names** (`rtt_avg_google`, `jitter_cloudflare`), not Prometheus label selectors. Dashboards query by metric name — do not refactor into labels.
 - **`LOKI_PUSH_LEVEL = "WARN"` in production.** `INFO` will flood Loki and burn the data budget. Only flip to `INFO` for local dev.
-- **Buffer capped at 512 KB** (`BUFFER_MAX_BYTES`) — the data partition is 1 GB; don't raise this without thinking.
+- **Buffer capped at 256 KB** (`LOKI_BUFFER_MAX_BYTES`) — the data partition is 1 GB; don't raise this without thinking.
 - **Data budget is a hard constraint, not a guideline.** Any change that adds network traffic (new probes, larger samples, higher frequencies, smaller batches) must be justified against the ~230 MB/month baseline. Ookla stays manual-only.
 
 ## Log events
