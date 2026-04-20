@@ -672,45 +672,24 @@ def _log_cycle(fields, timestamp):
               "connected": fields.get("connected")})
 
 
-def _persist_last_push_ts(ts: float):
-    """Write the last-successful-push timestamp atomically to the data partition.
-
-    Read on startup to distinguish process-restart gaps from network-outage gaps.
-    Best-effort — IO failures are swallowed because this is a hint, not critical data.
-    """
+def _write_ts(path: Path, ts: float, atomic: bool = False) -> None:
+    """Persist a Unix timestamp to a marker file. Best-effort — OSError is swallowed."""
     try:
-        marker = Path(config.LAST_PUSH_MARKER_FILE)
-        marker.parent.mkdir(parents=True, exist_ok=True)
-        tmp = marker.with_suffix(marker.suffix + ".tmp")
-        tmp.write_text(f"{ts:.0f}\n", encoding="utf-8")
-        os.replace(tmp, marker)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if atomic:
+            tmp = path.with_suffix(path.suffix + ".tmp")
+            tmp.write_text(f"{ts:.0f}\n", encoding="utf-8")
+            os.replace(tmp, path)
+        else:
+            path.write_text(f"{ts:.0f}\n", encoding="utf-8")
     except OSError:
         pass
 
 
-def _load_last_push_ts() -> float | None:
-    """Read the persisted last-push timestamp. Returns None if missing/unreadable."""
+def _read_ts(path: Path) -> float | None:
+    """Read a persisted Unix timestamp. Returns None if missing or unreadable."""
     try:
-        raw = Path(config.LAST_PUSH_MARKER_FILE).read_text(encoding="utf-8").strip()
-        return float(raw) if raw else None
-    except (OSError, ValueError):
-        return None
-
-
-def _touch_last_alive():
-    """Update the last-alive marker every cycle. Best-effort, no fsync (advisory)."""
-    try:
-        p = Path(config.LAST_ALIVE_MARKER_FILE)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(f"{time.time():.0f}\n", encoding="utf-8")
-    except OSError:
-        pass
-
-
-def _load_last_alive_ts() -> float | None:
-    """Read the last-alive timestamp. Returns None if missing/unreadable."""
-    try:
-        raw = Path(config.LAST_ALIVE_MARKER_FILE).read_text(encoding="utf-8").strip()
+        raw = path.read_text(encoding="utf-8").strip()
         return float(raw) if raw else None
     except (OSError, ValueError):
         return None
@@ -752,7 +731,7 @@ def _batch_and_push(line: str, any_connected: bool):
     if gap >= config.OUTAGE_GAP_THRESHOLD_S:
         _record_outage_annotation(_last_successful_push_ts, now, "network_unreachable")
     _last_successful_push_ts = now
-    _persist_last_push_ts(now)
+    _write_ts(Path(config.LAST_PUSH_MARKER_FILE), now, atomic=True)
     _flush_log_buffer()
 
 
@@ -793,8 +772,8 @@ def main():
 
     # Load persisted markers and check for a cross-restart gap. Use last_alive_ts
     # to distinguish: process was running (network outage) vs process was dead (restart).
-    loaded_last_push = _load_last_push_ts()
-    loaded_last_alive = _load_last_alive_ts()
+    loaded_last_push = _read_ts(Path(config.LAST_PUSH_MARKER_FILE))
+    loaded_last_alive = _read_ts(Path(config.LAST_ALIVE_MARKER_FILE))
     if loaded_last_push is not None:
         _last_successful_push_ts = loaded_last_push
         startup_now = time.time()
@@ -825,7 +804,7 @@ def main():
         )
 
         _log_cycle(fields, timestamp)
-        _touch_last_alive()
+        _write_ts(Path(config.LAST_ALIVE_MARKER_FILE), time.time())
         _batch_and_push(format_influx_line(fields, timestamp), any_connected)
 
         _maybe_heartbeat()
