@@ -429,6 +429,16 @@ def _buffer_log_entry(payload: dict):
         os.fsync(f.fileno())
 
 
+
+def _post_loki(payload: dict) -> None:
+    """POST a single Loki payload. Raises on network/HTTP error."""
+    requests.post(
+        secrets.LOKI_URL,
+        json=payload,
+        auth=(secrets.LOKI_USER, secrets.LOKI_TOKEN),
+        timeout=config.LOKI_PUSH_TIMEOUT_S,
+    )
+
 def push_log(level: str, message: str, extra: dict = None):
     """Push a structured log entry to Grafana Cloud Loki. Buffers to disk on failure."""
     if _LOG_LEVELS.get(level, 0) < _LOG_LEVELS.get(config.LOKI_PUSH_LEVEL, 1):
@@ -437,12 +447,7 @@ def push_log(level: str, message: str, extra: dict = None):
         return
     payload = _build_loki_payload(level, message, extra)
     try:
-        requests.post(
-            secrets.LOKI_URL,
-            json=payload,
-            auth=(secrets.LOKI_USER, secrets.LOKI_TOKEN),
-            timeout=config.LOKI_PUSH_TIMEOUT_S,
-        )
+        _post_loki(payload)
     except Exception:
         try:
             _buffer_log_entry(payload)
@@ -469,12 +474,7 @@ def _flush_log_buffer():
             consumed += 1
             continue
         try:
-            requests.post(
-                secrets.LOKI_URL,
-                json=payload,
-                auth=(secrets.LOKI_USER, secrets.LOKI_TOKEN),
-                timeout=config.LOKI_PUSH_TIMEOUT_S,
-            )
+            _post_loki(payload)
             delivered += 1
             consumed += 1
         except Exception:
