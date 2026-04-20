@@ -43,7 +43,7 @@ WantedBy=multi-user.target
 
 class Test(BenchTest):
     name = "reboot_survival"
-    description = "Arm resume oneshot, reboot Pi, verify service_started + buffer flush post-boot"
+    description = "Arm resume oneshot, reboot Pi, verify service_started + log buffer flush post-boot"
     timeout_s = 1200
 
     def inject(self) -> None:

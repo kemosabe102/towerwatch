@@ -25,7 +25,7 @@ Run with `python pi/bench/run.py --list` to see all tests and timeouts.
 
 ## 2. `partial_network`
 
-**Intent:** Block port 443 only; confirm ICMP probes still run, push fails, buffer accumulates.
+**Intent:** Block port 443 only; confirm ICMP probes still run, push fails, batch dropped.
 
 **Mechanism options considered:**
 - `iptables -p tcp --dport 443 -j REJECT` — precise; ICMP unaffected. **Chosen.**
@@ -44,7 +44,7 @@ Run with `python pi/bench/run.py --list` to see all tests and timeouts.
 - `/etc/hosts` redirect — persists across reboots if not cleaned; riskier.
 - iptables REDIRECT — requires kernel NAT; overkill.
 
-**Pass criteria:** `metrics_push_failed` event with 503 context; service does not crash; drop continues accumulating.
+**Pass criteria:** `metrics_push_failed` event with 503 context; service does not crash; batch continues to drop each push cycle.
 
 ---
 

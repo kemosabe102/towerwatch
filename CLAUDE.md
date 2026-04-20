@@ -64,6 +64,4 @@ Router signal polling and speedtest fail gracefully off-network — that's expec
 - **Outage-annotation token needs `datasources:read`:** The `GRAFANA_ANNOTATION_TOKEN` service account is used by both towerwatch (annotations write) and the bench harness (datasource resolution + Loki/Prom reads). It needs `annotations:read`, `annotations:write`, and `datasources:read` in the Grafana service account permissions.
 - **`GRAFANA_API_KEY` is push-only:** it authenticates Prometheus/Loki write endpoints, not the Grafana stack API. Do not use it for read queries.
 
-## Deferred boot warnings
 
-Warnings emitted before the network is up are queued and flushed on the first successful metric push — don't "fix" this by swallowing them or pushing early.

@@ -36,15 +36,15 @@ Towerwatch is a 5G connection quality monitor running on a Raspberry Pi 3B. It c
 ├──────┴──────┴─────┴─────┴─────┴─────┴────────┴─────────┤
 │                    fields = { ... }                     │
 │                         │                               │
-│              format_influx_line(:338)                    │
+│              format_influx_line(:117)                    │
 │                         │                               │
-│                  buffer_line(:429)                       │
-│               [always write to disk]                    │
+│              _batch_and_push(:416)                       │
+│          [accumulate PUSH_BATCH_SIZE lines]              │
 │                         │                               │
-│          ┌──── every 10 cycles (10 min) ────┐           │
-│          │     read_buffer → push_metrics   │           │
-│          │     on success: clear_buffer     │           │
-│          └──────────────────────────────────┘           │
+│          ┌──── every PUSH_BATCH_SIZE cycles ────┐        │
+│          │     push_metrics(batch)              │        │
+│          │     on failure: drop batch (logged)  │        │
+│          └──────────────────────────────────────┘        │
 │                         │                               │
 │              ┌──── Grafana Cloud ────┐                  │
 │              │ Prometheus (metrics)  │                  │
@@ -179,11 +179,11 @@ Towerwatch is a 5G connection quality monitor running on a Raspberry Pi 3B. It c
 | `format_influx_line` | 338 | `(fields: dict, timestamp: int) -> str` | `towerwatch,host=towerwatch field1=v1,... <timestamp>`. Filters `None` values |
 | `push_metrics` | 348 | `(lines: list[str]) -> bool` | Joins lines, gzip-compresses if `PUSH_COMPRESS`, POSTs to Grafana. Returns `True` if `status < 300` |
 
-**Batch cadence:** Every `PUSH_BATCH_SIZE=10` cycles (10 min at 60s interval). Counter `cycles_since_push` tracked in `main()` (line 623). On push failure, counter is NOT reset — retry every subsequent cycle.
+**Batch cadence:** Every `PUSH_BATCH_SIZE=2` cycles (~2 min at 60s interval). In-memory list `state.metric_batch` in `RuntimeState`. Batch is cleared before the push attempt; a failed push loses those samples.
 
-**Error pattern:** On HTTP 401/403 → resets session. On any exception → resets session + Loki `WARN`. Returns `False` to keep data in buffer.
+**Error pattern:** On HTTP 401/403 → resets session. On any exception → resets session + Loki `WARN`. Returns `False`; caller (`_batch_and_push:416`) logs a warning and drops the batch. Metrics are intentionally not retried — this keeps uptime math honest.
 
-**Config:** `GRAFANA_PUSH_URL`, `PUSH_BATCH_SIZE=10`, `PUSH_COMPRESS=True`, `GRAFANA_PUSH_TIMEOUT_S=10` (`pi/config.py:54–64`)
+**Config:** `GRAFANA_PUSH_URL`, `PUSH_BATCH_SIZE=2`, `PUSH_COMPRESS=True`, `GRAFANA_PUSH_TIMEOUT_S=10` (`pi/config.py:107–108`)
 
 **Credentials:** `secrets.GRAFANA_INSTANCE_ID`, `secrets.GRAFANA_API_KEY`
 
@@ -196,7 +196,7 @@ Towerwatch is a 5G connection quality monitor running on a Raspberry Pi 3B. It c
 | Function | Line | Signature | Behavior |
 |----------|------|-----------|----------|
 | `push_log` | 389 | `(level: str, message: str, extra: dict = None)` | Level-filtered against `LOKI_PUSH_LEVEL`. Builds Loki push payload with `{job, host, level}` stream labels. Fresh `requests.post` per call (no persistent session). Bare `except: pass` |
-| `flush_deferred_warnings` | 419 | `()` | Drains `_deferred_warnings` list (populated during startup before network is up). Called once after first successful metric push (line 631) |
+| `_flush_log_buffer` | 158 | `()` | Drains the JSONL log buffer after a successful metric push. Reads `LOKI_BUFFER_FILE`, posts each entry to Loki, truncates the file on full drain |
 
 **Payload structure:**
 ```json
@@ -212,23 +212,20 @@ Towerwatch is a 5G connection quality monitor running on a Raspberry Pi 3B. It c
 
 ---
 
-### 3.10 Disk Buffer
+### 3.10 Log Buffer
 
-**Purpose:** Append-only Influx line protocol buffer on the writable data partition. Survives crashes, SIGTERM, and power loss. Accumulates during outages, flushed on reconnect.
+**Purpose:** Append-only JSONL buffer for Loki log payloads on the writable data partition. Survives crashes, SIGTERM, and power loss. Accumulates during outages, flushed on reconnect. Metrics are **not** buffered — failed batches are dropped intentionally so Prometheus gaps are truthful.
 
-| Function | Line | Signature | Behavior |
+| Function | File | Signature | Behavior |
 |----------|------|-----------|----------|
-| `buffer_line` | 429 | `(line: str)` | Appends to `BUFFER_FILE` with `f.flush()` + `os.fsync()` for durability. If file exceeds `BUFFER_MAX_BYTES` (512KB), drops oldest 10% before appending |
-| `read_buffer` | 446 | `() -> list[str]` | Non-destructive read, returns stripped lines. Returns `[]` if absent |
-| `clear_buffer` | 454 | `()` | `Path.unlink()` — called only after successful `push_metrics()` |
+| `_buffer_log_entry` | `pi/loki.py:42` | `(payload: dict)` | Appends JSON payload + newline to `LOKI_BUFFER_FILE` with `fsync()`. If file ≥ `LOKI_BUFFER_MAX_BYTES`, trims oldest ~10% before appending |
+| `_flush_log_buffer` | `pi/towerwatch.py:158` | `()` | Reads buffer, posts each entry to Loki via `_post_loki`. On full drain, unlinks the file. On partial failure, truncates to remaining tail |
 
-**Write path (main loop line 622):** `buffer_line(line)` runs every cycle, unconditionally. Data is safe on disk before any push attempt.
+**Write path:** `push_log` in `pi/loki.py` calls `_buffer_log_entry` on any network exception.
 
-**Flush path (main loop lines 625–639):** When `cycles_since_push >= PUSH_BATCH_SIZE` and connected: `read_buffer() → push_metrics() → clear_buffer()`. On failure, data stays on disk and push retries every subsequent cycle.
+**Flush path:** `_flush_log_buffer` is called from `_batch_and_push` after every successful metric push, and once at startup after markers are read.
 
-**Startup recovery (line 555):** If buffer exists from a prior crash, `cycles_since_push` is pre-set to `PUSH_BATCH_SIZE` to force immediate push on first cycle.
-
-**Config:** `BUFFER_FILE`, `BUFFER_MAX_BYTES=512KB` (`pi/config.py:67–75, 65`)
+**Config:** `LOKI_BUFFER_FILE`, `LOKI_BUFFER_MAX_BYTES=256KB` (`pi/config.py:111–114`)
 
 ---
 

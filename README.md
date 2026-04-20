@@ -1,12 +1,12 @@
 # Towerwatch — Cellular/Broadband Network Quality Monitor
 
-A continuous network-quality probe for a Raspberry Pi. Ships latency, jitter, packet loss, DNS/TCP/HTTP timings, throughput, and (optionally) cellular-radio signal metrics to Grafana Cloud. Buffers to disk during outages and flushes on reconnect. Designed to build a long-running evidence dataset for your ISP or cellular provider.
+A continuous network-quality probe for a Raspberry Pi. Ships latency, jitter, packet loss, DNS/TCP/HTTP timings, throughput, and (optionally) cellular-radio signal metrics to Grafana Cloud. Buffers **logs** to disk during outages and flushes on reconnect; metrics are dropped on push failure so uptime can't be backfilled. Designed to build a long-running evidence dataset for your ISP or cellular provider.
 
 > **At a glance**
 > - **Runtime:** Python 3 on Raspberry Pi OS (also runs on Windows/macOS for dev).
 > - **Outputs:** Prometheus metrics (Influx line protocol) + structured JSON logs (Loki), both to Grafana Cloud over HTTPS.
 > - **Cadence:** 60 s main loop. Pushes batched every ~2 min.
-> - **Offline behaviour:** atomic CSV buffer on a dedicated data partition, capped at 256 KB, flushed on reconnect.
+> - **Offline behaviour:** atomic JSONL **log** buffer on the data partition, capped at 256 KB, flushed on reconnect; metrics are not buffered.
 > - **Data cost:** ~230 MB/month at defaults — tune `config.py` if you're on a metered connection.
 
 ---
@@ -42,7 +42,7 @@ A continuous network-quality probe for a Raspberry Pi. Ships latency, jitter, pa
 7. **Ookla speedtest** — manual only (~400 MB/run at 5G speeds).
 8. **Push metrics** — Influx line protocol to Grafana Cloud Prometheus, gzipped, batched.
 9. **Push logs** — structured JSON to Grafana Cloud Loki (fire-and-forget).
-10. **Buffer on failure** — atomic CSV write to the data partition; flush on reconnect. Gaps ≥ 10 min also POST a sticky region annotation to Grafana.
+10. **On push failure** — failed metric batches are dropped (not buffered) so uptime stays truthful; failed log payloads append to the JSONL buffer on the data partition and flush on reconnect. Gaps ≥ 10 min also POST a sticky region annotation to Grafana.
 
 Metric names are flattened: `towerwatch_{field}_{target_label}` (e.g. `towerwatch_rtt_avg_google`). Units are `_ms` throughout (not Prometheus-standard seconds).
 
@@ -176,7 +176,7 @@ To enable sticky outage annotations: create a service account in your Grafana st
 
 - Metric units are `_ms`, not seconds. Don't "fix" this — dashboards depend on it.
 - Target labels are baked into field names (e.g. `rtt_avg_google`), not Prometheus label selectors. This is deliberate; dashboards query by metric name.
-- The buffer is capped at 256 KB (`LOKI_BUFFER_MAX_BYTES`) to avoid filling the 1 GB data partition.
+- The **log** buffer is capped at 256 KB (`LOKI_BUFFER_MAX_BYTES`) to avoid filling the 1 GB data partition. Metrics are not buffered.
 - `LOKI_PUSH_LEVEL` defaults to `WARN` in production. `INFO` is for local dev only; `INFO` in production will flood Loki.
 
 ---

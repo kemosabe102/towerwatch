@@ -1,6 +1,6 @@
 """Test 2: partial_network — block port 443 only; ICMP still works.
 
-Pass: metrics_push_failed events, buffer grows, probes continue (ping metrics present).
+Pass: metrics_push_failed events, batch dropped, probes continue (ping metrics present).
 """
 
 import subprocess
@@ -17,7 +17,7 @@ BLOCK_DURATION_S = 120
 
 class Test(BenchTest):
     name = "partial_network"
-    description = "Block TCP 443 (HTTPS push); ICMP probes unaffected, push fails, buffer grows"
+    description = "Block TCP 443 (HTTPS push); ICMP probes unaffected, push fails, batch dropped"
     timeout_s = 420
 
     def __init__(self, *args, **kwargs):

@@ -140,7 +140,7 @@ sudo systemctl start towerwatch
 
 **Symptom:** All probes failing (google, cloudflare, 8.8.8.8) but gateway (192.168.1.1) ping OK.
 
-This is expected ISP/carrier outage behavior. The buffer accumulates; data flushes on reconnect. No action needed unless the outage exceeds ~8 hours (buffer cap).
+This is expected ISP/carrier outage behavior. Logs buffer on disk and flush on reconnect (256 KB cap). Metrics during the outage are lost by design — expect a gap in Prom, not a backfill.
 
 **Monitor:**
 ```bash
@@ -246,7 +246,7 @@ sudo mount /dev/mmcblk0p3 /opt/towerwatch/data
 sudo systemctl restart towerwatch
 ```
 
-If the partition is full (unlikely at 1 GB with 256 KB buffer cap): check for unexpected files in `/opt/towerwatch/data/` and clear bench snapshots/reports if present.
+If the partition is full (unlikely at 1 GB with 256 KB log buffer cap): check for unexpected files in `/opt/towerwatch/data/` and clear bench snapshots/reports if present.
 
 ---
 
