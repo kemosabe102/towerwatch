@@ -25,10 +25,16 @@ import sys
 import time
 from pathlib import Path
 
-import dns.resolver
 import requests
 
 import config
+from probes.ping import run_ping
+from probes.tcp import measure_tcp_connect
+from probes.dns import measure_dns
+from probes.http import measure_http_latency, measure_http_throughput
+from probes.ookla import run_speedtest
+from probes.m6 import poll_m6_signal
+from loki import push_log, log_and_push
 
 try:
     import secrets
@@ -71,202 +77,6 @@ def update_connection_state(connected: bool, timestamp: int):
     _connected = connected
 
 
-# ---------------------------------------------------------------------------
-# ICMP Ping (cross-platform)
-# ---------------------------------------------------------------------------
-def _build_ping_cmd(target: str) -> list[str]:
-    """Build platform-specific ping command."""
-    if IS_WINDOWS:
-        return ["ping", "-n", str(config.PING_COUNT),
-                "-w", str(config.PING_TIMEOUT_S * 1000), target]
-    else:
-        return ["ping", "-c", str(config.PING_COUNT),
-                "-W", str(config.PING_TIMEOUT_S), target]
-
-
-def _parse_rtt_stats(stdout: str) -> tuple[int, int, int, float]:
-    """Parse platform-specific RTT summary. Returns (min, avg, max, mdev)."""
-    if IS_WINDOWS:
-        m = re.search(
-            r"Minimum\s*=\s*(\d+)ms.*Maximum\s*=\s*(\d+)ms.*Average\s*=\s*(\d+)ms",
-            stdout, re.DOTALL,
-        )
-        if m:
-            return int(m.group(1)), int(m.group(3)), int(m.group(2)), 0.0
-        return 0, 0, 0, 0.0
-    m = re.search(
-        r"rtt min/avg/max/mdev = ([\d.]+)/([\d.]+)/([\d.]+)/([\d.]+)",
-        stdout,
-    )
-    if m:
-        return (round(float(m.group(1))), round(float(m.group(2))),
-                round(float(m.group(3))), float(m.group(4)))
-    return 0, 0, 0, 0.0
-
-
-def _calc_jitter(rtts: list[float], mdev: float) -> int:
-    """RFC 3550 jitter from individual RTTs, falling back to mdev."""
-    if len(rtts) >= 2:
-        diffs = [abs(rtts[i] - rtts[i - 1]) for i in range(1, len(rtts))]
-        return round(statistics.mean(diffs))
-    return round(mdev)
-
-
-def _parse_ping_output(stdout: str) -> dict:
-    """Parse ping output into {rtt_avg, rtt_min, rtt_max, jitter, pkt_loss, connected}."""
-    loss_match = re.search(r"(\d+)%\s*(?:packet )?loss", stdout)
-    pkt_loss = int(loss_match.group(1)) if loss_match else 100
-
-    rtt_min, rtt_avg, rtt_max, mdev = _parse_rtt_stats(stdout)
-
-    if IS_WINDOWS:
-        rtts = [float(m) for m in re.findall(r"time[=<](\d+)ms", stdout)]
-    else:
-        rtts = [float(m) for m in re.findall(r"time=([\d.]+)", stdout)]
-
-    return {
-        "rtt_avg": rtt_avg, "rtt_min": rtt_min, "rtt_max": rtt_max,
-        "jitter": _calc_jitter(rtts, mdev), "pkt_loss": pkt_loss,
-        "connected": pkt_loss < 100,
-    }
-
-
-
-def run_ping(target: str) -> dict:
-    """Run ICMP ping burst, return {rtt_avg, rtt_min, rtt_max, jitter, pkt_loss, connected}."""
-    try:
-        result = subprocess.run(
-            _build_ping_cmd(target),
-            capture_output=True, text=True,
-            timeout=config.PING_TIMEOUT_S * config.PING_COUNT + 5,
-        )
-    except (subprocess.TimeoutExpired, OSError) as e:
-        log_and_push("WARN", f"Ping {target} failed",
-                     event=config.LOG_EVENT_PING_FAILED, target=target, error=str(e))
-        return {"rtt_avg": 0, "rtt_min": 0, "rtt_max": 0,
-                "jitter": 0, "pkt_loss": 100, "connected": False}
-
-    return _parse_ping_output(result.stdout)
-
-
-# ---------------------------------------------------------------------------
-# TCP Connection Time
-# ---------------------------------------------------------------------------
-def measure_tcp_connect() -> float:
-    """Measure TCP handshake time in ms. Returns 0 on failure."""
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(config.TCP_TIMEOUT_S)
-        start = time.perf_counter()
-        sock.connect((config.TCP_TARGET_HOST, config.TCP_TARGET_PORT))
-        elapsed = (time.perf_counter() - start) * 1000
-        sock.close()
-        return round(elapsed)
-    except (OSError, socket.timeout) as e:
-        log.warning("TCP connect failed: %s", e)
-        return 0
-
-
-# ---------------------------------------------------------------------------
-# DNS Resolution Time
-# ---------------------------------------------------------------------------
-def measure_dns(nameserver: str) -> float:
-    """Measure DNS resolution time in ms using explicit nameserver."""
-    resolver = dns.resolver.Resolver()
-    resolver.nameservers = [nameserver]
-    resolver.lifetime = config.DNS_TIMEOUT_S
-    try:
-        start = time.perf_counter()
-        resolver.resolve(config.DNS_QUERY_DOMAIN, "A")
-        return round((time.perf_counter() - start) * 1000)
-    except Exception as e:
-        log_and_push("WARN", f"DNS {nameserver} failed",
-                     event=config.LOG_EVENT_DNS_FAILED, nameserver=nameserver, error=str(e))
-        return 0
-
-
-# ---------------------------------------------------------------------------
-# HTTP Latency Probe (10 KB, frequent — replaces old 500 KB download)
-# ---------------------------------------------------------------------------
-def measure_http_latency() -> float:
-    """Timed download of ~10KB CDN asset for latency proxy. Returns elapsed ms, 0 on failure."""
-    try:
-        start = time.perf_counter()
-        resp = requests.get(
-            config.HTTP_LATENCY_URL,
-            timeout=config.HTTP_LATENCY_TIMEOUT_S,
-        )
-        resp.raise_for_status()
-        _ = resp.content  # Ensure body is fully received
-        return round((time.perf_counter() - start) * 1000)
-    except Exception as e:
-        log.warning("HTTP latency probe failed: %s", e)
-        return 0
-
-
-# ---------------------------------------------------------------------------
-# HTTP Throughput Sample (1 MB, random schedule — replaces scheduled Ookla)
-# ---------------------------------------------------------------------------
-def measure_http_throughput() -> dict:
-    """Timed download of ~1MB CDN asset for throughput estimation.
-    Returns {http_throughput_ms, http_throughput_mbps}, zeros on failure."""
-    try:
-        start = time.perf_counter()
-        resp = requests.get(
-            config.HTTP_THROUGHPUT_URL,
-            timeout=config.HTTP_THROUGHPUT_TIMEOUT_S,
-        )
-        resp.raise_for_status()
-        size_bytes = len(resp.content)
-        elapsed_s = time.perf_counter() - start
-        throughput_mbps = round((size_bytes * 8) / elapsed_s / 1_000_000, 2)
-        elapsed_ms = round(elapsed_s * 1000)
-        log_and_push("INFO", f"Throughput: {throughput_mbps} Mbps ({elapsed_ms}ms)",
-                     event=config.LOG_EVENT_HTTP_THROUGHPUT_OK,
-                     throughput_mbps=throughput_mbps, elapsed_ms=elapsed_ms)
-        return {"http_throughput_ms": elapsed_ms, "http_throughput_mbps": throughput_mbps}
-    except Exception as e:
-        log_and_push("WARN", f"HTTP throughput test failed: {e}",
-                     event=config.LOG_EVENT_HTTP_THROUGHPUT_FAILED, error=str(e))
-        return {"http_throughput_ms": 0, "http_throughput_mbps": 0}
-
-
-# ---------------------------------------------------------------------------
-# Speedtest (Ookla official CLI — manual only, not scheduled)
-# ---------------------------------------------------------------------------
-# MANUAL-ONLY: invoked via REPL, not scheduled in _collect_probes.
-def run_speedtest() -> dict:
-    """Run Ookla speedtest CLI. Returns {download_mbps, upload_mbps, success}."""
-    cmd = [config.SPEEDTEST_BINARY, "--format=json", "--accept-license"]
-    if config.SPEEDTEST_SERVER_ID:
-        cmd += ["--server-id", str(config.SPEEDTEST_SERVER_ID)]
-    try:
-        result = subprocess.run(
-            cmd, capture_output=True, text=True,
-            timeout=config.SPEEDTEST_TIMEOUT_S,
-        )
-        data = json.loads(result.stdout)
-        dl = round(data["download"]["bandwidth"] * 8 / 1_000_000, 2)
-        ul = round(data["upload"]["bandwidth"] * 8 / 1_000_000, 2)
-        log_and_push("INFO", f"Speedtest: {dl} Mbps down, {ul} Mbps up",
-                     event=config.LOG_EVENT_SPEEDTEST_OK, download_mbps=dl, upload_mbps=ul)
-        return {"download_mbps": dl, "upload_mbps": ul, "success": 1}
-    except subprocess.TimeoutExpired:
-        log.error("Speedtest timed out after %ds", config.SPEEDTEST_TIMEOUT_S)
-        push_log("WARN", f"Speedtest timed out after {config.SPEEDTEST_TIMEOUT_S}s",
-                 {"event": config.LOG_EVENT_SPEEDTEST_TIMEOUT, "timeout_s": config.SPEEDTEST_TIMEOUT_S})
-        return {"download_mbps": 0, "upload_mbps": 0, "success": 0}
-    except Exception as e:
-        log.error("Speedtest failed: %s", e)
-        push_log("WARN", f"Speedtest failed: {e}",
-                 {"event": config.LOG_EVENT_SPEEDTEST_FAILED, "error": str(e)})
-        return {"download_mbps": 0, "upload_mbps": 0, "success": 0}
-
-
-# ---------------------------------------------------------------------------
-# M6 Signal Metrics
-# ---------------------------------------------------------------------------
-
 _sessions: dict = {}
 
 
@@ -275,49 +85,6 @@ def _lazy_session(key: str, factory) -> requests.Session:
     if key not in _sessions or _sessions[key] is None:
         _sessions[key] = factory()
     return _sessions[key]
-
-
-
-_M6_FIELD_MAP = [
-    ('m6_rsrp', ('RSRP', 'rsrp'), int),
-    ('m6_rsrq', ('RSRQ', 'rsrq'), int),
-    ('m6_sinr', ('SINR', 'sinr'), int),
-    ('m6_band', ('curBand', 'band'), lambda v: int(v) if str(v).isdigit() else 0),
-]
-
-
-def _ensure_m6_session() -> requests.Session:
-    def _factory():
-        s = requests.Session()
-        s.auth = ('admin', secrets.M6_ADMIN_PASSWORD)
-        return s
-    return _lazy_session('m6', _factory)
-
-
-def _extract_m6_fields(data: dict) -> dict:
-    """Extract signal metrics from M6 JSON using field map."""
-    result = {}
-    for metric, keys, convert in _M6_FIELD_MAP:
-        val = next((data[k] for k in keys if k in data), None)
-        if val is not None:
-            result[metric] = convert(val)
-    return result
-
-
-def poll_m6_signal() -> dict:
-    """Poll Nighthawk M6 for signal metrics. Returns dict or empty on failure."""
-    try:
-        session = _ensure_m6_session()
-        resp = session.get(config.M6_WWAN_URL, timeout=config.M6_TIMEOUT_S)
-        if resp.status_code == 401:
-            _sessions['m6'] = None
-            log_and_push('WARN', 'M6 auth expired', event=config.LOG_EVENT_M6_AUTH_EXPIRED)
-            return {}
-        resp.raise_for_status()
-        return _extract_m6_fields(resp.json())
-    except Exception as e:
-        log.debug('M6 poll failed: %s', e)
-        return {}
 
 
 # ---------------------------------------------------------------------------
@@ -380,76 +147,6 @@ def push_metrics(lines: list[str]) -> bool:
                      event=config.LOG_EVENT_METRICS_PUSH_FAIL, error=str(e))
         _sessions['grafana'] = None
         return False
-
-
-# ---------------------------------------------------------------------------
-# Loki Log Shipping (direct HTTP push, no sidecar)
-# ---------------------------------------------------------------------------
-_LOG_LEVELS = {"DEBUG": 0, "INFO": 1, "WARN": 2, "ERROR": 3}
-
-
-def _build_loki_payload(level: str, message: str, extra: dict = None) -> dict:
-    """Build a Loki push payload dict."""
-    return {
-        "streams": [{
-            "stream": {
-                "job": "towerwatch",
-                "host": config.INFLUX_HOST_TAG,
-                "level": level.lower(),
-            },
-            "values": [[
-                str(int(time.time() * 1e9)),
-                json.dumps({"msg": message, **(extra or {})}),
-            ]],
-        }]
-    }
-
-
-def _buffer_log_entry(payload: dict):
-    """Append a Loki payload (as JSON line) to the log buffer file. fsync'd."""
-    buf = Path(config.LOKI_BUFFER_FILE)
-    buf.parent.mkdir(parents=True, exist_ok=True)
-    if buf.exists() and buf.stat().st_size >= config.LOKI_BUFFER_MAX_BYTES:
-        lines = buf.read_text(encoding="utf-8").splitlines()
-        keep = lines[max(1, len(lines) // 10):]
-        buf.write_text("\n".join(keep) + "\n", encoding="utf-8")
-    with open(buf, "a", encoding="utf-8") as f:
-        f.write(json.dumps(payload) + "\n")
-        f.flush()
-        os.fsync(f.fileno())
-
-
-
-def _post_loki(payload: dict) -> None:
-    """POST a single Loki payload. Raises on network/HTTP error."""
-    requests.post(
-        secrets.LOKI_URL,
-        json=payload,
-        auth=(secrets.LOKI_USER, secrets.LOKI_TOKEN),
-        timeout=config.LOKI_PUSH_TIMEOUT_S,
-    )
-
-
-def log_and_push(level: str, message: str, **fields) -> None:
-    """Log locally and push to Loki in one call. level is the Loki level (INFO/WARN/ERROR)."""
-    _LOG_FN = {"INFO": log.info, "WARN": log.warning, "ERROR": log.error}
-    _LOG_FN.get(level, log.warning)(message)
-    push_log(level, message, fields if fields else None)
-
-def push_log(level: str, message: str, extra: dict = None):
-    """Push a structured log entry to Grafana Cloud Loki. Buffers to disk on failure."""
-    if _LOG_LEVELS.get(level, 0) < _LOG_LEVELS.get(config.LOKI_PUSH_LEVEL, 1):
-        return
-    if not getattr(secrets, "LOKI_URL", None):
-        return
-    payload = _build_loki_payload(level, message, extra)
-    try:
-        _post_loki(payload)
-    except Exception:
-        try:
-            _buffer_log_entry(payload)
-        except Exception:
-            pass  # Buffer write failure must never crash the monitor
 
 
 def _flush_log_buffer():

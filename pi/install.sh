@@ -55,6 +55,7 @@ echo "[5/8] Installing towerwatch to $INSTALL_DIR..."
 mkdir -p "$INSTALL_DIR"
 cp "$SCRIPT_DIR/towerwatch.py" "$INSTALL_DIR/"
 cp "$SCRIPT_DIR/config.py" "$INSTALL_DIR/"
+cp "$SCRIPT_DIR/loki.py" "$INSTALL_DIR/"
 # version.txt is stamped by ci.sh on the dev machine; cd.sh copies it during
 # deploy. On a fresh install it may not exist yet — fall back to a marker.
 if [ -f "$SCRIPT_DIR/version.txt" ]; then
@@ -70,6 +71,7 @@ if [ -f "$SCRIPT_DIR/secrets.py" ]; then
 else
     echo "  WARNING: secrets.py not found. Copy secrets.py.example to secrets.py and re-run."
 fi
+cp -r "$SCRIPT_DIR/probes" "$INSTALL_DIR/"
 chown -R towerwatch:towerwatch "$INSTALL_DIR"
 
 # --- Mount data partition ---

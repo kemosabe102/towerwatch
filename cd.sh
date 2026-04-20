@@ -63,7 +63,8 @@ INSTALL_DIR="$2"
 # Step 1: Pull latest code
 echo "[1/3] Pulling latest code..."
 cd "$REPO_DIR" && git pull --ff-only
-sudo cp pi/towerwatch.py pi/config.py pi/version.txt "$INSTALL_DIR/"
+sudo cp pi/towerwatch.py pi/config.py pi/loki.py pi/version.txt "$INSTALL_DIR/"
+sudo cp -r pi/probes "$INSTALL_DIR/"
 sudo chown towerwatch:towerwatch \
     "$INSTALL_DIR/towerwatch.py" "$INSTALL_DIR/config.py" \
     "$INSTALL_DIR/version.txt"
