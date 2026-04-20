@@ -271,7 +271,17 @@ def run_speedtest() -> dict:
 # ---------------------------------------------------------------------------
 # M6 Signal Metrics
 # ---------------------------------------------------------------------------
-_m6_session = None
+
+_sessions: dict = {}
+
+
+def _lazy_session(key: str, factory) -> requests.Session:
+    """Return a cached Session, creating it via factory() on first call."""
+    if key not in _sessions or _sessions[key] is None:
+        _sessions[key] = factory()
+    return _sessions[key]
+
+
 
 _M6_FIELD_MAP = [
     ('m6_rsrp', ('RSRP', 'rsrp'), int),
@@ -282,12 +292,11 @@ _M6_FIELD_MAP = [
 
 
 def _ensure_m6_session() -> requests.Session:
-    """Lazily create the M6 admin session."""
-    global _m6_session
-    if _m6_session is None:
-        _m6_session = requests.Session()
-        _m6_session.auth = ('admin', secrets.M6_ADMIN_PASSWORD)
-    return _m6_session
+    def _factory():
+        s = requests.Session()
+        s.auth = ('admin', secrets.M6_ADMIN_PASSWORD)
+        return s
+    return _lazy_session('m6', _factory)
 
 
 def _extract_m6_fields(data: dict) -> dict:
@@ -302,12 +311,11 @@ def _extract_m6_fields(data: dict) -> dict:
 
 def poll_m6_signal() -> dict:
     """Poll Nighthawk M6 for signal metrics. Returns dict or empty on failure."""
-    global _m6_session
     try:
         session = _ensure_m6_session()
         resp = session.get(config.M6_WWAN_URL, timeout=config.M6_TIMEOUT_S)
         if resp.status_code == 401:
-            _m6_session = None
+            _sessions['m6'] = None
             log_and_push('WARN', 'M6 auth expired', event=config.LOG_EVENT_M6_AUTH_EXPIRED)
             return {}
         resp.raise_for_status()
@@ -325,18 +333,17 @@ def _build_auth_header() -> str:
     return "Basic " + base64.b64encode(creds.encode()).decode()
 
 
-_grafana_session = None
 
 
 def _get_grafana_session() -> requests.Session:
-    global _grafana_session
-    if _grafana_session is None:
-        _grafana_session = requests.Session()
-        _grafana_session.headers.update({
+    def _factory():
+        s = requests.Session()
+        s.headers.update({
             "Authorization": _build_auth_header(),
             "Content-Type": "text/plain",
         })
-    return _grafana_session
+        return s
+    return _lazy_session('grafana', _factory)
 
 
 def format_influx_line(fields: dict, timestamp: int) -> str:
@@ -351,7 +358,6 @@ def format_influx_line(fields: dict, timestamp: int) -> str:
 
 def push_metrics(lines: list[str]) -> bool:
     """Push Influx line protocol lines to Grafana Cloud. Returns True on success."""
-    global _grafana_session
     body_raw = "\n".join(lines).encode("utf-8")
     headers = {}
     if config.PUSH_COMPRESS:
@@ -372,12 +378,12 @@ def push_metrics(lines: list[str]) -> bool:
         log_and_push("WARN", f"Metric push HTTP {resp.status_code}",
                      event=config.LOG_EVENT_METRICS_PUSH_FAIL, http_status=resp.status_code)
         if resp.status_code in (401, 403):
-            _grafana_session = None
+            _sessions['grafana'] = None
         return False
     except Exception as e:
         log_and_push("WARN", f"Metric push error: {e}",
                      event=config.LOG_EVENT_METRICS_PUSH_FAIL, error=str(e))
-        _grafana_session = None
+        _sessions['grafana'] = None
         return False
 
 
