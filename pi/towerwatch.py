@@ -36,11 +36,6 @@ except ImportError:
     print("ERROR: secrets.py not found. Copy secrets.py.example to secrets.py and fill in values.")
     raise SystemExit(1)
 
-logging.basicConfig(
-    level=getattr(logging, config.LOG_LEVEL, logging.INFO),
-    format="%(asctime)s %(levelname)s %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
 log = logging.getLogger("towerwatch")
 
 IS_WINDOWS = sys.platform == "win32"
@@ -612,8 +607,17 @@ def _handle_sigterm(signum, frame):
     _shutdown_requested = True
 
 
-if not IS_WINDOWS:
-    signal.signal(signal.SIGTERM, _handle_sigterm)
+def _configure_logging() -> None:
+    logging.basicConfig(
+        level=getattr(logging, config.LOG_LEVEL, logging.INFO),
+        format="%(asctime)s %(levelname)s %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+
+def _install_signal_handlers() -> None:
+    if not IS_WINDOWS:
+        signal.signal(signal.SIGTERM, _handle_sigterm)
 
 
 # ---------------------------------------------------------------------------
@@ -754,6 +758,8 @@ def _maybe_heartbeat():
 # ---------------------------------------------------------------------------
 def main():
     global _last_successful_push_ts
+    _configure_logging()
+    _install_signal_handlers()
     log.info("=== Towerwatch %s ===", "(Windows)" if IS_WINDOWS else "(Raspberry Pi)")
     wait_for_data_partition()
 
