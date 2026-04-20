@@ -14,6 +14,8 @@ from ..harness.snapshot import write_dropin, remove_dropin
 from ..harness.observe import ObserveError
 from .base import BenchTest
 
+ORDER = 6
+
 DROPIN_NAME = "loki429"
 LOCAL_PORT = 19998
 INJECT_DURATION_S = 120

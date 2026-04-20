@@ -2,6 +2,7 @@
 
 import json
 import time
+from collections import Counter
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Optional
@@ -63,12 +64,18 @@ class Report:
             dur = f"{r.duration_s:.1f}s" if r.duration_s else ""
             print(f"{r.name:<40} {icon:<8} {dur:>10}")
         print()
-        passed  = sum(1 for r in self._results if r.status == "pass")
-        xfail   = sum(1 for r in self._results if r.status == "expected_failure")
-        failed  = sum(1 for r in self._results if r.status in ("fail", "error"))
-        skipped = sum(1 for r in self._results if r.status == "skipped")
-        print(f"Summary: {passed} pass  {xfail} xfail  {failed} fail  {skipped} skip")
+        summary = self._summary()
+        print(f"Summary: {summary['passed']} pass  {summary['xfail']} xfail  {summary['failed']} fail  {summary['skipped']} skip")
         print(f"Report:  {self._path}")
+
+    def _summary(self) -> dict:
+        """Compute pass/xfail/fail/skip counts."""
+        return {
+            'passed': sum(1 for r in self._results if r.status == "pass"),
+            'xfail': sum(1 for r in self._results if r.status == "expected_failure"),
+            'failed': sum(1 for r in self._results if r.status in ("fail", "error")),
+            'skipped': sum(1 for r in self._results if r.status == "skipped"),
+        }
 
     @property
     def path(self) -> Path:

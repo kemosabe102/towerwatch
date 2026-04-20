@@ -67,16 +67,20 @@ class GrafanaObserver:
         if self._prom_uid and self._loki_uid:
             return
         ds_list = self._get(f"{self._base}/api/datasources", self._api_key)
-        for ds in ds_list:
-            name = ds.get("name", "").lower()
-            if "prom" in name and self._prom_uid is None:
-                self._prom_uid = ds["uid"]
-            elif "log" in name and self._loki_uid is None:
-                self._loki_uid = ds["uid"]
+        self._prom_uid = self._match_ds(ds_list, "prom")
+        self._loki_uid = self._match_ds(ds_list, "log")
         if not self._prom_uid:
             raise ObserveError("Could not resolve Prometheus datasource UID")
         if not self._loki_uid:
             raise ObserveError("Could not resolve Loki datasource UID")
+
+    def _match_ds(self, ds_list: list[dict], needle: str) -> str | None:
+        """Find a datasource by name substring, return its UID or None."""
+        for ds in ds_list:
+            name = ds.get("name", "").lower()
+            if needle in name:
+                return ds["uid"]
+        return None
 
     # ------------------------------------------------------------------
     # Loki queries

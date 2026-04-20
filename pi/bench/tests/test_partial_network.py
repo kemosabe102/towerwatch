@@ -9,6 +9,8 @@ import time
 from ..harness.snapshot import snapshot_iptables, restore_iptables
 from .base import BenchTest
 
+ORDER = 4
+
 BLOCK_DURATION_S = 120
 
 

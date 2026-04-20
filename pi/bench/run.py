@@ -11,7 +11,9 @@ Usage:
 """
 
 import argparse
+import glob
 import importlib
+import json
 import os
 import subprocess
 import sys
@@ -31,61 +33,40 @@ from pi.bench.harness.state import (
     read_sentinel, read_state, sentinel_present, write_state,
     BENCH_DIR,
 )
+from pi.bench.loader import load_secrets, load_tests
+from pi.bench.preflight import preflight_check
 
 # ---------------------------------------------------------------------------
-# Test registry — import order determines --all run order
+# Test discovery — glob-based with ORDER sorting
 # ---------------------------------------------------------------------------
-TEST_MODULES = [
-    "pi.bench.tests.test_service_lifecycle",         # 9: lowest-risk, smoke first
-    "pi.bench.tests.test_latency_injection",         # 13
-    "pi.bench.tests.test_probe_targets_down",        # 10
-    "pi.bench.tests.test_dns_only_outage",           # 12
-    "pi.bench.tests.test_partial_network",           # 2
-    "pi.bench.tests.test_prom_5xx",                  # 3
-    "pi.bench.tests.test_loki_429",                  # 4 (expected-failure)
-    "pi.bench.tests.test_config_drift",              # 11
-    "pi.bench.tests.test_buffer_cap_and_corrupt",    # 5
-    "pi.bench.tests.test_readonly_data_partition",   # 6
-    "pi.bench.tests.test_clock_skew_forward",        # 7
-    "pi.bench.tests.test_clock_skew_backward",       # 8 (expected-failure)
-    "pi.bench.tests.test_full_network_loss",         # 1 (longest — needs annotation)
-    "pi.bench.tests.test_reboot_survival",           # 14 (run separately)
-]
 
-
-def _load_secrets():
-    # Priority: /opt/towerwatch (Pi install, authoritative) → pi/ sibling (dev repo)
-    # pi.secrets (repo import) is NOT tried first — the repo may have a stale copy
-    # with empty GRAFANA_ANNOTATION_TOKEN from initial setup.
-    for candidate in [
-        Path("/opt/towerwatch"),               # Pi install path (authoritative)
-        Path(__file__).resolve().parents[1],   # pi/bench/../ = pi/ (dev repo)
-    ]:
-        if not (candidate / "secrets.py").exists():
-            continue
-        sys.path.insert(0, str(candidate))
+def _discover_tests() -> list[type]:
+    """Discover test modules via glob, sorted by ORDER constant.
+    
+    Returns list of test classes sorted by their module-level ORDER constant.
+    """
+    tests_dir = Path(__file__).resolve().parent / "tests"
+    test_files = sorted(glob.glob(str(tests_dir / "test_*.py")))
+    
+    test_classes_with_order = []
+    for test_file in test_files:
+        # Convert path to module name: /path/to/test_foo.py → pi.bench.tests.test_foo
+        module_name = f"pi.bench.tests.{Path(test_file).stem}"
         try:
-            import secrets as s
-            return s
-        except ImportError:
-            sys.path.pop(0)
-    print("ERROR: secrets.py not found. Copy secrets.py.example → secrets.py and fill values.")
-    sys.exit(1)
-
-
-def _load_tests(skip: list[str] = None) -> list:
-    tests = []
-    skip = set(skip or [])
-    for module_path in TEST_MODULES:
-        mod = importlib.import_module(module_path)
-        cls = getattr(mod, "Test", None)
-        if cls is None:
-            print(f"WARNING: {module_path} has no 'Test' class, skipping")
+            mod = importlib.import_module(module_name)
+            cls = getattr(mod, "Test", None)
+            if cls is None:
+                print(f"WARNING: {module_name} has no 'Test' class, skipping")
+                continue
+            order = getattr(mod, "ORDER", 999)
+            test_classes_with_order.append((order, cls))
+        except ImportError as e:
+            print(f"WARNING: Could not import {module_name}: {e}")
             continue
-        if cls.name in skip:
-            continue
-        tests.append(cls)
-    return tests
+    
+    # Sort by ORDER constant (default 999 if missing)
+    test_classes_with_order.sort(key=lambda x: x[0])
+    return [cls for _, cls in test_classes_with_order]
 
 
 def _make_observer(secrets) -> GrafanaObserver:
@@ -98,34 +79,18 @@ def _make_observer(secrets) -> GrafanaObserver:
     )
 
 
-def _preflight(observer: GrafanaObserver) -> None:
-    print("Preflight: checking towerwatch service is active...")
-    active = service_active()
-    if not active:
-        r = subprocess.run(["systemctl", "is-active", "towerwatch"],
-                           capture_output=True, text=True)
-        print(f"ERROR: towerwatch service is not active ({r.stdout.strip()})")
-        sys.exit(1)
-
-    print("Preflight: verifying Grafana read access...")
-    try:
-        observer._resolve_ds_uids()
-    except ObserveError as e:
-        print(f"ERROR: Grafana preflight failed: {e}")
-        sys.exit(1)
-
-    print("Preflight: OK")
-
-def cmd_list(args):
-    tests = _load_tests()
+def cmd_list(args, test_classes):
+    """List available tests."""
+    filtered_tests = load_tests(test_classes, skip=args.skip)
     print(f"{'Name':<45} {'Timeout':>8}  {'Notes'}")
     print("-" * 70)
-    for cls in tests:
+    for cls in filtered_tests:
         notes = "XFAIL" if cls.expected_failure else ""
         print(f"{cls.name:<45} {cls.timeout_s:>7}s  {notes}")
 
 
 def cmd_restore(args):
+    """Restore iptables, drop-ins, and qdisc from bench state."""
     if not sentinel_present():
         print("No sentinel present — nothing to restore.")
         return
@@ -160,9 +125,10 @@ def cmd_restore(args):
 
 
 def cmd_run_tests(test_classes, run_id, secrets, args):
+    """Run tests, respecting skip list and --resume flag."""
     observer = _make_observer(secrets)
     if not getattr(args, "resume", False):
-        _preflight(observer)
+        preflight_check(observer)
     logger = BenchLogger(
         run_id=run_id,
         loki_url=getattr(secrets, "LOKI_URL", None),
@@ -183,13 +149,14 @@ def cmd_run_tests(test_classes, run_id, secrets, args):
     report.print_table()
     return 0 if not report.has_unexpected_failures else 1
 
-def cmd_note(args, secrets, run_id):
+
+def cmd_note(args, run_id):
+    """Attach a note to the last report file."""
     report_files = sorted((BENCH_DIR / "reports").glob("report_*.json"), key=lambda p: p.stat().st_mtime)
     if not report_files:
         print("No report found to attach note to.")
         return
     latest = report_files[-1]
-    import json
     data = json.loads(latest.read_text())
     data.setdefault("results", []).append({
         "name": "__note__", "status": "note",
@@ -212,19 +179,22 @@ def main():
     parser.add_argument("--skip", metavar="NAME", nargs="+", default=[], help="Skip named tests")
     args = parser.parse_args()
 
+    # Discover tests once at startup
+    all_test_classes = _discover_tests()
+
     if args.list:
-        cmd_list(args)
+        cmd_list(args, all_test_classes)
         return
 
     if args.restore:
         cmd_restore(args)
         return
 
-    secrets = _load_secrets()
+    secrets = load_secrets()
 
     if args.note:
         run_id = uuid.uuid4().hex[:8]
-        cmd_note(args, secrets, run_id)
+        cmd_note(args, run_id)
         return
 
     if sentinel_present() and not args.resume:
@@ -247,9 +217,10 @@ def main():
     skip = list(args.skip)
     if args.all:
         skip.append("reboot_survival")
-        test_classes = _load_tests(skip=skip)
+        test_classes = load_tests(all_test_classes, skip=skip)
     else:
-        test_classes = [cls for cls in _load_tests(skip=skip) if cls.name == args.test]
+        test_classes = load_tests(all_test_classes, skip=skip)
+        test_classes = [cls for cls in test_classes if cls.name == args.test]
         if not test_classes:
             print(f"ERROR: No test named '{args.test}'. Use --list to see available tests.")
             sys.exit(1)

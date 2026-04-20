@@ -6,6 +6,8 @@ import time
 from ..harness.snapshot import snapshot_iptables, restore_iptables
 from .base import BenchTest
 
+ORDER = 3
+
 DNS_TARGETS = ["8.8.8.8", "1.1.1.1"]
 BLOCK_DURATION_S = 120   # 2 probe cycles
 

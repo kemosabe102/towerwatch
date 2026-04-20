@@ -14,6 +14,8 @@ from ..harness.snapshot import write_dropin, remove_dropin
 from ..harness.observe import ObserveError
 from .base import BenchTest
 
+ORDER = 7
+
 WAIT_S = 120  # 2 probe cycles per sub-case
 
 

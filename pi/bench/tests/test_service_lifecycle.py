@@ -7,6 +7,7 @@ from ..harness.service import service_control
 from ..harness.observe import ObserveError
 from .base import BenchTest
 
+ORDER = 0
 
 class Test(BenchTest):
     name = "service_lifecycle"

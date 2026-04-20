@@ -10,6 +10,8 @@ import time
 from ..harness.snapshot import snapshot_tc, restore_tc
 from .base import BenchTest
 
+ORDER = 1
+
 IFACE = "eth0"
 INJECT_DURATION_S = 120   # 2 probe cycles of degraded traffic
 

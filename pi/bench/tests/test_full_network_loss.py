@@ -18,6 +18,8 @@ import time
 from ..harness.snapshot import snapshot_iptables, restore_iptables
 from .base import BenchTest
 
+ORDER = 12
+
 OUTAGE_DURATION_S = 620   # 10m20s — just above the 10-min annotation threshold
 ANNOTATION_TIMEOUT_S = 600  # 10 min polling timeout after restore
 

@@ -10,6 +10,8 @@ from ..harness.snapshot import snapshot_clock, step_clock, restore_clock
 from ..harness.observe import ObserveError
 from .base import BenchTest
 
+ORDER = 10
+
 SKEW_S = 7200   # +2 hours
 OBSERVE_DURATION_S = 120  # 2 probe cycles while clock is skewed
 

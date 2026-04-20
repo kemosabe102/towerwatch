@@ -13,6 +13,8 @@ from ..harness.service import service_active, service_control
 from ..harness.snapshot import snapshot_file, restore_file
 from .base import BenchTest
 
+ORDER = 8
+
 BUFFER_MAX = 256 * 1024  # 256 KB per config.py
 
 

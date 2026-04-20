@@ -11,6 +11,8 @@ from ..harness.snapshot import snapshot_clock, step_clock, restore_clock
 from ..harness.observe import ObserveError
 from .base import BenchTest
 
+ORDER = 11
+
 SKEW_S = -1800   # −30 minutes
 OBSERVE_DURATION_S = 120
 

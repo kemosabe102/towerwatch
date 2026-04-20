@@ -9,6 +9,8 @@ import time
 from ..harness.snapshot import snapshot_iptables, restore_iptables
 from .base import BenchTest
 
+ORDER = 2
+
 TARGETS = [
     ("8.8.8.8",     "google"),
     ("1.1.1.1",     "cloudflare"),

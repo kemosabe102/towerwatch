@@ -12,6 +12,8 @@ from ..harness.service import service_control
 from ..harness.snapshot import write_dropin, remove_dropin
 from .base import BenchTest
 
+ORDER = 5
+
 DROPIN_NAME = "prom5xx"
 LOCAL_PORT = 19999
 INJECT_DURATION_S = 120

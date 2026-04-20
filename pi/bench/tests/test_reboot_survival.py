@@ -17,6 +17,8 @@ from ..harness.report import TestResult
 from ..harness.state import read_state, write_state, clear_state, clear_sentinel, arm_sentinel
 from .base import BenchTest
 
+ORDER = 13
+
 RESUME_UNIT = "towerwatch-bench-resume.service"
 RESUME_UNIT_PATH = Path(f"/etc/systemd/system/{RESUME_UNIT}")
 BOOT_TIMEOUT_S = 300    # 5 min for Pi to reboot and come back
