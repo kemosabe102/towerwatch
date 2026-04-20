@@ -64,9 +64,8 @@ def update_connection_state(connected: bool, timestamp: int):
         if _outage_start:
             duration = timestamp - _outage_start
             _total_outage_s += duration
-            log.info("Connection UP (was down %ds)", duration)
-            push_log("INFO", f"Connection restored after {duration}s",
-                     {"event": config.LOG_EVENT_CONN_RESTORED, "down_duration_s": duration})
+            log_and_push("INFO", f"Connection restored after {duration}s",
+                       event=config.LOG_EVENT_CONN_RESTORED, down_duration_s=duration)
         _outage_start = 0
     elif not connected and _connected:
         _outage_start = timestamp
@@ -147,9 +146,8 @@ def run_ping(target: str) -> dict:
             timeout=config.PING_TIMEOUT_S * config.PING_COUNT + 5,
         )
     except (subprocess.TimeoutExpired, OSError) as e:
-        log.warning("Ping %s failed: %s", target, e)
-        push_log("WARN", f"Ping {target} failed",
-                 {"event": config.LOG_EVENT_PING_FAILED, "target": target, "error": str(e)})
+        log_and_push("WARN", f"Ping {target} failed",
+                     event=config.LOG_EVENT_PING_FAILED, target=target, error=str(e))
         return {"rtt_avg": 0, "rtt_min": 0, "rtt_max": 0,
                 "jitter": 0, "pkt_loss": 100, "connected": False}
 
@@ -187,9 +185,8 @@ def measure_dns(nameserver: str) -> float:
         resolver.resolve(config.DNS_QUERY_DOMAIN, "A")
         return round((time.perf_counter() - start) * 1000)
     except Exception as e:
-        log.warning("DNS %s failed: %s", nameserver, e)
-        push_log("WARN", f"DNS {nameserver} failed",
-                 {"event": config.LOG_EVENT_DNS_FAILED, "nameserver": nameserver, "error": str(e)})
+        log_and_push("WARN", f"DNS {nameserver} failed",
+                     event=config.LOG_EVENT_DNS_FAILED, nameserver=nameserver, error=str(e))
         return 0
 
 
@@ -229,16 +226,13 @@ def measure_http_throughput() -> dict:
         elapsed_s = time.perf_counter() - start
         throughput_mbps = round((size_bytes * 8) / elapsed_s / 1_000_000, 2)
         elapsed_ms = round(elapsed_s * 1000)
-        log.info("HTTP throughput: %.1f Mbps (%d bytes in %dms)",
-                 throughput_mbps, size_bytes, elapsed_ms)
-        push_log("INFO", f"Throughput: {throughput_mbps} Mbps ({elapsed_ms}ms)",
-                 {"event": config.LOG_EVENT_HTTP_THROUGHPUT_OK,
-                  "throughput_mbps": throughput_mbps, "elapsed_ms": elapsed_ms})
+        log_and_push("INFO", f"Throughput: {throughput_mbps} Mbps ({elapsed_ms}ms)",
+                     event=config.LOG_EVENT_HTTP_THROUGHPUT_OK,
+                     throughput_mbps=throughput_mbps, elapsed_ms=elapsed_ms)
         return {"http_throughput_ms": elapsed_ms, "http_throughput_mbps": throughput_mbps}
     except Exception as e:
-        log.warning("HTTP throughput test failed: %s", e)
-        push_log("WARN", f"HTTP throughput test failed: {e}",
-                 {"event": config.LOG_EVENT_HTTP_THROUGHPUT_FAILED, "error": str(e)})
+        log_and_push("WARN", f"HTTP throughput test failed: {e}",
+                     event=config.LOG_EVENT_HTTP_THROUGHPUT_FAILED, error=str(e))
         return {"http_throughput_ms": 0, "http_throughput_mbps": 0}
 
 
@@ -259,9 +253,8 @@ def run_speedtest() -> dict:
         data = json.loads(result.stdout)
         dl = round(data["download"]["bandwidth"] * 8 / 1_000_000, 2)
         ul = round(data["upload"]["bandwidth"] * 8 / 1_000_000, 2)
-        log.info("Speedtest: %.1f Mbps down, %.1f Mbps up", dl, ul)
-        push_log("INFO", f"Speedtest: {dl} Mbps down, {ul} Mbps up",
-                 {"event": config.LOG_EVENT_SPEEDTEST_OK, "download_mbps": dl, "upload_mbps": ul})
+        log_and_push("INFO", f"Speedtest: {dl} Mbps down, {ul} Mbps up",
+                     event=config.LOG_EVENT_SPEEDTEST_OK, download_mbps=dl, upload_mbps=ul)
         return {"download_mbps": dl, "upload_mbps": ul, "success": 1}
     except subprocess.TimeoutExpired:
         log.error("Speedtest timed out after %ds", config.SPEEDTEST_TIMEOUT_S)
@@ -315,9 +308,7 @@ def poll_m6_signal() -> dict:
         resp = session.get(config.M6_WWAN_URL, timeout=config.M6_TIMEOUT_S)
         if resp.status_code == 401:
             _m6_session = None
-            log.warning('M6 auth expired, will retry next cycle')
-            push_log('WARN', 'M6 auth expired',
-                     {'event': config.LOG_EVENT_M6_AUTH_EXPIRED})
+            log_and_push('WARN', 'M6 auth expired', event=config.LOG_EVENT_M6_AUTH_EXPIRED)
             return {}
         resp.raise_for_status()
         return _extract_m6_fields(resp.json())
@@ -378,16 +369,14 @@ def push_metrics(lines: list[str]) -> bool:
         )
         if resp.status_code < 300:
             return True
-        log.warning("Grafana push HTTP %d: %s", resp.status_code, resp.text[:200])
-        push_log("WARN", f"Metric push HTTP {resp.status_code}",
-                 {"event": config.LOG_EVENT_METRICS_PUSH_FAIL, "http_status": resp.status_code})
+        log_and_push("WARN", f"Metric push HTTP {resp.status_code}",
+                     event=config.LOG_EVENT_METRICS_PUSH_FAIL, http_status=resp.status_code)
         if resp.status_code in (401, 403):
             _grafana_session = None
         return False
     except Exception as e:
-        log.warning("Grafana push failed: %s", e)
-        push_log("WARN", f"Metric push error: {e}",
-                 {"event": config.LOG_EVENT_METRICS_PUSH_FAIL, "error": str(e)})
+        log_and_push("WARN", f"Metric push error: {e}",
+                     event=config.LOG_EVENT_METRICS_PUSH_FAIL, error=str(e))
         _grafana_session = None
         return False
 
@@ -438,6 +427,13 @@ def _post_loki(payload: dict) -> None:
         auth=(secrets.LOKI_USER, secrets.LOKI_TOKEN),
         timeout=config.LOKI_PUSH_TIMEOUT_S,
     )
+
+
+def log_and_push(level: str, message: str, **fields) -> None:
+    """Log locally and push to Loki in one call. level is the Loki level (INFO/WARN/ERROR)."""
+    _LOG_FN = {"INFO": log.info, "WARN": log.warning, "ERROR": log.error}
+    _LOG_FN.get(level, log.warning)(message)
+    push_log(level, message, fields if fields else None)
 
 def push_log(level: str, message: str, extra: dict = None):
     """Push a structured log entry to Grafana Cloud Loki. Buffers to disk on failure."""
