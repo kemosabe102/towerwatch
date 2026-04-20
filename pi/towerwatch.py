@@ -23,6 +23,7 @@ import subprocess
 import statistics
 import sys
 import time
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import requests
@@ -48,33 +49,38 @@ IS_WINDOWS = sys.platform == "win32"
 
 
 # ---------------------------------------------------------------------------
-# Connection state tracking
+# RuntimeState: consolidated module globals
 # ---------------------------------------------------------------------------
-_connected = True
-_outage_start = 0
-_outage_count = 0
-_total_outage_s = 0
-_start_ts = time.monotonic()  # monotonic: uptime math must not regress when fake-hwclock jumps
-_last_heartbeat_ts = 0
-_last_successful_push_ts = time.time()  # wall clock: compared against buffered-sample timestamps
+@dataclass
+class RuntimeState:
+    """Encapsulates all mutable state shared across main loop functions."""
+    connected: bool = True
+    outage_start: int = 0
+    outage_count: int = 0
+    total_outage_s: int = 0
+    start_ts: float = field(default_factory=time.monotonic)
+    last_heartbeat_ts: float = 0.0
+    last_successful_push_ts: float = field(default_factory=time.time)
+    shutdown_requested: bool = False
+    metric_batch: list = field(default_factory=list)
 
 
-def update_connection_state(connected: bool, timestamp: int):
-    global _connected, _outage_start, _outage_count, _total_outage_s
-    if connected and not _connected:
-        if _outage_start:
-            duration = timestamp - _outage_start
-            _total_outage_s += duration
+def update_connection_state(state: "RuntimeState", connected: bool, timestamp: int):
+    """Update connection state tracking. Logs transitions."""
+    if connected and not state.connected:
+        if state.outage_start:
+            duration = timestamp - state.outage_start
+            state.total_outage_s += duration
             log_and_push("INFO", f"Connection restored after {duration}s",
                        event=config.LOG_EVENT_CONN_RESTORED, down_duration_s=duration)
-        _outage_start = 0
-    elif not connected and _connected:
-        _outage_start = timestamp
-        _outage_count += 1
+        state.outage_start = 0
+    elif not connected and state.connected:
+        state.outage_start = timestamp
+        state.outage_count += 1
         log.warning("Connection DOWN")
         push_log("ERROR", "All targets unreachable",
                  {"event": config.LOG_EVENT_CONN_DOWN})
-    _connected = connected
+    state.connected = connected
 
 
 _sessions: dict = {}
@@ -295,15 +301,6 @@ def _build_daily_throughput_schedule() -> list[float]:
 # ---------------------------------------------------------------------------
 # Graceful shutdown
 # ---------------------------------------------------------------------------
-_shutdown_requested = False
-
-
-def _handle_sigterm(signum, frame):
-    global _shutdown_requested
-    log.info("SIGTERM received — shutting down gracefully")
-    _shutdown_requested = True
-
-
 def _configure_logging() -> None:
     logging.basicConfig(
         level=getattr(logging, config.LOG_LEVEL, logging.INFO),
@@ -312,15 +309,19 @@ def _configure_logging() -> None:
     )
 
 
-def _install_signal_handlers() -> None:
+def _install_signal_handlers(state: "RuntimeState") -> None:
+    """Install signal handlers. SIGTERM sets shutdown_requested flag in state."""
+    def _on_sigterm(signum, frame):
+        log.info("SIGTERM received — shutting down gracefully")
+        state.shutdown_requested = True
     if not IS_WINDOWS:
-        signal.signal(signal.SIGTERM, _handle_sigterm)
+        signal.signal(signal.SIGTERM, _on_sigterm)
 
 
 # ---------------------------------------------------------------------------
 # Main loop helpers
 # ---------------------------------------------------------------------------
-def _collect_probes(last_http_latency, throughput_schedule, last_schedule_day):
+def _collect_probes(state: "RuntimeState", last_http_latency, throughput_schedule, last_schedule_day):
     """Run all probe sections. Returns (fields, any_connected, last_http_latency, throughput_schedule, last_schedule_day)."""
     fields = {}
     now = time.time()
@@ -364,7 +365,7 @@ def _collect_probes(last_http_latency, throughput_schedule, last_schedule_day):
     return fields, any_connected, last_http_latency, throughput_schedule, last_schedule_day
 
 
-def _log_cycle(fields, timestamp):
+def _log_cycle(state: "RuntimeState", fields, timestamp):
     """Log cycle summary to console and Loki."""
     duration = fields["collection_duration_ms"]
     log.info("Cycle t=%d connected=%s rtt_avg_google=%s duration=%dms",
@@ -412,17 +413,13 @@ def _record_outage_annotation(start_ts: float, end_ts: float, reason: str):
               "version": config.BUILD_VERSION})
 
 
-_metric_batch: list[str] = []
-
-
-def _batch_and_push(line: str, any_connected: bool):
+def _batch_and_push(state: "RuntimeState", line: str, any_connected: bool):
     """Accumulate metrics in memory; push when batch is full. Drop on failure."""
-    global _last_successful_push_ts
-    _metric_batch.append(line)
-    if len(_metric_batch) < config.PUSH_BATCH_SIZE:
+    state.metric_batch.append(line)
+    if len(state.metric_batch) < config.PUSH_BATCH_SIZE:
         return
-    batch = _metric_batch[:]
-    _metric_batch.clear()
+    batch = state.metric_batch[:]
+    state.metric_batch.clear()
     if not any_connected:
         return
     if not push_metrics(batch):
@@ -430,33 +427,31 @@ def _batch_and_push(line: str, any_connected: bool):
         return
     log.info("Pushed %d lines", len(batch))
     now = time.time()
-    gap = now - _last_successful_push_ts
+    gap = now - state.last_successful_push_ts
     if gap >= config.OUTAGE_GAP_THRESHOLD_S:
-        _record_outage_annotation(_last_successful_push_ts, now, "network_unreachable")
-    _last_successful_push_ts = now
+        _record_outage_annotation(state.last_successful_push_ts, now, "network_unreachable")
+    state.last_successful_push_ts = now
     _write_ts(Path(config.LAST_PUSH_MARKER_FILE), now, atomic=True)
     _flush_log_buffer()
 
 
-
-def _maybe_heartbeat():
+def _maybe_heartbeat(state: "RuntimeState"):
     """Emit a periodic heartbeat log to Loki so the Event Log panel stays populated."""
-    global _last_heartbeat_ts
     now = time.time()
-    if now - _last_heartbeat_ts >= config.HEARTBEAT_INTERVAL_S:
-        uptime_h = round((time.monotonic() - _start_ts) / 3600, 1)
+    if now - state.last_heartbeat_ts >= config.HEARTBEAT_INTERVAL_S:
+        uptime_h = round((time.monotonic() - state.start_ts) / 3600, 1)
         push_log("WARN", "Service heartbeat",
                  {"event": config.LOG_EVENT_HEARTBEAT, "uptime_h": uptime_h})
-        _last_heartbeat_ts = now
+        state.last_heartbeat_ts = now
 
 
 # ---------------------------------------------------------------------------
 # Main loop
 # ---------------------------------------------------------------------------
 def main():
-    global _last_successful_push_ts
+    state = RuntimeState()
     _configure_logging()
-    _install_signal_handlers()
+    _install_signal_handlers(state)
     log.info("=== Towerwatch %s ===", "(Windows)" if IS_WINDOWS else "(Raspberry Pi)")
     wait_for_data_partition()
 
@@ -473,14 +468,14 @@ def main():
               "platform": sys.platform})
 
     # One-shot restart metric — will be pushed with the first batch.
-    _metric_batch.append(format_influx_line({"service_restart": 1}, int(time.time())))
+    state.metric_batch.append(format_influx_line({"service_restart": 1}, int(time.time())))
 
     # Load persisted markers and check for a cross-restart gap. Use last_alive_ts
     # to distinguish: process was running (network outage) vs process was dead (restart).
     loaded_last_push = _read_ts(Path(config.LAST_PUSH_MARKER_FILE))
     loaded_last_alive = _read_ts(Path(config.LAST_ALIVE_MARKER_FILE))
     if loaded_last_push is not None:
-        _last_successful_push_ts = loaded_last_push
+        state.last_successful_push_ts = loaded_last_push
         startup_now = time.time()
         startup_gap = startup_now - loaded_last_push
         if startup_gap >= config.OUTAGE_GAP_THRESHOLD_S:
@@ -496,23 +491,23 @@ def main():
     throughput_schedule = _build_daily_throughput_schedule()
     last_schedule_day = time.localtime().tm_yday
 
-    while not _shutdown_requested:
+    while not state.shutdown_requested:
         cycle_start = time.perf_counter()
         timestamp = int(time.time())
 
         fields, any_connected, last_http_latency, throughput_schedule, last_schedule_day = \
-            _collect_probes(last_http_latency, throughput_schedule, last_schedule_day)
+            _collect_probes(state, last_http_latency, throughput_schedule, last_schedule_day)
 
-        update_connection_state(any_connected, timestamp)
+        update_connection_state(state, any_connected, timestamp)
         fields["collection_duration_ms"] = round(
             (time.perf_counter() - cycle_start) * 1000
         )
 
-        _log_cycle(fields, timestamp)
+        _log_cycle(state, fields, timestamp)
         _write_ts(Path(config.LAST_ALIVE_MARKER_FILE), time.time())
-        _batch_and_push(format_influx_line(fields, timestamp), any_connected)
+        _batch_and_push(state, format_influx_line(fields, timestamp), any_connected)
 
-        _maybe_heartbeat()
+        _maybe_heartbeat(state)
 
         elapsed = time.perf_counter() - cycle_start
         time.sleep(max(0, config.METRIC_INTERVAL_S - elapsed))
