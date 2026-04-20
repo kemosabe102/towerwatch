@@ -9,6 +9,7 @@ import subprocess
 import threading
 import time
 
+from ..harness.service import service_control
 from ..harness.snapshot import write_dropin, remove_dropin
 from ..harness.observe import ObserveError
 from .base import BenchTest
@@ -52,7 +53,7 @@ class Test(BenchTest):
         threading.Thread(target=_serve_429, args=(self._stop_event,), daemon=True).start()
         override = f"http://127.0.0.1:{LOCAL_PORT}/loki/api/v1/push"
         write_dropin(DROPIN_NAME, f"[Service]\nEnvironment=LOKI_URL_OVERRIDE={override}\n")
-        subprocess.run(["systemctl", "restart", "towerwatch"], check=True)
+        service_control("restart")
         time.sleep(INJECT_DURATION_S)
 
     def observe(self) -> dict:
@@ -72,4 +73,4 @@ class Test(BenchTest):
     def restore(self) -> None:
         self._stop_event.set()
         remove_dropin(DROPIN_NAME)
-        subprocess.run(["systemctl", "restart", "towerwatch"], check=False)
+        service_control("restart", check=False)

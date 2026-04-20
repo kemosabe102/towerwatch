@@ -8,6 +8,7 @@ import subprocess
 import threading
 import time
 
+from ..harness.service import service_control
 from ..harness.snapshot import write_dropin, remove_dropin
 from .base import BenchTest
 
@@ -55,7 +56,7 @@ class Test(BenchTest):
         override_url = f"http://127.0.0.1:{LOCAL_PORT}/api/v1/push/influx/write?precision=s"
         dropin_content = f"[Service]\nEnvironment=GRAFANA_PUSH_URL_OVERRIDE={override_url}\n"
         write_dropin(DROPIN_NAME, dropin_content)
-        subprocess.run(["systemctl", "restart", "towerwatch"], check=True)
+        service_control("restart")
         time.sleep(INJECT_DURATION_S)
 
     def observe(self) -> dict:
@@ -70,4 +71,4 @@ class Test(BenchTest):
     def restore(self) -> None:
         self._stop_event.set()
         remove_dropin(DROPIN_NAME)
-        subprocess.run(["systemctl", "restart", "towerwatch"], check=False)
+        service_control("restart", check=False)

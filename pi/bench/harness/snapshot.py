@@ -10,6 +10,7 @@ import sys
 import time
 from pathlib import Path
 
+from .paths import DROPIN_DIR
 from .state import SNAPSHOTS_DIR
 
 
@@ -79,8 +80,6 @@ def restore_clock() -> None:
 # ---------------------------------------------------------------------------
 # systemd drop-ins
 # ---------------------------------------------------------------------------
-
-DROPIN_DIR = Path("/etc/systemd/system/towerwatch.service.d")
 
 
 def write_dropin(name: str, content: str) -> Path:

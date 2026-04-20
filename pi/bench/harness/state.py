@@ -6,17 +6,13 @@ State JSON tracks the active test and reboot-resume phase.
 
 import json
 import os
-import sys
 import time
 from pathlib import Path
 
-if sys.platform == "win32":
-    _DATA_ROOT = Path("./data")
-else:
-    _DATA_ROOT = Path("/opt/towerwatch/data")
+from .paths import DATA_ROOT
 
-BENCH_DIR       = _DATA_ROOT / "bench"
-SENTINEL_FILE   = _DATA_ROOT / ".bench-in-progress"
+BENCH_DIR       = DATA_ROOT / "bench"
+SENTINEL_FILE   = DATA_ROOT / ".bench-in-progress"
 STATE_FILE      = BENCH_DIR / "state.json"
 SNAPSHOTS_DIR   = BENCH_DIR / "snapshots"
 REPORTS_DIR     = BENCH_DIR / "reports"

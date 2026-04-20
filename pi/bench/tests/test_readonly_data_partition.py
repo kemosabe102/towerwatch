@@ -9,9 +9,10 @@ import time
 from pathlib import Path
 
 from ..harness.observe import BenchSkip
+from ..harness.paths import DATA_MOUNT
+from ..harness.service import service_active
 from .base import BenchTest
 
-DATA_MOUNT = "/opt/towerwatch/data"
 INJECT_DURATION_S = 120  # 2 probe cycles
 
 
@@ -66,9 +67,7 @@ class Test(BenchTest):
 
     def observe(self) -> dict:
         # Service should still be alive
-        r = subprocess.run(["systemctl", "is-active", "towerwatch"],
-                           capture_output=True, text=True)
-        if r.stdout.strip() != "active":
+        if not service_active():
             raise Exception("towerwatch crashed during read-only partition test")
 
         # Expect partition_not_detected or a write-related WARN

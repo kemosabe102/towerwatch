@@ -25,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from pi.bench.harness.logger import BenchLogger
 from pi.bench.harness.observe import GrafanaObserver, ObserveError
 from pi.bench.harness.report import Report
+from pi.bench.harness.service import daemon_reload, service_active
 from pi.bench.harness.state import (
     arm_sentinel, clear_sentinel, clear_state,
     read_sentinel, read_state, sentinel_present, write_state,
@@ -99,9 +100,10 @@ def _make_observer(secrets) -> GrafanaObserver:
 
 def _preflight(observer: GrafanaObserver) -> None:
     print("Preflight: checking towerwatch service is active...")
-    r = subprocess.run(["systemctl", "is-active", "towerwatch"],
-                       capture_output=True, text=True)
-    if r.stdout.strip() != "active":
+    active = service_active()
+    if not active:
+        r = subprocess.run(["systemctl", "is-active", "towerwatch"],
+                           capture_output=True, text=True)
         print(f"ERROR: towerwatch service is not active ({r.stdout.strip()})")
         sys.exit(1)
 
@@ -146,7 +148,7 @@ def cmd_restore(args):
     for f in dropin_dir.glob("bench-*.conf") if dropin_dir.exists() else []:
         print(f"  Removing drop-in: {f.name}")
         f.unlink()
-    subprocess.run(["systemctl", "daemon-reload"], check=False)
+    daemon_reload(check=False)
     # Remove netem qdisc
     subprocess.run(["tc", "qdisc", "del", "dev", "eth0", "root"], check=False,
                    capture_output=True)

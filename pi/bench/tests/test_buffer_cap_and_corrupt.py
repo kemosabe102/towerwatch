@@ -5,17 +5,13 @@ Pass: 10% trim triggers on overflow, corrupt line skipped, subsequent pushes suc
 
 import json
 import subprocess
-import sys
 import time
 from pathlib import Path
 
+from ..harness.paths import BUFFER_FILE
+from ..harness.service import service_active, service_control
 from ..harness.snapshot import snapshot_file, restore_file
 from .base import BenchTest
-
-if sys.platform == "win32":
-    BUFFER_FILE = Path("./data/buffer/loki.jsonl")
-else:
-    BUFFER_FILE = Path("/opt/towerwatch/data/buffer/loki.jsonl")
 
 BUFFER_MAX = 256 * 1024  # 256 KB per config.py
 
@@ -48,15 +44,13 @@ class Test(BenchTest):
             for _ in range(20):
                 fh.write(line)
 
-        subprocess.run(["systemctl", "start", "towerwatch"], check=True)
+        service_control("start")
         # Give the service time to detect overflow and flush
         time.sleep(120)
 
     def observe(self) -> dict:
         # Service should still be running (no crash on corrupt line)
-        r = subprocess.run(["systemctl", "is-active", "towerwatch"],
-                           capture_output=True, text=True)
-        if r.stdout.strip() != "active":
+        if not service_active():
             raise Exception("Service not active after corrupt-buffer test")
 
         # Confirm log_buffer_flushed event in Loki
@@ -70,7 +64,7 @@ class Test(BenchTest):
         return {"flush_entry": entry}
 
     def restore(self) -> None:
-        subprocess.run(["systemctl", "stop", "towerwatch"], check=False)
+        service_control("stop", check=False)
         if self._buffer_snapshot:
             restore_file(BUFFER_FILE, self._buffer_snapshot)
-        subprocess.run(["systemctl", "start", "towerwatch"], check=False)
+        service_control("start", check=False)

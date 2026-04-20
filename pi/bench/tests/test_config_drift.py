@@ -9,6 +9,7 @@ import subprocess
 import time
 
 from ..harness.report import TestResult
+from ..harness.service import service_active, service_control
 from ..harness.snapshot import write_dropin, remove_dropin
 from ..harness.observe import ObserveError
 from .base import BenchTest
@@ -33,38 +34,32 @@ class Test(BenchTest):
         # --- 11a: empty LOKI_URL (expected-failure: AttributeError on flush) ---
         self.log.info("Sub-case 11a: empty LOKI_URL", event="bench_inject")
         write_dropin("drift-a", "[Service]\nEnvironment=LOKI_URL=\n")
-        subprocess.run(["systemctl", "restart", "towerwatch"], check=True)
+        service_control("restart")
         time.sleep(WAIT_S)
         # Service should NOT have crashed (systemctl is-active == active)
-        r = subprocess.run(["systemctl", "is-active", "towerwatch"],
-                           capture_output=True, text=True)
-        results["11a_service_still_active"] = r.stdout.strip() == "active"
+        results["11a_service_still_active"] = service_active()
         remove_dropin("drift-a")
-        subprocess.run(["systemctl", "restart", "towerwatch"], check=False)
+        service_control("restart", check=False)
         time.sleep(15)
 
         # --- 11b: empty GRAFANA_ANNOTATION_TOKEN ---
         self.log.info("Sub-case 11b: empty annotation token", event="bench_inject")
         write_dropin("drift-b", "[Service]\nEnvironment=GRAFANA_ANNOTATION_TOKEN=\n")
-        subprocess.run(["systemctl", "restart", "towerwatch"], check=True)
+        service_control("restart")
         time.sleep(WAIT_S)
-        r = subprocess.run(["systemctl", "is-active", "towerwatch"],
-                           capture_output=True, text=True)
-        results["11b_service_still_active"] = r.stdout.strip() == "active"
+        results["11b_service_still_active"] = service_active()
         remove_dropin("drift-b")
-        subprocess.run(["systemctl", "restart", "towerwatch"], check=False)
+        service_control("restart", check=False)
         time.sleep(15)
 
         # --- 11c: empty M6_ADMIN_PASSWORD ---
         self.log.info("Sub-case 11c: empty M6 password", event="bench_inject")
         write_dropin("drift-c", "[Service]\nEnvironment=M6_ADMIN_PASSWORD=\n")
-        subprocess.run(["systemctl", "restart", "towerwatch"], check=True)
+        service_control("restart")
         time.sleep(WAIT_S)
-        r = subprocess.run(["systemctl", "is-active", "towerwatch"],
-                           capture_output=True, text=True)
-        results["11c_service_still_active"] = r.stdout.strip() == "active"
+        results["11c_service_still_active"] = service_active()
         remove_dropin("drift-c")
-        subprocess.run(["systemctl", "restart", "towerwatch"], check=False)
+        service_control("restart", check=False)
 
         return results
 
@@ -93,4 +88,4 @@ class Test(BenchTest):
     def restore(self) -> None:
         for name in ("drift-a", "drift-b", "drift-c"):
             remove_dropin(name)
-        subprocess.run(["systemctl", "restart", "towerwatch"], check=False)
+        service_control("restart", check=False)

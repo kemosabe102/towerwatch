@@ -3,6 +3,7 @@
 import subprocess
 import time
 
+from ..harness.service import service_control
 from ..harness.observe import ObserveError
 from .base import BenchTest
 
@@ -14,13 +15,13 @@ class Test(BenchTest):
 
     def inject(self) -> None:
         self.log.info("Stopping towerwatch", event="bench_inject")
-        subprocess.run(["systemctl", "stop", "towerwatch"], check=True)
+        service_control("stop")
         time.sleep(5)
         self.log.info("Starting towerwatch", event="bench_inject")
-        subprocess.run(["systemctl", "start", "towerwatch"], check=True)
+        service_control("start")
         time.sleep(15)
         self.log.info("Restarting towerwatch", event="bench_inject")
-        subprocess.run(["systemctl", "restart", "towerwatch"], check=True)
+        service_control("restart")
         time.sleep(15)
 
     def observe(self) -> dict:
@@ -37,4 +38,4 @@ class Test(BenchTest):
         return {"service_restarted": entry, "version_in_event": version}
 
     def restore(self) -> None:
-        subprocess.run(["systemctl", "start", "towerwatch"], check=False)
+        service_control("start", check=False)

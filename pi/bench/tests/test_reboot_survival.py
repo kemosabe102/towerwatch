@@ -12,6 +12,7 @@ import sys
 import time
 from pathlib import Path
 
+from ..harness.service import daemon_reload
 from ..harness.report import TestResult
 from ..harness.state import read_state, write_state, clear_state, clear_sentinel, arm_sentinel
 from .base import BenchTest
@@ -58,7 +59,7 @@ class Test(BenchTest):
 
         # Install the resume oneshot
         RESUME_UNIT_PATH.write_text(RESUME_UNIT_CONTENT)
-        subprocess.run(["systemctl", "daemon-reload"], check=True)
+        daemon_reload(check=True)
         subprocess.run(["systemctl", "enable", RESUME_UNIT], check=True)
         self.log.warn(
             "Reboot armed — Pi will reboot now; resume oneshot installed",
@@ -100,6 +101,6 @@ class Test(BenchTest):
             RESUME_UNIT_PATH.unlink()
         except FileNotFoundError:
             pass
-        subprocess.run(["systemctl", "daemon-reload"], check=False)
+        daemon_reload(check=False)
         clear_state()
         clear_sentinel()
