@@ -23,6 +23,11 @@ class ObserveError(Exception):
     pass
 
 
+class BenchSkip(Exception):
+    """Raise from inject() to cleanly skip the test (e.g. preflight unsafe)."""
+    pass
+
+
 class GrafanaObserver:
     """Wraps Grafana Cloud read APIs.  All methods are blocking pollers."""
 

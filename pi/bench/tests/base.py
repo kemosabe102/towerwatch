@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from typing import Optional
 
 from ..harness.logger import BenchLogger
-from ..harness.observe import GrafanaObserver
+from ..harness.observe import BenchSkip, GrafanaObserver
 from ..harness.report import TestResult
 
 
@@ -87,6 +87,10 @@ class BenchTest(ABC):
                 result.status = "expected_failure"
             else:
                 result.status = "pass"
+        except BenchSkip as e:
+            result.status = "skipped"
+            result.error_msg = str(e)
+            self.log.warn(f"Test {self.name} skipped: {e}", event="bench_test_skip", test=self.name)
         except Exception as e:
             result.error_msg = str(e)
             if self.expected_failure:

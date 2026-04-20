@@ -6,11 +6,42 @@ Pass: service survives, partition_not_detected / write-fail events emit, clean r
 import subprocess
 import sys
 import time
+from pathlib import Path
 
+from ..harness.observe import BenchSkip
 from .base import BenchTest
 
 DATA_MOUNT = "/opt/towerwatch/data"
 INJECT_DURATION_S = 120  # 2 probe cycles
+
+
+def _bind_mounts_sharing_device(data_mount: str) -> list[str]:
+    """Return other mount points backed by the same device as data_mount.
+
+    A read-only remount fails if any other active mount (typically a bind mount
+    like /var/lib/tailscale → /opt/towerwatch/data/tailscale-state/) holds open
+    write handles on the same underlying device. Detect this up-front so we can
+    skip cleanly instead of failing with "mount point is busy".
+    """
+    try:
+        entries = Path("/proc/self/mountinfo").read_text().splitlines()
+    except OSError:
+        return []
+    data_dev = None
+    for line in entries:
+        # mountinfo format: <id> <parent> <major:minor> <root> <mount-point> ...
+        parts = line.split()
+        if len(parts) >= 5 and parts[4] == data_mount:
+            data_dev = parts[2]
+            break
+    if not data_dev:
+        return []
+    shared = []
+    for line in entries:
+        parts = line.split()
+        if len(parts) >= 5 and parts[2] == data_dev and parts[4] != data_mount:
+            shared.append(parts[4])
+    return shared
 
 
 class Test(BenchTest):
@@ -21,6 +52,14 @@ class Test(BenchTest):
     def inject(self) -> None:
         if sys.platform == "win32":
             raise Exception("readonly_data_partition test requires Linux/Pi")
+        shared = _bind_mounts_sharing_device(DATA_MOUNT)
+        if shared:
+            raise BenchSkip(
+                f"Bind mount(s) {shared} share the data-partition device; "
+                "read-only remount would either fail as busy or disconnect "
+                "SSH (tailscale state). Run from console or disable the bind "
+                "mount first."
+            )
         self.log.info(f"Remounting {DATA_MOUNT} read-only", event="bench_inject")
         subprocess.run(["mount", "-o", "remount,ro", DATA_MOUNT], check=True)
         time.sleep(INJECT_DURATION_S)
