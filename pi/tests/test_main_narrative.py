@@ -75,7 +75,7 @@ def test_main_two_ticks(tmp_path, monkeypatch):
                                    "jitter": 1, "pkt_loss": 0, "connected": True})
     monkeypatch.setattr("towerwatch.measure_tcp_connect", lambda: 5)
     monkeypatch.setattr("towerwatch.measure_dns", lambda ns: 20)
-    monkeypatch.setattr("towerwatch.poll_m6_signal", lambda: {})
+    monkeypatch.setattr("towerwatch.poll_gateway", lambda: {})
 
     # Skip partition wait
     import startup

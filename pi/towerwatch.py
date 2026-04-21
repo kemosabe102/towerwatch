@@ -27,7 +27,7 @@ from probes.ping import run_ping
 from probes.tcp import measure_tcp_connect
 from probes.dns import measure_dns
 from probes.http import measure_http_latency, measure_http_throughput
-from probes.m6 import poll_m6_signal
+from probes.gateway import poll_gateway
 
 try:
     import credentials
@@ -123,7 +123,7 @@ def _collect_probes() -> tuple[dict, bool]:
     for ns in config.DNS_TARGETS:
         fields[f"dns_resolve_ms_{ns.replace('.', '_')}"] = measure_dns(ns)
 
-    fields.update(poll_m6_signal())
+    fields.update(poll_gateway())
 
     if _scheduler and _scheduler.should_run_http_latency(now):
         fields["http_latency_ms"] = measure_http_latency()

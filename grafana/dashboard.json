@@ -943,6 +943,58 @@
         "x": 12,
         "y": 36
       },
+      "id": 26,
+      "title": "Gateway Health",
+      "description": "TCP connect and HTTP response time to the local gateway. Works on any router — always populated regardless of vendor.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "targets": [
+        {
+          "expr": "towerwatch_gateway_tcp_ms{host=\"towerwatch\"}",
+          "legendFormat": "TCP to Gateway",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "towerwatch_gateway_http_ms{host=\"towerwatch\"}",
+          "legendFormat": "HTTP to Gateway",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "scaleDistribution": { "type": "log", "log": 2 }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      }
+    },
+    {
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 44
+      },
       "id": 25,
       "title": "Service Restarts",
       "description": "All service restarts (planned deploys and unplanned crashes) in the selected time range.",
@@ -995,7 +1047,7 @@
       ],
       "gridPos": {
         "h": 8,
-        "w": 24,
+        "w": 12,
         "x": 0,
         "y": 44
       },

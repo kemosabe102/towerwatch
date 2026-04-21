@@ -91,6 +91,12 @@ else:
 SPEEDTEST_TIMEOUT_S = 120
 SPEEDTEST_SERVER_ID = None
 
+# --- Gateway Probe (vendor-agnostic baseline) ---
+GATEWAY_IP        = "192.168.1.1"
+GATEWAY_TCP_PORT  = 80
+GATEWAY_TIMEOUT_S = 5
+GATEWAY_VENDOR    = "m6"  # "m6" | "orbi" | "" (baseline only)
+
 # --- M6 Signal Metrics ---
 M6_ADMIN_URL = "http://192.168.1.1/api/model.json"
 M6_WWAN_URL = "http://192.168.1.1/api/wwanadv.json"
