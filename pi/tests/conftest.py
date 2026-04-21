@@ -12,7 +12,7 @@ from unittest.mock import MagicMock
 import pytest
 
 # ---------------------------------------------------------------------------
-# Path setup — insert stubs dir so `import secrets` resolves to the stub,
+# Path setup — insert stubs dir so `import credentials` resolves to the stub,
 # and insert pi/ so `import config`, `import loki`, etc. work without install.
 # ---------------------------------------------------------------------------
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -21,7 +21,7 @@ _STUBS_DIR = Path(__file__).resolve().parent / "stubs"
 
 
 def _ensure_paths():
-    # stubs first so `secrets` stub shadows any real secrets.py
+    # stubs first so `credentials` stub shadows any real credentials.py
     for p in [str(_STUBS_DIR), str(_PI_DIR)]:
         if p not in sys.path:
             sys.path.insert(0, p)
@@ -35,7 +35,7 @@ _ensure_paths()
 # ---------------------------------------------------------------------------
 @pytest.fixture(autouse=True)
 def _stub_secrets(monkeypatch, tmp_path):
-    """Ensure stub secrets is on path and redirect config data paths to tmp_path."""
+    """Ensure stub credentials is on path and redirect config data paths to tmp_path."""
     _ensure_paths()
 
     # Redirect all data/marker/buffer paths in config to tmp_path so no test

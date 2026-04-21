@@ -5,7 +5,7 @@ import logging
 import requests
 
 import config
-import secrets
+import credentials
 from loki import log_and_push
 
 log = logging.getLogger("towerwatch")
@@ -25,7 +25,7 @@ def _ensure_m6_session() -> requests.Session:
     global _m6_session
     if _m6_session is None:
         _m6_session = requests.Session()
-        _m6_session.auth = ('admin', secrets.M6_ADMIN_PASSWORD)
+        _m6_session.auth = ('admin', credentials.M6_ADMIN_PASSWORD)
     return _m6_session
 
 

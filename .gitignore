@@ -1,6 +1,7 @@
 # Local secrets — never commit
 secrets.h
 pi/secrets.py
+pi/credentials.py
 
 # Python bytecode (may contain compiled secrets)
 __pycache__/

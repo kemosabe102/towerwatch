@@ -39,7 +39,7 @@ def test_loki_warn_level_filter_passes():
     posted = []
     with patch.object(config, "LOKI_PUSH_LEVEL", "WARN"):
         with patch("loki._post_loki", side_effect=posted.append):
-            with patch("loki.secrets") as m:
+            with patch("loki.credentials") as m:
                 m.LOKI_URL = "http://fake"
                 loki.push_log("WARN", "should pass")
     assert len(posted) == 1
@@ -50,7 +50,7 @@ def test_loki_info_level_filter_dropped():
     posted = []
     with patch.object(config, "LOKI_PUSH_LEVEL", "WARN"):
         with patch("loki._post_loki", side_effect=posted.append):
-            with patch("loki.secrets") as m:
+            with patch("loki.credentials") as m:
                 m.LOKI_URL = "http://fake"
                 loki.push_log("INFO", "should be dropped")
     assert len(posted) == 0

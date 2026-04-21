@@ -1,4 +1,4 @@
-"""Stub secrets module for pytest — all values empty/None so imports succeed without a real secrets file."""
+"""Stub credentials module for pytest — all values empty/None so imports succeed without a real credentials file."""
 
 GRAFANA_INSTANCE_ID = ""
 GRAFANA_API_KEY = ""

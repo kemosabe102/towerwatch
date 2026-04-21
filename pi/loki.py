@@ -13,9 +13,9 @@ import requests
 import config
 
 try:
-    import secrets
+    import credentials
 except ImportError:
-    raise ImportError("secrets.py not found. Copy secrets.py.example to secrets.py and fill in values.")
+    raise ImportError("credentials.py not found. Copy credentials.py.example to credentials.py and fill in values.")
 
 log = logging.getLogger("towerwatch")
 
@@ -56,9 +56,9 @@ def _buffer_log_entry(payload: dict):
 def _post_loki(payload: dict) -> None:
     """POST a single Loki payload. Raises on network/HTTP error."""
     requests.post(
-        secrets.LOKI_URL,
+        credentials.LOKI_URL,
         json=payload,
-        auth=(secrets.LOKI_USER, secrets.LOKI_TOKEN),
+        auth=(credentials.LOKI_USER, credentials.LOKI_TOKEN),
         timeout=config.LOKI_PUSH_TIMEOUT_S,
     )
 
@@ -67,7 +67,7 @@ def push_log(level: str, message: str, extra: dict = None):
     """Push a structured log entry to Grafana Cloud Loki. Buffers to disk on failure."""
     if _LOG_LEVELS.get(level, 0) < _LOG_LEVELS.get(config.LOKI_PUSH_LEVEL, 1):
         return
-    if not getattr(secrets, "LOKI_URL", None):
+    if not getattr(credentials, "LOKI_URL", None):
         return
     payload = _build_loki_payload(level, message, extra)
     try:

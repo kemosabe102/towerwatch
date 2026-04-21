@@ -38,9 +38,9 @@ from probes.m6 import poll_m6_signal
 from loki import push_log, log_and_push, _post_loki, _buffer_log_entry, _build_loki_payload
 
 try:
-    import secrets
+    import credentials
 except ImportError:
-    print("ERROR: secrets.py not found. Copy secrets.py.example to secrets.py and fill in values.")
+    print("ERROR: credentials.py not found. Copy credentials.py.example to credentials.py and fill in values.")
     raise SystemExit(1)
 
 log = logging.getLogger("towerwatch")
@@ -97,7 +97,7 @@ def _lazy_session(key: str, factory) -> requests.Session:
 # Grafana Push (Influx Line Protocol over HTTPS, batched + gzip)
 # ---------------------------------------------------------------------------
 def _build_auth_header() -> str:
-    creds = f"{secrets.GRAFANA_INSTANCE_ID}:{secrets.GRAFANA_API_KEY}"
+    creds = f"{credentials.GRAFANA_INSTANCE_ID}:{credentials.GRAFANA_API_KEY}"
     return "Basic " + base64.b64encode(creds.encode()).decode()
 
 
@@ -201,7 +201,7 @@ def push_annotation(time_ms: int, time_end_ms: int, text: str,
     tags so Grafana can filter/color by it. `version` is appended to the
     text so deploy boundaries are visible at a glance.
     """
-    token = getattr(secrets, "GRAFANA_ANNOTATION_TOKEN", "")
+    token = getattr(credentials, "GRAFANA_ANNOTATION_TOKEN", "")
     if not token:
         return
     tags = list(config.OUTAGE_ANNOTATION_TAGS)
