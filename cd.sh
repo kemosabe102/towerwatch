@@ -63,11 +63,14 @@ INSTALL_DIR="$2"
 # Step 1: Pull latest code
 echo "[1/3] Pulling latest code..."
 cd "$REPO_DIR" && git pull --ff-only
-sudo cp pi/towerwatch.py pi/config.py pi/loki.py pi/version.txt "$INSTALL_DIR/"
+sudo cp pi/towerwatch.py pi/config.py pi/loki.py pi/grafana.py \
+    pi/events.py pi/scheduling.py pi/startup.py pi/version.txt "$INSTALL_DIR/"
 sudo cp -r pi/probes "$INSTALL_DIR/"
 sudo chown towerwatch:towerwatch \
     "$INSTALL_DIR/towerwatch.py" "$INSTALL_DIR/config.py" \
-    "$INSTALL_DIR/version.txt"
+    "$INSTALL_DIR/loki.py" "$INSTALL_DIR/grafana.py" \
+    "$INSTALL_DIR/events.py" "$INSTALL_DIR/scheduling.py" \
+    "$INSTALL_DIR/startup.py" "$INSTALL_DIR/version.txt"
 echo "  Files copied to $INSTALL_DIR (version: $(cat $INSTALL_DIR/version.txt))"
 
 # Step 1.5: Clean up legacy metrics buffer (replaced by Loki log buffer)
