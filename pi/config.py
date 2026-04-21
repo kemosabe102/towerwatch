@@ -28,6 +28,9 @@ def _load_build_version() -> tuple[str, str]:
         except OSError:
             continue
     # Fallback: ask git directly (works in-repo when version.txt hasn't been written yet).
+    # Set TOWERWATCH_SKIP_GIT_VERSION=1 to suppress this subprocess call (e.g. in tests).
+    if os.environ.get("TOWERWATCH_SKIP_GIT_VERSION") == "1":
+        return "dev", "unknown"
     try:
         repo_root = Path(__file__).resolve().parents[1]
         version = subprocess.check_output(
