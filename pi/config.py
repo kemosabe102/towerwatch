@@ -91,6 +91,9 @@ else:
 SPEEDTEST_TIMEOUT_S = 120
 SPEEDTEST_SERVER_ID = None
 
+# --- Startup grace period (let network settle before first probe) ---
+STARTUP_GRACE_S = 15  # seconds to wait after startup before first probe cycle
+
 # --- Gateway Probe (vendor-agnostic baseline) ---
 GATEWAY_IP        = "192.168.1.1"
 GATEWAY_TCP_PORT  = 80

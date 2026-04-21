@@ -208,6 +208,10 @@ def main():
 
     _loki_client.flush()
 
+    if not IS_WINDOWS and config.STARTUP_GRACE_S > 0:
+        log.info("Startup grace period: waiting %ds for network to settle", config.STARTUP_GRACE_S)
+        time.sleep(config.STARTUP_GRACE_S)
+
     while not state.shutdown_requested:
         cycle_start = time.perf_counter()
         timestamp = int(time.time())
