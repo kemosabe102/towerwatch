@@ -57,17 +57,14 @@ def test_linux_100pct_loss_not_connected():
 # ---------------------------------------------------------------------------
 # Windows — known bugs marked xfail (fixed in Pass 6)
 # ---------------------------------------------------------------------------
-@pytest.mark.xfail(reason="Pass 6 fix: sub-ms Windows RTTs parsed as 0 due to \\d+ regex")
 def test_windows_subms_rtt_nonzero():
     """time<1ms replies should produce rtt_avg > 0, not 0."""
     r = _parse(_read("ping_windows_subms.txt"), is_windows=True)
     assert r["rtt_avg"] > 0
 
-@pytest.mark.xfail(reason="Pass 6 fix: Windows mdev always 0 because RTTs not parsed from time<1ms")
 def test_windows_subms_mdev_nonzero():
-    """When all RTTs are sub-ms, jitter should be 0 (truly equal) but rtt_min/max non-zero."""
+    """When all RTTs are sub-ms, rtt_min/max should be 1 (floor of <1ms)."""
     r = _parse(_read("ping_windows_subms.txt"), is_windows=True)
-    # rtt_min == rtt_max == 0 is the bug; post-fix they'll be 1 (ceiling of <1ms)
     assert r["rtt_min"] > 0
 
 def test_windows_ok_rtt():

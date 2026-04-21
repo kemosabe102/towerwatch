@@ -7,6 +7,7 @@ import requests
 import config
 import credentials
 from loki import log_and_push
+from probes.base import Probe, ProbeResult
 
 log = logging.getLogger("towerwatch")
 
@@ -54,3 +55,11 @@ def poll_m6_signal() -> dict:
     except Exception as e:
         log.debug('M6 poll failed: %s', e)
         return {}
+
+
+class M6Probe:
+    name = "m6"
+
+    def run(self) -> ProbeResult:
+        f = poll_m6_signal()
+        return ProbeResult(fields=f, ok=bool(f))

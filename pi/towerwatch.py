@@ -28,12 +28,12 @@ import requests
 
 import config
 import grafana as grafana_mod
-from probes.ping import run_ping
-from probes.tcp import measure_tcp_connect
-from probes.dns import measure_dns
-from probes.http import measure_http_latency, measure_http_throughput
-from probes.ookla import run_speedtest
-from probes.m6 import poll_m6_signal
+from probes.ping import run_ping, PingProbe
+from probes.tcp import measure_tcp_connect, TCPProbe
+from probes.dns import measure_dns, DNSProbe
+from probes.http import measure_http_latency, measure_http_throughput, HTTPLatencyProbe, HTTPThroughputProbe
+from probes.ookla import run_speedtest, OoklaProbe
+from probes.m6 import poll_m6_signal, M6Probe
 import loki as loki_mod
 from loki import push_log, log_and_push
 

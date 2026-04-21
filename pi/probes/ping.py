@@ -8,6 +8,7 @@ import sys
 
 import config
 from loki import log_and_push
+from probes.base import Probe, ProbeResult
 
 log = logging.getLogger("towerwatch")
 
@@ -15,7 +16,6 @@ IS_WINDOWS = sys.platform == "win32"
 
 
 def _build_ping_cmd(target: str) -> list[str]:
-    """Build platform-specific ping command."""
     if IS_WINDOWS:
         return ["ping", "-n", str(config.PING_COUNT),
                 "-w", str(config.PING_TIMEOUT_S * 1000), target]
@@ -25,14 +25,14 @@ def _build_ping_cmd(target: str) -> list[str]:
 
 
 def _parse_rtt_stats(stdout: str) -> tuple[int, int, int, float]:
-    """Parse platform-specific RTT summary. Returns (min, avg, max, mdev)."""
+    """Parse platform-specific RTT summary line. Returns (min, avg, max, mdev)."""
     if IS_WINDOWS:
         m = re.search(
-            r"Minimum\s*=\s*(\d+)ms.*Maximum\s*=\s*(\d+)ms.*Average\s*=\s*(\d+)ms",
+            r"Minimum\s*=\s*([\d.]+)ms.*Maximum\s*=\s*([\d.]+)ms.*Average\s*=\s*([\d.]+)ms",
             stdout, re.DOTALL,
         )
         if m:
-            return int(m.group(1)), int(m.group(3)), int(m.group(2)), 0.0
+            return int(float(m.group(1))), int(float(m.group(3))), int(float(m.group(2))), 0.0
         return 0, 0, 0, 0.0
     m = re.search(
         r"rtt min/avg/max/mdev = ([\d.]+)/([\d.]+)/([\d.]+)/([\d.]+)",
@@ -60,7 +60,12 @@ def _parse_ping_output(stdout: str) -> dict:
     rtt_min, rtt_avg, rtt_max, mdev = _parse_rtt_stats(stdout)
 
     if IS_WINDOWS:
-        rtts = [float(m) for m in re.findall(r"time[=<](\d+)ms", stdout)]
+        # time=Nms for >=1ms replies; time<1ms for sub-ms — treat as 0.5ms
+        rtts = [float(m) for m in re.findall(r"time=([\d.]+)ms", stdout)]
+        rtts += [0.5 for _ in re.findall(r"time<1ms", stdout)]
+        # If the summary line shows 0ms but we have sub-ms replies, use 1 as floor
+        if rtts and rtt_avg == 0 and all(r < 1 for r in rtts):
+            rtt_min = rtt_avg = rtt_max = 1
     else:
         rtts = [float(m) for m in re.findall(r"time=([\d.]+)", stdout)]
 
@@ -86,3 +91,25 @@ def run_ping(target: str) -> dict:
                 "jitter": 0, "pkt_loss": 100, "connected": False}
 
     return _parse_ping_output(result.stdout)
+
+
+class PingProbe:
+    """Class-based ping probe implementing the Probe protocol."""
+
+    def __init__(self, target_ip: str, label: str,
+                 count: int = None, timeout_s: int = None):
+        self.target_ip = target_ip
+        self.label = label
+        self._count = count or config.PING_COUNT
+        self._timeout_s = timeout_s or config.PING_TIMEOUT_S
+        self.name = f"ping_{label}"
+
+    def run(self) -> ProbeResult:
+        fields_raw = run_ping(self.target_ip)
+        labeled = {f"{k}_{self.label}": v for k, v in fields_raw.items()
+                   if k != "connected"}
+        labeled[f"connected_{self.label}"] = 1 if fields_raw["connected"] else 0
+        return ProbeResult(
+            fields=labeled,
+            ok=fields_raw["connected"],
+        )

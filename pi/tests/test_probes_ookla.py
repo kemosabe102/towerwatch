@@ -31,16 +31,8 @@ def test_ookla_ok_parses_speeds():
     assert result["upload_mbps"] == expected_ul
     assert result["success"] == 1
 
-@pytest.mark.xfail(
-    strict=False,
-    reason=(
-        "Pass 6 adds explicit returncode check. Currently passes by accident: "
-        "json.loads succeeds on the log-type fixture but KeyError on 'download' "
-        "falls into the outer except, coincidentally returning success=0."
-    ),
-)
 def test_ookla_nonzero_returncode_returns_failure():
-    """Non-zero returncode should return success=0 explicitly, not via KeyError fallthrough."""
+    """Non-zero returncode returns success=0 via explicit returncode check."""
     import probes.ookla as ookla_mod
 
     raw = (_FIXTURES / "ookla_bad_returncode.json").read_text()

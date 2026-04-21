@@ -34,9 +34,8 @@ def test_tcp_connect_timeout_returns_zero():
         result = tcp_mod.measure_tcp_connect()
     assert result == 0
 
-@pytest.mark.xfail(reason="Pass 6 fix: sock.close() not in finally block — leaks socket on exception")
 def test_tcp_socket_closed_after_failure():
-    """Socket must be closed even when connect raises — needs finally block."""
+    """Socket must be closed even when connect raises."""
     import probes.tcp as tcp_mod
 
     mock_sock = MagicMock(spec=socket.socket)
