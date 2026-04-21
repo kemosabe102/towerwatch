@@ -12,12 +12,10 @@ Cross-platform: runs on Raspberry Pi (production) and Windows (testing).
 
 import json
 import logging
-import os
 import random
 import re
 import signal
 import socket
-import subprocess
 import statistics
 import sys
 import time
@@ -28,6 +26,7 @@ import requests
 
 import config
 import grafana as grafana_mod
+import startup as startup_mod
 from probes.ping import run_ping, PingProbe
 from probes.tcp import measure_tcp_connect, TCPProbe
 from probes.dns import measure_dns, DNSProbe
@@ -102,34 +101,7 @@ def format_influx_line(fields: dict, timestamp: int) -> str:
 # Startup guard: wait for data partition
 # ---------------------------------------------------------------------------
 def wait_for_data_partition(timeout: int = 30):
-    """Block until the data partition is mounted or timeout. Skips on Windows."""
-    data = Path(config.DATA_DIR)
-    if IS_WINDOWS:
-        data.mkdir(parents=True, exist_ok=True)
-        log.info("Windows: using local data dir %s", data)
-        return
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        if data.is_dir():
-            try:
-                result = subprocess.run(
-                    ["mountpoint", "-q", str(data)],
-                    capture_output=True, timeout=5,
-                )
-                if result.returncode == 0:
-                    log.info("Data partition mounted at %s", data)
-                    return
-            except Exception:
-                pass
-        time.sleep(1)
-    log.warning("Data partition not detected at %s — buffering to local dir", data)
-    try:
-        _buffer_log_entry(_build_loki_payload(
-            "WARN", f"Data partition not detected at {data}",
-            {"event": config.LOG_EVENT_PARTITION_MISSING, "path": str(data)}))
-    except Exception:
-        pass
-    data.mkdir(parents=True, exist_ok=True)
+    startup_mod.wait_for_data_partition(Path(config.DATA_DIR), timeout_s=timeout)
 
 
 # ---------------------------------------------------------------------------
@@ -240,26 +212,11 @@ def _log_cycle(state: "RuntimeState", fields, timestamp):
 
 
 def _write_ts(path: Path, ts: float, atomic: bool = False) -> None:
-    """Persist a Unix timestamp to a marker file. Best-effort — OSError is swallowed."""
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        if atomic:
-            tmp = path.with_suffix(path.suffix + ".tmp")
-            tmp.write_text(f"{ts:.0f}\n", encoding="utf-8")
-            os.replace(tmp, path)
-        else:
-            path.write_text(f"{ts:.0f}\n", encoding="utf-8")
-    except OSError:
-        pass
+    startup_mod.write_marker(path, ts, atomic=atomic)
 
 
 def _read_ts(path: Path) -> float | None:
-    """Read a persisted Unix timestamp. Returns None if missing or unreadable."""
-    try:
-        raw = path.read_text(encoding="utf-8").strip()
-        return float(raw) if raw else None
-    except (OSError, ValueError):
-        return None
+    return startup_mod.read_marker(path)
 
 
 _grafana_client: "grafana_mod.GrafanaClient | None" = None
@@ -349,13 +306,15 @@ def main():
     if loaded_last_push is not None:
         state.last_successful_push_ts = loaded_last_push
         startup_now = time.time()
-        startup_gap = startup_now - loaded_last_push
-        if startup_gap >= config.OUTAGE_GAP_THRESHOLD_S:
-            if loaded_last_alive and (startup_now - loaded_last_alive) < config.OUTAGE_GAP_THRESHOLD_S:
-                reason = "network_unreachable"
-            else:
-                reason = "process_restart"
-            _record_outage_annotation(loaded_last_push, startup_now, reason)
+        outage = startup_mod.classify_outage(
+            now=startup_now,
+            last_push_ts=loaded_last_push,
+            last_alive_ts=loaded_last_alive,
+            gap_threshold_s=config.OUTAGE_GAP_THRESHOLD_S,
+        )
+        if outage:
+            kind, _gap = outage
+            _record_outage_annotation(loaded_last_push, startup_now, kind.value)
 
     if _loki_client:
         _loki_client.flush()
