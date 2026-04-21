@@ -27,6 +27,7 @@ import requests
 import config
 import grafana as grafana_mod
 import startup as startup_mod
+from scheduling import Scheduler
 from probes.ping import run_ping, PingProbe
 from probes.tcp import measure_tcp_connect, TCPProbe
 from probes.dns import measure_dns, DNSProbe
@@ -104,33 +105,15 @@ def wait_for_data_partition(timeout: int = 30):
     startup_mod.wait_for_data_partition(Path(config.DATA_DIR), timeout_s=timeout)
 
 
-# ---------------------------------------------------------------------------
-# Random throughput schedule
-# ---------------------------------------------------------------------------
+_scheduler: "Scheduler | None" = None
+
+
 def _build_daily_throughput_schedule() -> list[float]:
-    """Generate random timestamps for today's throughput tests.
-    Divides 24 hours into equal slots, picks a random second in each.
-    Skips slots whose time has already passed."""
-    n = config.HTTP_THROUGHPUT_TESTS_PER_DAY
-    now = time.time()
-    # Start of today (local time)
-    local = time.localtime(now)
-    midnight = time.mktime(time.struct_time((
-        local.tm_year, local.tm_mon, local.tm_mday,
-        0, 0, 0, 0, 0, local.tm_isdst,
-    )))
-    slot_size = 86400 / n
-    schedule = []
-    for i in range(n):
-        slot_start = midnight + i * slot_size
-        slot_end = slot_start + slot_size
-        t = random.uniform(slot_start, slot_end)
-        if t > now:
-            schedule.append(t)
-    schedule.sort()
-    log.info("Throughput schedule: %s",
-             [time.strftime("%H:%M", time.localtime(t)) for t in schedule])
-    return schedule
+    """Back-compat shim — delegates to module Scheduler instance."""
+    if _scheduler is not None:
+        _scheduler._rebuild_schedule(time.time())
+        return list(_scheduler._throughput_schedule)
+    return []
 
 
 # ---------------------------------------------------------------------------
@@ -156,8 +139,8 @@ def _install_signal_handlers(state: "RuntimeState") -> None:
 # ---------------------------------------------------------------------------
 # Main loop helpers
 # ---------------------------------------------------------------------------
-def _collect_probes(state: "RuntimeState", last_http_latency, throughput_schedule, last_schedule_day):
-    """Run all probe sections. Returns (fields, any_connected, last_http_latency, throughput_schedule, last_schedule_day)."""
+def _collect_probes(state: "RuntimeState"):
+    """Run all probe sections. Returns (fields, any_connected)."""
     fields = {}
     now = time.time()
 
@@ -184,20 +167,14 @@ def _collect_probes(state: "RuntimeState", last_http_latency, throughput_schedul
     fields.update(poll_m6_signal())
 
     # HTTP Latency (10KB, every 5 min)
-    if now - last_http_latency >= config.HTTP_LATENCY_INTERVAL_S:
+    if _scheduler and _scheduler.should_run_http_latency(now):
         fields["http_latency_ms"] = measure_http_latency()
-        last_http_latency = now
 
     # HTTP Throughput (1MB, random schedule)
-    today_yday = time.localtime().tm_yday
-    if today_yday != last_schedule_day:
-        throughput_schedule = _build_daily_throughput_schedule()
-        last_schedule_day = today_yday
-    if throughput_schedule and now >= throughput_schedule[0]:
-        throughput_schedule.pop(0)
+    if _scheduler and _scheduler.should_run_throughput(now):
         fields.update(measure_http_throughput())
 
-    return fields, any_connected, last_http_latency, throughput_schedule, last_schedule_day
+    return fields, any_connected
 
 
 def _log_cycle(state: "RuntimeState", fields, timestamp):
@@ -264,7 +241,7 @@ def _batch_and_push(state: "RuntimeState", line: str, any_connected: bool):
 def _maybe_heartbeat(state: "RuntimeState"):
     """Emit a periodic heartbeat log to Loki so the Event Log panel stays populated."""
     now = time.time()
-    if now - state.last_heartbeat_ts >= config.HEARTBEAT_INTERVAL_S:
+    if _scheduler is None or _scheduler.should_heartbeat(now):
         uptime_h = round((time.monotonic() - state.start_ts) / 3600, 1)
         push_log("WARN", "Service heartbeat",
                  {"event": config.LOG_EVENT_HEARTBEAT, "uptime_h": uptime_h})
@@ -275,12 +252,13 @@ def _maybe_heartbeat(state: "RuntimeState"):
 # Main loop
 # ---------------------------------------------------------------------------
 def main():
-    global _grafana_client, _loki_client
+    global _grafana_client, _loki_client, _scheduler
     state = RuntimeState()
     _configure_logging()
     _install_signal_handlers(state)
     _loki_client = loki_mod.LokiClient.from_config(config, credentials)
     _grafana_client = grafana_mod.GrafanaClient.from_config(config, credentials)
+    _scheduler = Scheduler.from_config(config)
     log.info("=== Towerwatch %s ===", "(Windows)" if IS_WINDOWS else "(Raspberry Pi)")
     wait_for_data_partition()
 
@@ -319,16 +297,11 @@ def main():
     if _loki_client:
         _loki_client.flush()
 
-    last_http_latency = 0
-    throughput_schedule = _build_daily_throughput_schedule()
-    last_schedule_day = time.localtime().tm_yday
-
     while not state.shutdown_requested:
         cycle_start = time.perf_counter()
         timestamp = int(time.time())
 
-        fields, any_connected, last_http_latency, throughput_schedule, last_schedule_day = \
-            _collect_probes(state, last_http_latency, throughput_schedule, last_schedule_day)
+        fields, any_connected = _collect_probes(state)
 
         update_connection_state(state, any_connected, timestamp)
         fields["collection_duration_ms"] = round(

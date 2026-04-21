@@ -1,71 +1,142 @@
-"""Characterization tests for _build_daily_throughput_schedule — 5 tests."""
-import time
+"""Tests for scheduling.Scheduler — retargeted from towerwatch._build_daily_throughput_schedule."""
+import sys
+import time as time_mod
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
+_PI = Path(__file__).resolve().parents[1]
+if str(_PI) not in sys.path:
+    sys.path.insert(0, str(_PI))
 
-def _build_schedule(now=None, n=4):
-    import towerwatch, config
-    with patch.object(config, "HTTP_THROUGHPUT_TESTS_PER_DAY", n):
-        with patch("towerwatch.time.time", return_value=now or time.time()):
-            with patch("towerwatch.time.localtime", side_effect=time.localtime):
-                with patch("towerwatch.time.mktime", side_effect=time.mktime):
-                    return towerwatch._build_daily_throughput_schedule()
+from scheduling import Scheduler
 
 
+def _make_scheduler(n=4, now=None):
+    import config
+    s = Scheduler(
+        http_latency_interval_s=config.HTTP_LATENCY_INTERVAL_S,
+        http_throughput_tests_per_day=n,
+        heartbeat_interval_s=config.HEARTBEAT_INTERVAL_S,
+    )
+    if now is not None:
+        s._rebuild_schedule(now)
+        s._last_schedule_day = time_mod.localtime(now).tm_yday
+    return s
+
+
+# ---------------------------------------------------------------------------
+# Throughput schedule basics
+# ---------------------------------------------------------------------------
 def test_schedule_length_at_most_n():
-    """Schedule has at most HTTP_THROUGHPUT_TESTS_PER_DAY entries."""
-    sched = _build_schedule(n=4)
-    assert len(sched) <= 4
+    now = time_mod.time()
+    s = _make_scheduler(n=4, now=now)
+    assert len(s._throughput_schedule) <= 4
+
 
 def test_schedule_all_in_future():
-    """All scheduled times must be in the future relative to now."""
-    import time as time_mod
     now = time_mod.time()
-    sched = _build_schedule(now=now, n=4)
-    for t in sched:
+    s = _make_scheduler(n=4, now=now)
+    for t in s._throughput_schedule:
         assert t > now
 
+
 def test_schedule_is_sorted():
-    sched = _build_schedule(n=4)
-    assert sched == sorted(sched)
+    now = time_mod.time()
+    s = _make_scheduler(n=4, now=now)
+    assert s._throughput_schedule == sorted(s._throughput_schedule)
+
 
 def test_schedule_skips_past_due_slots():
-    """If called at 23:59:59, all 4 slots (each 6h wide, last ending at midnight) are past."""
-    import time as time_mod
+    """Called at 23:59:59 — all 4 slots (each 6h wide) are past."""
     local = time_mod.localtime()
     midnight = time_mod.mktime(time_mod.struct_time((
         local.tm_year, local.tm_mon, local.tm_mday,
         0, 0, 0, 0, 0, local.tm_isdst,
     )))
-    # One second before midnight — every possible random slot time is in the past
     just_before_midnight = midnight + 86400 - 1
-    sched = _build_schedule(now=just_before_midnight, n=4)
-    assert len(sched) == 0
+    s = _make_scheduler(n=4, now=just_before_midnight)
+    assert len(s._throughput_schedule) == 0
+
 
 def test_schedule_slot_count_config_respected():
-    """HTTP_THROUGHPUT_TESTS_PER_DAY=2 yields at most 2 slots."""
-    sched = _build_schedule(n=2)
-    assert len(sched) <= 2
+    now = time_mod.time()
+    s = _make_scheduler(n=2, now=now)
+    assert len(s._throughput_schedule) <= 2
 
-def test_heartbeat_cadence_config(monkeypatch):
-    """_maybe_heartbeat emits only when interval has elapsed."""
-    import towerwatch, config
 
-    state = towerwatch.RuntimeState()
-    state.last_heartbeat_ts = 0.0
+# ---------------------------------------------------------------------------
+# Heartbeat cadence
+# ---------------------------------------------------------------------------
+def test_heartbeat_not_yet_due():
+    import config
+    s = Scheduler.from_config(config)
+    s._last_heartbeat_ts = 0.0
+    assert s.should_heartbeat(1.0) is False
 
-    posted = []
-    with patch("towerwatch.push_log", side_effect=lambda *a, **kw: posted.append(a)):
-        with patch("towerwatch.time.time", return_value=1.0):
-            towerwatch._maybe_heartbeat(state)
-    # 1s elapsed is less than HEARTBEAT_INTERVAL_S (3600) — no heartbeat
-    assert len(posted) == 0
 
-    # Now advance past interval
-    with patch("towerwatch.push_log", side_effect=lambda *a, **kw: posted.append(a)):
-        with patch("towerwatch.time.time", return_value=float(config.HEARTBEAT_INTERVAL_S + 1)):
-            with patch("towerwatch.time.monotonic", return_value=0.0):
-                towerwatch._maybe_heartbeat(state)
-    assert len(posted) == 1
+def test_heartbeat_due_after_interval():
+    import config
+    s = Scheduler.from_config(config)
+    s._last_heartbeat_ts = 0.0
+    assert s.should_heartbeat(float(config.HEARTBEAT_INTERVAL_S + 1)) is True
+
+
+# ---------------------------------------------------------------------------
+# Day rollover rebuilds schedule
+# ---------------------------------------------------------------------------
+def test_day_rollover_rebuilds_schedule():
+    """should_run_throughput triggers a schedule rebuild when tm_yday changes."""
+    import config
+    rng_calls = []
+
+    class DeterministicRng:
+        def uniform(self, a, b):
+            rng_calls.append((a, b))
+            return b - 1  # always near end of slot, always in future if now < b-1
+
+    now = time_mod.time()
+    s = Scheduler(
+        http_latency_interval_s=config.HTTP_LATENCY_INTERVAL_S,
+        http_throughput_tests_per_day=4,
+        heartbeat_interval_s=config.HEARTBEAT_INTERVAL_S,
+        rng=DeterministicRng(),
+    )
+    s._last_schedule_day = -1  # force rebuild on first call
+    s.should_run_throughput(now)
+    assert len(rng_calls) == 4  # one call per slot
+
+
+# ---------------------------------------------------------------------------
+# RNG injection — deterministic schedule
+# ---------------------------------------------------------------------------
+def test_rng_injection_controls_schedule():
+    """With a fixed RNG, the schedule is deterministic."""
+    import config
+
+    class FixedRng:
+        def uniform(self, a, b):
+            return a + (b - a) / 2  # always midpoint
+
+    now = time_mod.time()
+    local = time_mod.localtime(now)
+    midnight = time_mod.mktime(time_mod.struct_time((
+        local.tm_year, local.tm_mon, local.tm_mday,
+        0, 0, 0, 0, 0, local.tm_isdst,
+    )))
+    slot_size = 86400 / 4
+    expected = sorted(
+        midnight + i * slot_size + slot_size / 2
+        for i in range(4)
+        if midnight + i * slot_size + slot_size / 2 > now
+    )
+
+    s = Scheduler(
+        http_latency_interval_s=300,
+        http_throughput_tests_per_day=4,
+        heartbeat_interval_s=3600,
+        rng=FixedRng(),
+    )
+    s._rebuild_schedule(now)
+    assert s._throughput_schedule == expected
