@@ -33,15 +33,19 @@ fi
 echo "=== Towerwatch CI ($MODE) ==="
 
 # Step 1: syntax check
-echo "[1/5] py_compile..."
+echo "[1/6] py_compile..."
 $PY -m py_compile pi/towerwatch.py pi/config.py
 
 # Step 2: import check (catches missing deps, top-level typos)
-echo "[2/5] import check..."
+echo "[2/6] import check..."
 $PY -c "import sys; sys.path.insert(0, 'pi'); import towerwatch, config"
 
-# Step 3: clean-tree check — dirty tree means the stamp won't match deployed code
-echo "[3/5] clean-tree check..."
+# Step 3: unit tests
+echo "[3/6] pytest..."
+$PY -m pytest -q pi/tests --ignore=pi/bench -x
+
+# Step 4: clean-tree check — dirty tree means the stamp won't match deployed code
+echo "[4/6] clean-tree check..."
 if [[ $ALLOW_DIRTY -eq 0 ]]; then
     if [[ -n "$(git status --porcelain)" ]]; then
         echo "ERROR: working tree is dirty. Commit or stash changes first."
@@ -51,16 +55,16 @@ if [[ $ALLOW_DIRTY -eq 0 ]]; then
     fi
 fi
 
-# Step 4: write version.txt ("<short-hash> <iso-date>")
-echo "[4/5] stamping pi/version.txt..."
+# Step 5: write version.txt ("<short-hash> <iso-date>")
+echo "[5/6] stamping pi/version.txt..."
 HASH="$(git rev-parse --short HEAD)"
 DATE="$(git log -1 --format=%cI)"
 echo "$HASH $DATE" > pi/version.txt
 echo "  stamped: $HASH $DATE"
 
-# Step 5 (full only): smoke run
+# Step 6 (full only): smoke run
 if [[ "$MODE" == "full" ]]; then
-    echo "[5/5] smoke run (30s)..."
+    echo "[6/6] smoke run (30s)..."
     SMOKE_DIR="$REPO_ROOT/ci-tmp"
     rm -rf "$SMOKE_DIR"
     mkdir -p "$SMOKE_DIR/buffer"
@@ -81,7 +85,7 @@ if [[ "$MODE" == "full" ]]; then
     echo "  smoke run complete"
     rm -rf "$SMOKE_DIR"
 else
-    echo "[5/5] (skipped — fast mode; run './ci.sh full' before deploy)"
+    echo "[6/6] (skipped — fast mode; run './ci.sh full' before deploy)"
 fi
 
 echo "=== CI OK — stamped $HASH $DATE ==="

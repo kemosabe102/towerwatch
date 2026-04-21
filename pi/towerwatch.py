@@ -35,7 +35,7 @@ from probes.dns import measure_dns
 from probes.http import measure_http_latency, measure_http_throughput
 from probes.ookla import run_speedtest
 from probes.m6 import poll_m6_signal
-from loki import push_log, log_and_push
+from loki import push_log, log_and_push, _post_loki, _buffer_log_entry, _build_loki_payload
 
 try:
     import secrets
