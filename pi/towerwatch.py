@@ -34,7 +34,8 @@ from probes.dns import measure_dns
 from probes.http import measure_http_latency, measure_http_throughput
 from probes.ookla import run_speedtest
 from probes.m6 import poll_m6_signal
-from loki import push_log, log_and_push, _post_loki, _buffer_log_entry, _build_loki_payload
+import loki as loki_mod
+from loki import push_log, log_and_push
 
 try:
     import credentials
@@ -92,38 +93,7 @@ def format_influx_line(fields: dict, timestamp: int) -> str:
     )
 
 
-def _flush_log_buffer():
-    """Flush buffered Loki entries after connectivity returns."""
-    buf = Path(config.LOKI_BUFFER_FILE)
-    if not buf.exists() or buf.stat().st_size == 0:
-        return
-    lines = [l.strip() for l in buf.read_text(encoding="utf-8").splitlines() if l.strip()]
-    if not lines:
-        buf.unlink()
-        return
-    delivered = 0
-    consumed = 0  # lines consumed from the buffer (delivered OR discarded as corrupt)
-    for line in lines:
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
-            # Corrupt line — drop it and keep going, else one bad line bricks the buffer forever.
-            consumed += 1
-            continue
-        try:
-            _post_loki(payload)
-            delivered += 1
-            consumed += 1
-        except Exception:
-            break  # Network went away again — keep remaining entries
-    if consumed == len(lines):
-        buf.unlink()
-        log.info("Log buffer flushed: %d entries delivered", delivered)
-        push_log("WARN", f"Log buffer flushed: {delivered} entries",
-                 {"event": config.LOG_EVENT_LOG_BUFFER_FLUSHED, "count": delivered})
-    elif consumed > 0:
-        remaining = lines[consumed:]
-        buf.write_text("\n".join(remaining) + "\n", encoding="utf-8")
+
 
 
 
@@ -293,6 +263,7 @@ def _read_ts(path: Path) -> float | None:
 
 
 _grafana_client: "grafana_mod.GrafanaClient | None" = None
+_loki_client: "loki_mod.LokiClient | None" = None
 
 
 def _record_outage_annotation(start_ts: float, end_ts: float, reason: str):
@@ -329,7 +300,8 @@ def _batch_and_push(state: "RuntimeState", line: str, any_connected: bool):
         _record_outage_annotation(state.last_successful_push_ts, now, "network_unreachable")
     state.last_successful_push_ts = now
     _write_ts(Path(config.LAST_PUSH_MARKER_FILE), now, atomic=True)
-    _flush_log_buffer()
+    if _loki_client:
+        _loki_client.flush()
 
 
 def _maybe_heartbeat(state: "RuntimeState"):
@@ -346,10 +318,11 @@ def _maybe_heartbeat(state: "RuntimeState"):
 # Main loop
 # ---------------------------------------------------------------------------
 def main():
-    global _grafana_client
+    global _grafana_client, _loki_client
     state = RuntimeState()
     _configure_logging()
     _install_signal_handlers(state)
+    _loki_client = loki_mod.LokiClient.from_config(config, credentials)
     _grafana_client = grafana_mod.GrafanaClient.from_config(config, credentials)
     log.info("=== Towerwatch %s ===", "(Windows)" if IS_WINDOWS else "(Raspberry Pi)")
     wait_for_data_partition()
@@ -384,7 +357,8 @@ def main():
                 reason = "process_restart"
             _record_outage_annotation(loaded_last_push, startup_now, reason)
 
-    _flush_log_buffer()
+    if _loki_client:
+        _loki_client.flush()
 
     last_http_latency = 0
     throughput_schedule = _build_daily_throughput_schedule()

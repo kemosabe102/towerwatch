@@ -43,17 +43,27 @@ def test_flush_delivers_all_lines_and_removes_buffer(tmp_marker_dir, monkeypatch
     tmp_marker_dir.seed_loki_buffer(payloads)
     assert buf_path.exists()
 
+    import loki as loki_mod
+
     posted = []
 
-    def fake_post_loki(payload):
+    def fake_post(payload):
         posted.append(payload)
 
-    # Patch _post_loki in the towerwatch module namespace (where _flush_log_buffer runs)
-    monkeypatch.setattr(towerwatch, "_post_loki", fake_post_loki)
+    # Pass 5: flush now lives in LokiClient; build a client pointed at tmp buffer
+    client = loki_mod.LokiClient(
+        url="http://fake", user="u", token="t",
+        buffer_path=str(buf_path),
+        buffer_max_bytes=256 * 1024,
+    )
+    monkeypatch.setattr(client, "_post", fake_post)
+    client.flush()
 
-    towerwatch._flush_log_buffer()
-
-    assert len(posted) == 3, f"Expected 3 posts, got {len(posted)}"
+    # flush() delivers the 3 buffered entries then self.push() sends a
+    # "Log buffer flushed" confirmation — so >= 3 posts total.
+    assert len(posted) >= 3, f"Expected at least 3 posts, got {len(posted)}"
+    msgs = [json.loads(p["streams"][0]["values"][0][1]).get("msg", "") for p in posted[:3]]
+    assert msgs == ["entry 0", "entry 1", "entry 2"]
     assert not buf_path.exists(), "Buffer file should be removed after full flush"
 
 
@@ -70,6 +80,8 @@ def test_flush_preserves_remaining_on_network_failure(tmp_marker_dir, monkeypatc
     payloads = [_make_payload(f"entry {i}") for i in range(3)]
     tmp_marker_dir.seed_loki_buffer(payloads)
 
+    import loki as loki_mod
+
     call_count = [0]
 
     def flaky_post(payload):
@@ -77,11 +89,14 @@ def test_flush_preserves_remaining_on_network_failure(tmp_marker_dir, monkeypatc
         if call_count[0] >= 2:
             raise OSError("network gone")
 
-    monkeypatch.setattr(towerwatch, "_post_loki", flaky_post)
+    client = loki_mod.LokiClient(
+        url="http://fake", user="u", token="t",
+        buffer_path=str(buf_path),
+        buffer_max_bytes=256 * 1024,
+    )
+    monkeypatch.setattr(client, "_post", flaky_post)
+    client.flush()
 
-    towerwatch._flush_log_buffer()
-
-    # First entry delivered, 2 remaining preserved
     assert call_count[0] == 2
     assert buf_path.exists()
     remaining = [l for l in buf_path.read_text().splitlines() if l.strip()]

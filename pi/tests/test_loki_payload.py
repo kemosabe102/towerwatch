@@ -37,50 +37,61 @@ def test_loki_warn_level_filter_passes():
     """Constraint #4: WARN messages are pushed (LOKI_PUSH_LEVEL=WARN)."""
     import loki, config
     posted = []
-    with patch.object(config, "LOKI_PUSH_LEVEL", "WARN"):
-        with patch("loki._post_loki", side_effect=posted.append):
-            with patch("loki.credentials") as m:
-                m.LOKI_URL = "http://fake"
-                loki.push_log("WARN", "should pass")
+    # Force a fresh singleton with known config so push_level is WARN
+    client = loki.LokiClient(
+        url="http://fake", user="u", token="t",
+        buffer_path="/tmp/test_loki.jsonl",
+        buffer_max_bytes=256 * 1024,
+        push_level="WARN",
+    )
+    with patch.object(client, "_post", side_effect=posted.append):
+        client.push("WARN", "should pass")
     assert len(posted) == 1
 
 def test_loki_info_level_filter_dropped():
     """Constraint #4: INFO messages are dropped when LOKI_PUSH_LEVEL=WARN."""
     import loki, config
     posted = []
-    with patch.object(config, "LOKI_PUSH_LEVEL", "WARN"):
-        with patch("loki._post_loki", side_effect=posted.append):
-            with patch("loki.credentials") as m:
-                m.LOKI_URL = "http://fake"
-                loki.push_log("INFO", "should be dropped")
+    client = loki.LokiClient(
+        url="http://fake", user="u", token="t",
+        buffer_path="/tmp/test_loki.jsonl",
+        buffer_max_bytes=256 * 1024,
+        push_level="WARN",
+    )
+    with patch.object(client, "_post", side_effect=posted.append):
+        client.push("INFO", "should be dropped")
     assert len(posted) == 0
 
-def test_loki_buffer_256kb_eviction(tmp_path, monkeypatch):
+def test_loki_buffer_256kb_eviction(tmp_path):
     """Constraint #3: buffer evicts oldest entries when size >= 256 KB."""
-    import loki, config
+    import loki
 
     buf = tmp_path / "buffer" / "loki.jsonl"
     buf.parent.mkdir(parents=True)
-    monkeypatch.setattr(config, "LOKI_BUFFER_FILE", str(buf))
-    monkeypatch.setattr(config, "LOKI_BUFFER_MAX_BYTES", 256 * 1024)
 
-    # Fill buffer to just over 256 KB with many large entries
+    client = loki.LokiClient(
+        url="http://fake", user="u", token="t",
+        buffer_path=str(buf),
+        buffer_max_bytes=256 * 1024,
+    )
+
+    # Fill to just over 256 KB
     big_payload = {"streams": [{"stream": {}, "values": [["0", "x" * 512]]}]}
     line = json.dumps(big_payload) + "\n"
-    # Write 260 KB worth
     content = line * (int(260 * 1024 / len(line)) + 1)
     buf.write_text(content, encoding="utf-8")
     size_before = buf.stat().st_size
     assert size_before >= 256 * 1024
+    lines_before = len(buf.read_text().splitlines())
 
-    # Now buffer a new entry — eviction must trigger
-    new_payload = loki._build_loki_payload("WARN", "newest entry")
-    loki._buffer_log_entry(new_payload)
+    # Buffer a new entry — eviction must drop oldest 90% of lines
+    new_payload = client._build_payload("WARN", "newest entry")
+    client._buffer(new_payload)
 
-    size_after = buf.stat().st_size
-    assert size_after < size_before, "Buffer must shrink after eviction"
+    lines_after = buf.read_text(encoding="utf-8").splitlines()
+    # Eviction removed ~90% of lines, so count must be much less than before
+    assert len(lines_after) < lines_before
 
-    # Newest entry must be retained
-    lines = buf.read_text(encoding="utf-8").splitlines()
-    last = json.loads(lines[-1])
+    # Newest entry must be retained as the last line
+    last = json.loads(lines_after[-1])
     assert last["streams"][0]["values"][0][1] == json.dumps({"msg": "newest entry"})
