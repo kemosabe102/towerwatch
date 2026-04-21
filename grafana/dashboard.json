@@ -87,6 +87,19 @@
           "matchAny": false,
           "tags": ["towerwatch", "outage"]
         }
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "grafanacloud-towerwatch-logs"
+        },
+        "enable": true,
+        "hide": false,
+        "iconColor": "blue",
+        "name": "Deploys",
+        "expr": "{job=\"towerwatch\", level=\"warn\"} | json | event=`service_restarted`",
+        "titleFormat": "Deploy",
+        "textFormat": "{{version}} ({{build_date}})"
       }
     ]
   },
@@ -100,7 +113,7 @@
     {
       "gridPos": {
         "h": 4,
-        "w": 12,
+        "w": 8,
         "x": 0,
         "y": 0
       },
@@ -168,8 +181,8 @@
     {
       "gridPos": {
         "h": 4,
-        "w": 12,
-        "x": 12,
+        "w": 8,
+        "x": 8,
         "y": 0
       },
       "id": 2,
@@ -238,6 +251,60 @@
         "orientation": "auto",
         "textMode": "auto",
         "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 16,
+        "y": 0
+      },
+      "id": 24,
+      "title": "Current Version",
+      "description": "Version string from the most recent service restart. Shows 'No data' if no restart occurred in the selected time range — widen the range to see it.",
+      "type": "stat",
+      "datasource": {
+        "type": "loki",
+        "uid": "grafanacloud-towerwatch-logs"
+      },
+      "targets": [
+        {
+          "expr": "{job=\"towerwatch\", level=\"warn\"} | json | event=`service_restarted` | line_format \"{{.version}} · {{.build_date}}\"",
+          "legendFormat": "Version",
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "grafanacloud-towerwatch-logs"
+          },
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "string",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "text", "value": null }]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "/^Line$/",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "none",
         "graphMode": "none",
         "justifyMode": "auto"
       }
@@ -866,6 +933,43 @@
             "max"
           ]
         }
+      }
+    },
+    {
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 36
+      },
+      "id": 25,
+      "title": "Deploy History",
+      "description": "All service restarts (planned deploys and unplanned crashes) in the selected time range.",
+      "type": "logs",
+      "datasource": {
+        "type": "loki",
+        "uid": "grafanacloud-towerwatch-logs"
+      },
+      "targets": [
+        {
+          "expr": "{job=\"towerwatch\", level=\"warn\"} | json | event=`service_restarted` | line_format \"{{.version}}  {{.build_date}}  {{.platform}}\"",
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "grafanacloud-towerwatch-logs"
+          },
+          "queryType": "range"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": false,
+        "prettifyLogMessage": false,
+        "enableLogDetails": false,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none"
       }
     },
     {
