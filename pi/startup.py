@@ -11,7 +11,7 @@ from enum import Enum
 from pathlib import Path
 
 import config
-from loki import push_log
+import events as events_mod
 
 log = logging.getLogger("towerwatch")
 
@@ -97,8 +97,8 @@ def wait_for_data_partition(path: Path = None, timeout_s: int = 30) -> None:
         _time.sleep(1)
     log.warning("Data partition not detected at %s — buffering to local dir", path)
     try:
-        push_log("WARN", f"Data partition not detected at {path}",
-                 {"event": config.LOG_EVENT_PARTITION_MISSING, "path": str(path)})
+        from loki import _get_singleton
+        events_mod.partition_missing(_get_singleton(), path=str(path))
     except Exception:
         pass
     path.mkdir(parents=True, exist_ok=True)

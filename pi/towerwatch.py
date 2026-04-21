@@ -25,6 +25,7 @@ from pathlib import Path
 import requests
 
 import config
+import events as events_mod
 import grafana as grafana_mod
 import startup as startup_mod
 from scheduling import Scheduler
@@ -71,15 +72,13 @@ def update_connection_state(state: "RuntimeState", connected: bool, timestamp: i
         if state.outage_start:
             duration = timestamp - state.outage_start
             state.total_outage_s += duration
-            log_and_push("INFO", f"Connection restored after {duration}s",
-                       event=config.LOG_EVENT_CONN_RESTORED, down_duration_s=duration)
+            events_mod.connection_restored(_loki_client, down_duration_s=duration)
         state.outage_start = 0
     elif not connected and state.connected:
         state.outage_start = timestamp
         state.outage_count += 1
         log.warning("Connection DOWN")
-        push_log("ERROR", "All targets unreachable",
-                 {"event": config.LOG_EVENT_CONN_DOWN})
+        events_mod.connection_down(_loki_client)
     state.connected = connected
 
 
@@ -209,10 +208,8 @@ def _record_outage_annotation(start_ts: float, end_ts: float, reason: str):
     if _grafana_client:
         _grafana_client.push_annotation(int(start_ts * 1000), int(end_ts * 1000),
                                         text, reason=reason, version=config.BUILD_VERSION)
-    push_log("WARN", f"Outage recorded: {gap_s}s ({gap_min} min)",
-             {"event": config.LOG_EVENT_OUTAGE_RECORDED,
-              "gap_seconds": gap_s, "reason": reason,
-              "version": config.BUILD_VERSION})
+    events_mod.outage_recorded(_loki_client, gap_seconds=gap_s,
+                               reason=reason, version=config.BUILD_VERSION)
 
 
 def _batch_and_push(state: "RuntimeState", line: str, any_connected: bool):
@@ -243,8 +240,7 @@ def _maybe_heartbeat(state: "RuntimeState"):
     now = time.time()
     if _scheduler is None or _scheduler.should_heartbeat(now):
         uptime_h = round((time.monotonic() - state.start_ts) / 3600, 1)
-        push_log("WARN", "Service heartbeat",
-                 {"event": config.LOG_EVENT_HEARTBEAT, "uptime_h": uptime_h})
+        events_mod.service_heartbeat(_loki_client, uptime_h=uptime_h)
         state.last_heartbeat_ts = now
 
 
@@ -265,14 +261,10 @@ def main():
     # Emit service_restarted at WARN so it survives LOKI_PUSH_LEVEL=WARN and shows
     # up as a deploy marker in the event-log panel. Keep service_started too for
     # backwards compat with any saved Grafana queries.
-    push_log("WARN", "Service restarted",
-             {"event": config.LOG_EVENT_SERVICE_RESTARTED,
-              "version": config.BUILD_VERSION,
-              "build_date": config.BUILD_DATE,
-              "platform": sys.platform})
-    push_log("INFO", "Service started",
-             {"event": config.LOG_EVENT_SERVICE_STARTED, "log_level": config.LOKI_PUSH_LEVEL,
-              "platform": sys.platform})
+    events_mod.service_restarted(_loki_client, version=config.BUILD_VERSION,
+                                 build_date=config.BUILD_DATE, platform=sys.platform)
+    events_mod.service_started(_loki_client, log_level=config.LOKI_PUSH_LEVEL,
+                               platform=sys.platform)
 
     # One-shot restart metric — will be pushed with the first batch.
     state.metric_batch.append(format_influx_line({"service_restart": 1}, int(time.time())))

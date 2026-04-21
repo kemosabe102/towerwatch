@@ -62,7 +62,8 @@ class GrafanaClient:
 
     def push_metrics(self, lines: list[str]) -> bool:
         """Push Influx line protocol lines to Grafana Cloud. Returns True on success."""
-        from loki import log_and_push
+        import events as events_mod
+        from loki import _get_singleton
         body_raw = "\n".join(lines).encode("utf-8")
         headers = {}
         if self._compress:
@@ -79,15 +80,12 @@ class GrafanaClient:
             )
             if resp.status_code < 300:
                 return True
-            log_and_push("WARN", f"Metric push HTTP {resp.status_code}",
-                         event=config.LOG_EVENT_METRICS_PUSH_FAIL,
-                         http_status=resp.status_code)
+            events_mod.metrics_push_failed(_get_singleton(), http_status=resp.status_code)
             if resp.status_code in (401, 403):
                 self._invalidate_session()
             return False
         except Exception as e:
-            log_and_push("WARN", f"Metric push error: {e}",
-                         event=config.LOG_EVENT_METRICS_PUSH_FAIL, error=str(e))
+            events_mod.metrics_push_failed(_get_singleton(), error=str(e))
             self._invalidate_session()
             return False
 
@@ -100,7 +98,6 @@ class GrafanaClient:
         version: str | None = None,
     ) -> None:
         """POST a region annotation to Grafana. Fire-and-forget."""
-        from loki import push_log
         if not self._annotation_token:
             return
         tags = list(config.OUTAGE_ANNOTATION_TAGS)
@@ -114,6 +111,8 @@ class GrafanaClient:
             "tags": tags,
             "text": text,
         }
+        import events as events_mod
+        from loki import _get_singleton
         try:
             r = requests.post(
                 self._annotations_url,
@@ -122,9 +121,6 @@ class GrafanaClient:
                 timeout=self._annotations_timeout,
             )
             if r.status_code >= 300:
-                push_log("WARN", f"Annotation POST failed: HTTP {r.status_code}",
-                         {"event": config.LOG_EVENT_ANNOTATION_FAILED,
-                          "status": r.status_code})
+                events_mod.annotation_failed(_get_singleton(), http_status=r.status_code)
         except Exception as e:
-            push_log("WARN", f"Annotation POST exception: {e}",
-                     {"event": config.LOG_EVENT_ANNOTATION_FAILED, "error": str(e)})
+            events_mod.annotation_failed(_get_singleton(), error=str(e))
