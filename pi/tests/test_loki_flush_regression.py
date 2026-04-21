@@ -137,5 +137,6 @@ def test_wait_for_data_partition_no_nameerror(tmp_path, monkeypatch):
     monkeypatch.setattr(time_mod, "time", fake_time)
     monkeypatch.setattr(time_mod, "sleep", lambda s: None)
 
+    import startup
     # Should not raise NameError
-    towerwatch.wait_for_data_partition(timeout=1)
+    startup.wait_for_data_partition(missing, timeout_s=1)

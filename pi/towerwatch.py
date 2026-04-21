@@ -10,33 +10,24 @@ Buffers logs locally during outages for delivery on reconnect.
 Cross-platform: runs on Raspberry Pi (production) and Windows (testing).
 """
 
-import json
 import logging
-import random
-import re
 import signal
-import socket
-import statistics
 import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import requests
-
 import config
 import events as events_mod
 import grafana as grafana_mod
+import loki as loki_mod
 import startup as startup_mod
 from scheduling import Scheduler
-from probes.ping import run_ping, PingProbe
-from probes.tcp import measure_tcp_connect, TCPProbe
-from probes.dns import measure_dns, DNSProbe
-from probes.http import measure_http_latency, measure_http_throughput, HTTPLatencyProbe, HTTPThroughputProbe
-from probes.ookla import run_speedtest, OoklaProbe
-from probes.m6 import poll_m6_signal, M6Probe
-import loki as loki_mod
-from loki import push_log, log_and_push
+from probes.ping import run_ping
+from probes.tcp import measure_tcp_connect
+from probes.dns import measure_dns
+from probes.http import measure_http_latency, measure_http_throughput
+from probes.m6 import poll_m6_signal
 
 try:
     import credentials
@@ -48,13 +39,16 @@ log = logging.getLogger("towerwatch")
 
 IS_WINDOWS = sys.platform == "win32"
 
+_grafana_client: "grafana_mod.GrafanaClient | None" = None
+_loki_client: "loki_mod.LokiClient | None" = None
+_scheduler: "Scheduler | None" = None
+
 
 # ---------------------------------------------------------------------------
-# RuntimeState: consolidated module globals
+# RuntimeState
 # ---------------------------------------------------------------------------
 @dataclass
 class RuntimeState:
-    """Encapsulates all mutable state shared across main loop functions."""
     connected: bool = True
     outage_start: int = 0
     outage_count: int = 0
@@ -66,8 +60,35 @@ class RuntimeState:
     metric_batch: list = field(default_factory=list)
 
 
-def update_connection_state(state: "RuntimeState", connected: bool, timestamp: int):
-    """Update connection state tracking. Logs transitions."""
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+def format_influx_line(fields: dict, timestamp: int) -> str:
+    parts = [f"{k}={v}" for k, v in fields.items() if v is not None]
+    return (
+        f"{config.INFLUX_MEASUREMENT},host={config.INFLUX_HOST_TAG} "
+        + ",".join(parts)
+        + f" {timestamp}"
+    )
+
+
+def _configure_logging() -> None:
+    logging.basicConfig(
+        level=getattr(logging, config.LOG_LEVEL, logging.INFO),
+        format="%(asctime)s %(levelname)s %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+
+def _install_signal_handlers(state: "RuntimeState") -> None:
+    def _on_sigterm(signum, frame):
+        log.info("SIGTERM received — shutting down gracefully")
+        state.shutdown_requested = True
+    if not IS_WINDOWS:
+        signal.signal(signal.SIGTERM, _on_sigterm)
+
+
+def _update_connection_state(state: "RuntimeState", connected: bool, timestamp: int) -> None:
     if connected and not state.connected:
         if state.outage_start:
             duration = timestamp - state.outage_start
@@ -82,68 +103,10 @@ def update_connection_state(state: "RuntimeState", connected: bool, timestamp: i
     state.connected = connected
 
 
-def format_influx_line(fields: dict, timestamp: int) -> str:
-    """Format a single Influx line protocol string."""
-    parts = [f"{k}={v}" for k, v in fields.items() if v is not None]
-    return (
-        f"{config.INFLUX_MEASUREMENT},host={config.INFLUX_HOST_TAG} "
-        + ",".join(parts)
-        + f" {timestamp}"
-    )
-
-
-
-
-
-
-
-# ---------------------------------------------------------------------------
-# Startup guard: wait for data partition
-# ---------------------------------------------------------------------------
-def wait_for_data_partition(timeout: int = 30):
-    startup_mod.wait_for_data_partition(Path(config.DATA_DIR), timeout_s=timeout)
-
-
-_scheduler: "Scheduler | None" = None
-
-
-def _build_daily_throughput_schedule() -> list[float]:
-    """Back-compat shim — delegates to module Scheduler instance."""
-    if _scheduler is not None:
-        _scheduler._rebuild_schedule(time.time())
-        return list(_scheduler._throughput_schedule)
-    return []
-
-
-# ---------------------------------------------------------------------------
-# Graceful shutdown
-# ---------------------------------------------------------------------------
-def _configure_logging() -> None:
-    logging.basicConfig(
-        level=getattr(logging, config.LOG_LEVEL, logging.INFO),
-        format="%(asctime)s %(levelname)s %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-
-
-def _install_signal_handlers(state: "RuntimeState") -> None:
-    """Install signal handlers. SIGTERM sets shutdown_requested flag in state."""
-    def _on_sigterm(signum, frame):
-        log.info("SIGTERM received — shutting down gracefully")
-        state.shutdown_requested = True
-    if not IS_WINDOWS:
-        signal.signal(signal.SIGTERM, _on_sigterm)
-
-
-# ---------------------------------------------------------------------------
-# Main loop helpers
-# ---------------------------------------------------------------------------
-def _collect_probes(state: "RuntimeState"):
-    """Run all probe sections. Returns (fields, any_connected)."""
+def _collect_probes() -> tuple[dict, bool]:
     fields = {}
     now = time.time()
 
-    # ICMP Ping (multi-target)
     any_connected = False
     for target_ip, target_label in config.PROBE_TARGETS:
         ping = run_ping(target_ip)
@@ -156,64 +119,21 @@ def _collect_probes(state: "RuntimeState"):
     fields["connected"] = 1 if any_connected else 0
     fields["metric_interval_s"] = config.METRIC_INTERVAL_S
 
-    # TCP + DNS
     fields["tcp_connect_ms"] = measure_tcp_connect()
     for ns in config.DNS_TARGETS:
-        ns_label = ns.replace(".", "_")
-        fields[f"dns_resolve_ms_{ns_label}"] = measure_dns(ns)
+        fields[f"dns_resolve_ms_{ns.replace('.', '_')}"] = measure_dns(ns)
 
-    # M6 Signal
     fields.update(poll_m6_signal())
 
-    # HTTP Latency (10KB, every 5 min)
     if _scheduler and _scheduler.should_run_http_latency(now):
         fields["http_latency_ms"] = measure_http_latency()
-
-    # HTTP Throughput (1MB, random schedule)
     if _scheduler and _scheduler.should_run_throughput(now):
         fields.update(measure_http_throughput())
 
     return fields, any_connected
 
 
-def _log_cycle(state: "RuntimeState", fields, timestamp):
-    """Log cycle summary to console and Loki."""
-    duration = fields["collection_duration_ms"]
-    log.info("Cycle t=%d connected=%s rtt_avg_google=%s duration=%dms",
-             timestamp, fields.get("connected"),
-             fields.get("rtt_avg_google"), duration)
-    push_log("DEBUG", f"Cycle complete in {duration}ms",
-             {"event": "cycle_complete", "duration_ms": duration,
-              "connected": fields.get("connected")})
-
-
-def _write_ts(path: Path, ts: float, atomic: bool = False) -> None:
-    startup_mod.write_marker(path, ts, atomic=atomic)
-
-
-def _read_ts(path: Path) -> float | None:
-    return startup_mod.read_marker(path)
-
-
-_grafana_client: "grafana_mod.GrafanaClient | None" = None
-_loki_client: "loki_mod.LokiClient | None" = None
-
-
-def _record_outage_annotation(start_ts: float, end_ts: float, reason: str):
-    """POST a region annotation for an outage gap and log it."""
-    gap_s = int(end_ts - start_ts)
-    gap_min = int(gap_s / 60)
-    text = (f"Outage: {gap_min} min — {reason} "
-            f"(v {config.BUILD_VERSION})")
-    if _grafana_client:
-        _grafana_client.push_annotation(int(start_ts * 1000), int(end_ts * 1000),
-                                        text, reason=reason, version=config.BUILD_VERSION)
-    events_mod.outage_recorded(_loki_client, gap_seconds=gap_s,
-                               reason=reason, version=config.BUILD_VERSION)
-
-
-def _batch_and_push(state: "RuntimeState", line: str, any_connected: bool):
-    """Accumulate metrics in memory; push when batch is full. Drop on failure."""
+def _push_batch(state: "RuntimeState", line: str, any_connected: bool) -> None:
     state.metric_batch.append(line)
     if len(state.metric_batch) < config.PUSH_BATCH_SIZE:
         return
@@ -228,83 +148,84 @@ def _batch_and_push(state: "RuntimeState", line: str, any_connected: bool):
     now = time.time()
     gap = now - state.last_successful_push_ts
     if gap >= config.OUTAGE_GAP_THRESHOLD_S:
-        _record_outage_annotation(state.last_successful_push_ts, now, "network_unreachable")
+        gap_s = int(gap)
+        text = f"Outage: {gap_s // 60} min — network_unreachable (v {config.BUILD_VERSION})"
+        if _grafana_client:
+            _grafana_client.push_annotation(
+                int(state.last_successful_push_ts * 1000), int(now * 1000),
+                text, reason="network_unreachable", version=config.BUILD_VERSION,
+            )
+        events_mod.outage_recorded(_loki_client, gap_seconds=gap_s,
+                                   reason="network_unreachable", version=config.BUILD_VERSION)
     state.last_successful_push_ts = now
-    _write_ts(Path(config.LAST_PUSH_MARKER_FILE), now, atomic=True)
+    startup_mod.write_marker(Path(config.LAST_PUSH_MARKER_FILE), now, atomic=True)
     if _loki_client:
         _loki_client.flush()
 
 
-def _maybe_heartbeat(state: "RuntimeState"):
-    """Emit a periodic heartbeat log to Loki so the Event Log panel stays populated."""
-    now = time.time()
-    if _scheduler is None or _scheduler.should_heartbeat(now):
-        uptime_h = round((time.monotonic() - state.start_ts) / 3600, 1)
-        events_mod.service_heartbeat(_loki_client, uptime_h=uptime_h)
-        state.last_heartbeat_ts = now
-
-
 # ---------------------------------------------------------------------------
-# Main loop
+# Main
 # ---------------------------------------------------------------------------
 def main():
     global _grafana_client, _loki_client, _scheduler
+
     state = RuntimeState()
     _configure_logging()
     _install_signal_handlers(state)
+
     _loki_client = loki_mod.LokiClient.from_config(config, credentials)
     _grafana_client = grafana_mod.GrafanaClient.from_config(config, credentials)
     _scheduler = Scheduler.from_config(config)
-    log.info("=== Towerwatch %s ===", "(Windows)" if IS_WINDOWS else "(Raspberry Pi)")
-    wait_for_data_partition()
 
-    # Emit service_restarted at WARN so it survives LOKI_PUSH_LEVEL=WARN and shows
-    # up as a deploy marker in the event-log panel. Keep service_started too for
-    # backwards compat with any saved Grafana queries.
+    log.info("=== Towerwatch %s ===", "(Windows)" if IS_WINDOWS else "(Raspberry Pi)")
+    startup_mod.wait_for_data_partition(Path(config.DATA_DIR))
+
     events_mod.service_restarted(_loki_client, version=config.BUILD_VERSION,
                                  build_date=config.BUILD_DATE, platform=sys.platform)
     events_mod.service_started(_loki_client, log_level=config.LOKI_PUSH_LEVEL,
                                platform=sys.platform)
 
-    # One-shot restart metric — will be pushed with the first batch.
     state.metric_batch.append(format_influx_line({"service_restart": 1}, int(time.time())))
 
-    # Load persisted markers and check for a cross-restart gap. Use last_alive_ts
-    # to distinguish: process was running (network outage) vs process was dead (restart).
-    loaded_last_push = _read_ts(Path(config.LAST_PUSH_MARKER_FILE))
-    loaded_last_alive = _read_ts(Path(config.LAST_ALIVE_MARKER_FILE))
-    if loaded_last_push is not None:
-        state.last_successful_push_ts = loaded_last_push
+    last_push = startup_mod.read_marker(Path(config.LAST_PUSH_MARKER_FILE))
+    last_alive = startup_mod.read_marker(Path(config.LAST_ALIVE_MARKER_FILE))
+    if last_push is not None:
+        state.last_successful_push_ts = last_push
         startup_now = time.time()
         outage = startup_mod.classify_outage(
-            now=startup_now,
-            last_push_ts=loaded_last_push,
-            last_alive_ts=loaded_last_alive,
+            now=startup_now, last_push_ts=last_push, last_alive_ts=last_alive,
             gap_threshold_s=config.OUTAGE_GAP_THRESHOLD_S,
         )
         if outage:
-            kind, _gap = outage
-            _record_outage_annotation(loaded_last_push, startup_now, kind.value)
+            kind, gap_s = outage
+            text = f"Outage: {int(gap_s) // 60} min — {kind.value} (v {config.BUILD_VERSION})"
+            _grafana_client.push_annotation(
+                int(last_push * 1000), int(startup_now * 1000),
+                text, reason=kind.value, version=config.BUILD_VERSION,
+            )
+            events_mod.outage_recorded(_loki_client, gap_seconds=int(gap_s),
+                                       reason=kind.value, version=config.BUILD_VERSION)
 
-    if _loki_client:
-        _loki_client.flush()
+    _loki_client.flush()
 
     while not state.shutdown_requested:
         cycle_start = time.perf_counter()
         timestamp = int(time.time())
 
-        fields, any_connected = _collect_probes(state)
+        fields, any_connected = _collect_probes()
+        _update_connection_state(state, any_connected, timestamp)
+        fields["collection_duration_ms"] = round((time.perf_counter() - cycle_start) * 1000)
 
-        update_connection_state(state, any_connected, timestamp)
-        fields["collection_duration_ms"] = round(
-            (time.perf_counter() - cycle_start) * 1000
-        )
+        log.info("Cycle t=%d connected=%s rtt_avg_google=%s duration=%dms",
+                 timestamp, fields.get("connected"),
+                 fields.get("rtt_avg_google"), fields["collection_duration_ms"])
 
-        _log_cycle(state, fields, timestamp)
-        _write_ts(Path(config.LAST_ALIVE_MARKER_FILE), time.time())
-        _batch_and_push(state, format_influx_line(fields, timestamp), any_connected)
+        startup_mod.write_marker(Path(config.LAST_ALIVE_MARKER_FILE), time.time())
+        _push_batch(state, format_influx_line(fields, timestamp), any_connected)
 
-        _maybe_heartbeat(state)
+        if _scheduler and _scheduler.should_heartbeat(time.time()):
+            uptime_h = round((time.monotonic() - state.start_ts) / 3600, 1)
+            events_mod.service_heartbeat(_loki_client, uptime_h=uptime_h)
 
         elapsed = time.perf_counter() - cycle_start
         time.sleep(max(0, config.METRIC_INTERVAL_S - elapsed))
@@ -319,5 +240,4 @@ if __name__ == "__main__":
         log.info("Stopped by user")
     except Exception as e:
         log.critical("Fatal error: %s", e, exc_info=True)
-        push_log("ERROR", f"Fatal: {e}", {"event": "fatal_error", "error": str(e)})
         raise
