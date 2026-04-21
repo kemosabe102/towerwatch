@@ -263,7 +263,7 @@
         "y": 0
       },
       "id": 24,
-      "title": "Current Version",
+      "title": "Deployed Version",
       "description": "Version string from the most recent service restart. Shows 'No data' if no restart occurred in the selected time range — widen the range to see it.",
       "type": "stat",
       "datasource": {
@@ -272,7 +272,7 @@
       },
       "targets": [
         {
-          "expr": "{job=\"towerwatch\", level=\"warn\"} | json | event=`service_restarted` | line_format \"{{.version}} · {{.build_date}}\"",
+          "expr": "{job=\"towerwatch\", level=\"warn\"} | json | event=`service_restarted` | line_format \"{{.version}}\"",
           "legendFormat": "Version",
           "refId": "A",
           "datasource": {
@@ -303,10 +303,11 @@
           "values": false
         },
         "orientation": "auto",
-        "textMode": "value",
+        "textMode": "value_and_name",
+        "wideLayout": false,
         "colorMode": "none",
         "graphMode": "none",
-        "justifyMode": "auto"
+        "justifyMode": "center"
       }
     },
     {
@@ -943,7 +944,7 @@
         "y": 36
       },
       "id": 25,
-      "title": "Deploy History",
+      "title": "Service Restarts",
       "description": "All service restarts (planned deploys and unplanned crashes) in the selected time range.",
       "type": "logs",
       "datasource": {
