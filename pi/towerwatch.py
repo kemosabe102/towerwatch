@@ -10,8 +10,6 @@ Buffers logs locally during outages for delivery on reconnect.
 Cross-platform: runs on Raspberry Pi (production) and Windows (testing).
 """
 
-import base64
-import gzip
 import json
 import logging
 import os
@@ -29,6 +27,7 @@ from pathlib import Path
 import requests
 
 import config
+import grafana as grafana_mod
 from probes.ping import run_ping
 from probes.tcp import measure_tcp_connect
 from probes.dns import measure_dns
@@ -83,37 +82,6 @@ def update_connection_state(state: "RuntimeState", connected: bool, timestamp: i
     state.connected = connected
 
 
-_sessions: dict = {}
-
-
-def _lazy_session(key: str, factory) -> requests.Session:
-    """Return a cached Session, creating it via factory() on first call."""
-    if key not in _sessions or _sessions[key] is None:
-        _sessions[key] = factory()
-    return _sessions[key]
-
-
-# ---------------------------------------------------------------------------
-# Grafana Push (Influx Line Protocol over HTTPS, batched + gzip)
-# ---------------------------------------------------------------------------
-def _build_auth_header() -> str:
-    creds = f"{credentials.GRAFANA_INSTANCE_ID}:{credentials.GRAFANA_API_KEY}"
-    return "Basic " + base64.b64encode(creds.encode()).decode()
-
-
-
-
-def _get_grafana_session() -> requests.Session:
-    def _factory():
-        s = requests.Session()
-        s.headers.update({
-            "Authorization": _build_auth_header(),
-            "Content-Type": "text/plain",
-        })
-        return s
-    return _lazy_session('grafana', _factory)
-
-
 def format_influx_line(fields: dict, timestamp: int) -> str:
     """Format a single Influx line protocol string."""
     parts = [f"{k}={v}" for k, v in fields.items() if v is not None]
@@ -122,37 +90,6 @@ def format_influx_line(fields: dict, timestamp: int) -> str:
         + ",".join(parts)
         + f" {timestamp}"
     )
-
-
-def push_metrics(lines: list[str]) -> bool:
-    """Push Influx line protocol lines to Grafana Cloud. Returns True on success."""
-    body_raw = "\n".join(lines).encode("utf-8")
-    headers = {}
-    if config.PUSH_COMPRESS:
-        body = gzip.compress(body_raw)
-        headers["Content-Encoding"] = "gzip"
-    else:
-        body = body_raw
-    try:
-        session = _get_grafana_session()
-        resp = session.post(
-            config.GRAFANA_PUSH_URL,
-            data=body,
-            headers=headers,
-            timeout=config.GRAFANA_PUSH_TIMEOUT_S,
-        )
-        if resp.status_code < 300:
-            return True
-        log_and_push("WARN", f"Metric push HTTP {resp.status_code}",
-                     event=config.LOG_EVENT_METRICS_PUSH_FAIL, http_status=resp.status_code)
-        if resp.status_code in (401, 403):
-            _sessions['grafana'] = None
-        return False
-    except Exception as e:
-        log_and_push("WARN", f"Metric push error: {e}",
-                     event=config.LOG_EVENT_METRICS_PUSH_FAIL, error=str(e))
-        _sessions['grafana'] = None
-        return False
 
 
 def _flush_log_buffer():
@@ -187,50 +124,6 @@ def _flush_log_buffer():
     elif consumed > 0:
         remaining = lines[consumed:]
         buf.write_text("\n".join(remaining) + "\n", encoding="utf-8")
-
-
-def push_annotation(time_ms: int, time_end_ms: int, text: str,
-                    reason: str | None = None, version: str | None = None):
-    """POST a region annotation to Grafana's annotations API.
-
-    Fire-and-forget: failures log to Loki but never block the monitor.
-    Requires GRAFANA_ANNOTATION_TOKEN in secrets.py (service account with
-    annotations:write permission).
-
-    `reason` (e.g. "network_unreachable", "process_restart") is appended to
-    tags so Grafana can filter/color by it. `version` is appended to the
-    text so deploy boundaries are visible at a glance.
-    """
-    token = getattr(credentials, "GRAFANA_ANNOTATION_TOKEN", "")
-    if not token:
-        return
-    tags = list(config.OUTAGE_ANNOTATION_TAGS)
-    if reason:
-        tags.append(f"reason:{reason}")
-    if version and version != "dev":
-        tags.append(f"version:{version}")
-    payload = {
-        "time": time_ms,
-        "timeEnd": time_end_ms,
-        "tags": tags,
-        "text": text,
-    }
-    try:
-        r = requests.post(
-            config.GRAFANA_ANNOTATIONS_URL,
-            json=payload,
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=config.GRAFANA_ANNOTATIONS_TIMEOUT_S,
-        )
-        if r.status_code >= 300:
-            push_log("WARN", f"Annotation POST failed: HTTP {r.status_code}",
-                     {"event": config.LOG_EVENT_ANNOTATION_FAILED,
-                      "status": r.status_code})
-    except Exception as e:
-        push_log("WARN", f"Annotation POST exception: {e}",
-                 {"event": config.LOG_EVENT_ANNOTATION_FAILED,
-                  "error": str(e)})
-
 
 
 
@@ -399,14 +292,18 @@ def _read_ts(path: Path) -> float | None:
         return None
 
 
+_grafana_client: "grafana_mod.GrafanaClient | None" = None
+
+
 def _record_outage_annotation(start_ts: float, end_ts: float, reason: str):
     """POST a region annotation for an outage gap and log it."""
     gap_s = int(end_ts - start_ts)
     gap_min = int(gap_s / 60)
     text = (f"Outage: {gap_min} min — {reason} "
             f"(v {config.BUILD_VERSION})")
-    push_annotation(int(start_ts * 1000), int(end_ts * 1000),
-                    text, reason=reason, version=config.BUILD_VERSION)
+    if _grafana_client:
+        _grafana_client.push_annotation(int(start_ts * 1000), int(end_ts * 1000),
+                                        text, reason=reason, version=config.BUILD_VERSION)
     push_log("WARN", f"Outage recorded: {gap_s}s ({gap_min} min)",
              {"event": config.LOG_EVENT_OUTAGE_RECORDED,
               "gap_seconds": gap_s, "reason": reason,
@@ -422,7 +319,7 @@ def _batch_and_push(state: "RuntimeState", line: str, any_connected: bool):
     state.metric_batch.clear()
     if not any_connected:
         return
-    if not push_metrics(batch):
+    if not _grafana_client or not _grafana_client.push_metrics(batch):
         log.warning("Metric push failed — batch dropped (%d lines)", len(batch))
         return
     log.info("Pushed %d lines", len(batch))
@@ -449,9 +346,11 @@ def _maybe_heartbeat(state: "RuntimeState"):
 # Main loop
 # ---------------------------------------------------------------------------
 def main():
+    global _grafana_client
     state = RuntimeState()
     _configure_logging()
     _install_signal_handlers(state)
+    _grafana_client = grafana_mod.GrafanaClient.from_config(config, credentials)
     log.info("=== Towerwatch %s ===", "(Windows)" if IS_WINDOWS else "(Raspberry Pi)")
     wait_for_data_partition()
 

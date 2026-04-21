@@ -32,17 +32,16 @@ def test_schedule_is_sorted():
     assert sched == sorted(sched)
 
 def test_schedule_skips_past_due_slots():
-    """If called late in the day, past-due slots are excluded."""
+    """If called at 23:59:59, all 4 slots (each 6h wide, last ending at midnight) are past."""
     import time as time_mod
-    # Simulate 23:50 local time — almost all slots should be past-due
     local = time_mod.localtime()
     midnight = time_mod.mktime(time_mod.struct_time((
         local.tm_year, local.tm_mon, local.tm_mday,
         0, 0, 0, 0, 0, local.tm_isdst,
     )))
-    late = midnight + 23 * 3600 + 50 * 60  # 23:50
-    sched = _build_schedule(now=late, n=4)
-    # At 23:50 with 4 equal slots (each 6h), all 4 slot midpoints are past
+    # One second before midnight — every possible random slot time is in the past
+    just_before_midnight = midnight + 86400 - 1
+    sched = _build_schedule(now=just_before_midnight, n=4)
     assert len(sched) == 0
 
 def test_schedule_slot_count_config_respected():
