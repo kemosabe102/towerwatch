@@ -11,6 +11,7 @@ __pycache__/
 pi/speedtest_bin/
 pi/speedtest.zip
 pi/data/
+data/
 
 # Local deploy wrapper (contains host-specific config)
 deploy-local.sh
