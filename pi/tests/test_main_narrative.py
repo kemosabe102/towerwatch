@@ -45,21 +45,6 @@ def test_main_two_ticks(tmp_path, monkeypatch):
     fake_grafana = _make_fake_grafana()
     fake_loki = _make_fake_loki()
 
-    tick = [0]
-
-    def fake_sleep(s):
-        tick[0] += 1
-        if tick[0] >= 2:
-            # After 2 ticks, signal shutdown
-            import towerwatch as tw
-            # Find the state object via the running frame — simplest: patch shutdown
-            tw._shutdown_after_ticks = True
-
-    # Patch clients
-    monkeypatch.setattr("towerwatch._grafana_client", None)
-    monkeypatch.setattr("towerwatch._loki_client", None)
-    monkeypatch.setattr("towerwatch._scheduler", None)
-
     import grafana as grafana_mod
     import loki as loki_mod
     from scheduling import Scheduler
@@ -69,37 +54,38 @@ def test_main_two_ticks(tmp_path, monkeypatch):
     monkeypatch.setattr(loki_mod.LokiClient, "from_config",
                         classmethod(lambda cls, *a, **kw: fake_loki))
 
-    # Make all probes fast no-ops
-    monkeypatch.setattr("towerwatch.run_ping",
+    # Make all probes fast no-ops in the tick module (where they're imported)
+    import tick
+    monkeypatch.setattr(tick, "run_ping",
                         lambda t: {"rtt_avg": 10, "rtt_min": 9, "rtt_max": 11,
                                    "jitter": 1, "pkt_loss": 0, "connected": True})
-    monkeypatch.setattr("towerwatch.measure_tcp_connect", lambda: 5)
-    monkeypatch.setattr("towerwatch.measure_dns", lambda ns: 20)
-    monkeypatch.setattr("towerwatch.poll_gateway", lambda: {})
+    monkeypatch.setattr(tick, "measure_tcp_connect", lambda: 5)
+    monkeypatch.setattr(tick, "measure_dns", lambda ns: 20)
+    monkeypatch.setattr(tick, "poll_gateway", lambda: {})
 
     # Skip partition wait
     import startup
     monkeypatch.setattr(startup, "wait_for_data_partition", lambda *a, **kw: None)
 
     # Shutdown after 2 ticks via sleep patch
-    states = []
-
-    real_sleep = time_mod.sleep
+    state_capture = {"state": None}
+    tick_count = [0]
 
     def fake_sleep_fn(s):
-        states.append("tick")
-        if len(states) >= 2:
-            towerwatch._current_state.shutdown_requested = True
+        tick_count[0] += 1
+        if tick_count[0] >= 2 and state_capture["state"]:
+            state_capture["state"].shutdown_requested = True
 
     # We need to capture the state object — patch RuntimeState to record it
-    OrigState = towerwatch.RuntimeState
+    from lifecycle import RuntimeState
+    OrigState = RuntimeState
 
     class CapturingState(OrigState):
         def __init__(self, *a, **kw):
             super().__init__(*a, **kw)
-            towerwatch._current_state = self
+            state_capture["state"] = self
 
-    monkeypatch.setattr(towerwatch, "RuntimeState", CapturingState)
+    monkeypatch.setattr("lifecycle.RuntimeState", CapturingState)
     monkeypatch.setattr(time_mod, "sleep", fake_sleep_fn)
     # Also patch perf_counter so cycles don't eat real time
     monkeypatch.setattr(time_mod, "perf_counter", lambda: 0.0)

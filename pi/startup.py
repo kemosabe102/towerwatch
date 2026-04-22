@@ -102,3 +102,30 @@ def wait_for_data_partition(path: Path = None, timeout_s: int = 30) -> None:
     except Exception:
         pass
     path.mkdir(parents=True, exist_ok=True)
+
+
+# ---------------------------------------------------------------------------
+# Startup outage reconciliation
+# ---------------------------------------------------------------------------
+def reconcile_previous_outage(grafana, loki, cfg) -> float | None:
+    """Check markers from the previous run and post an annotation if an outage is detected.
+    Returns the last_push timestamp if found, else None."""
+    last_push = read_marker(Path(cfg.LAST_PUSH_MARKER_FILE))
+    last_alive = read_marker(Path(cfg.LAST_ALIVE_MARKER_FILE))
+    if last_push is None:
+        return None
+    startup_now = _time.time()
+    outage = classify_outage(
+        now=startup_now, last_push_ts=last_push, last_alive_ts=last_alive,
+        gap_threshold_s=cfg.OUTAGE_GAP_THRESHOLD_S,
+    )
+    if outage:
+        kind, gap_s = outage
+        text = f"Outage: {int(gap_s) // 60} min — {kind.value} (v {cfg.BUILD_VERSION})"
+        grafana.push_annotation(
+            int(last_push * 1000), int(startup_now * 1000),
+            text, reason=kind.value, version=cfg.BUILD_VERSION,
+        )
+        events_mod.outage_recorded(loki, gap_seconds=int(gap_s),
+                                   reason=kind.value, version=cfg.BUILD_VERSION)
+    return last_push
