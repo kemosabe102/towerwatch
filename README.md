@@ -11,6 +11,21 @@ A continuous network-quality probe for a Raspberry Pi. Ships latency, jitter, pa
 
 ---
 
+## Further reading
+
+| Document | Purpose |
+|---|---|
+| [`docs/runbook.md`](docs/runbook.md) | Symptom-indexed ops runbook — start here at 2am |
+| [`docs/setup-pi.md`](docs/setup-pi.md) | Tailscale + read-only root hardening for unattended deployments |
+| [`docs/probe-m6.md`](docs/probe-m6.md) | Optional Netgear M6 cellular signal probe — setup or port to another router |
+| [`docs/design.md`](docs/design.md) | Per-component code reference (functions, config tables, error patterns) |
+| [`docs/bench-tests.md`](docs/bench-tests.md) | Failure-mode bench test catalog |
+| [`pi/bench/README.md`](pi/bench/README.md) | Bench harness quick-start — prerequisites, running, adding tests |
+| [`docs/code-health.md`](docs/code-health.md) | Radon complexity tracker |
+| [`CLAUDE.md`](CLAUDE.md) | Agent-facing invariants, CI/CD workflow, deploy gotchas |
+
+---
+
 ## Contents
 
 1. [Architecture](#architecture)
@@ -19,13 +34,10 @@ A continuous network-quality probe for a Raspberry Pi. Ships latency, jitter, pa
 4. [Hardware](#hardware)
 5. [Quick start](#quick-start)
 6. [Configuration](#configuration)
-7. [Remote access (Tailscale)](#remote-access-tailscale)
-8. [Read-only root filesystem](#read-only-root-filesystem)
-9. [Deploying updates](#deploying-updates)
-10. [Grafana dashboard & alerting](#grafana-dashboard--alerting)
-11. [Data budget](#data-budget)
-12. [Optional: cellular-router signal probe](#optional-cellular-router-signal-probe)
-13. [For AI assistants](#for-ai-assistants)
+7. [Deploy](#deploy)
+8. [Grafana dashboard & alerting](#grafana-dashboard--alerting)
+9. [Data budget](#data-budget)
+10. [For AI assistants](#for-ai-assistants)
 
 ---
 
@@ -77,15 +89,15 @@ towerwatch/
 │   ├── install.sh          # One-shot Pi setup (systemd, data partition, deps)
 │   ├── towerwatch.service  # systemd unit
 │   └── probes/             # Per-probe modules (ping, dns, tcp, http, m6, ookla)
-├── deploy.sh               # Generic deploy: ssh HOST, git pull, copy, restart
-├── deploy-local.sh         # Thin wrapper with a default host (gitignored)
+├── pi/bench/               # Failure-mode test harness
+├── docs/                   # Detailed guides (setup, probe config, ops)
 ├── grafana/
 │   └── dashboard.json      # Importable Grafana Cloud dashboard
-├── CLAUDE.md               # Instructions for AI assistants working in this repo
+├── ci.sh                   # Fast validation: compile, import, version stamp
+├── cd.sh                   # Deploy: pull, copy, restart
+├── CLAUDE.md               # Instructions for AI assistants
 └── README.md
 ```
-
-Agents editing this repo: start at `pi/config.py` (constants), then `pi/towerwatch.py` (loop), then `pi/probes/` (individual collectors).
 
 ---
 
@@ -101,7 +113,7 @@ Any Raspberry Pi with wired Ethernet will work. This project was developed on a 
 | Heatsink / case | Recommended if running 24/7 in a warm location. |
 | Ethernet cable | Cat5e or better to the router under test. |
 
-The probes don't care what's on the other end of the cable — 5G hotspot, fixed-wireless modem, fibre ONT, or LAN uplink. The cellular-specific signal probe (`pi/probes/m6.py`) is optional and disables itself cleanly if the router isn't reachable.
+The probes don't care what's on the other end of the cable — 5G hotspot, fixed-wireless modem, fibre ONT, or LAN uplink. The optional cellular signal probe (`pi/probes/m6.py`) disables itself cleanly if the router isn't reachable — see [`docs/probe-m6.md`](docs/probe-m6.md).
 
 ---
 
@@ -145,7 +157,7 @@ In Grafana Cloud:
 
 ### Local dev (Windows/macOS/Linux)
 
-The script is cross-platform. Paths, ping flags, and the data partition check are gated on `sys.platform`.
+Cross-platform — see [`CLAUDE.md`](CLAUDE.md) §Windows dev mechanics for path/flag differences.
 
 ```bash
 cd pi
@@ -172,78 +184,17 @@ To generate Grafana Cloud credentials: log in to grafana.com → your stack → 
 
 To enable sticky outage annotations: create a service account in your Grafana stack with the `annotations:write` permission, mint a token, and paste it into `GRAFANA_ANNOTATION_TOKEN`. Also set `GRAFANA_ANNOTATIONS_URL` in `config.py` to `https://<your-stack>.grafana.net/api/annotations` (the user-facing stack URL, **not** the `prometheus-prod-*` push endpoint).
 
-### Invariants worth knowing
-
-- Metric units are `_ms`, not seconds. Don't "fix" this — dashboards depend on it.
-- Target labels are baked into field names (e.g. `rtt_avg_google`), not Prometheus label selectors. This is deliberate; dashboards query by metric name.
-- The **log** buffer is capped at 256 KB (`LOKI_BUFFER_MAX_BYTES`) to avoid filling the 1 GB data partition. Metrics are not buffered.
-- `LOKI_PUSH_LEVEL` defaults to `WARN` in production. `INFO` is for local dev only; `INFO` in production will flood Loki.
+> Agents: see [`CLAUDE.md`](CLAUDE.md) for metric-naming and push-level invariants that must not be "cleaned up."
 
 ---
 
-## Remote access (Tailscale)
+## Deploy
 
-Optional. Tailscale gives the Pi a stable private IP reachable from anywhere, without port forwarding. The free Personal plan is enough.
+Run `./ci.sh full && ./cd.sh <user@host>` from your dev machine. `ci.sh` stamps `pi/version.txt`; `cd.sh` copies files and restarts the service.
 
-```bash
-# On the Pi
-curl -fsSL https://tailscale.com/install.sh | sh
+For dashboard updates: re-import `grafana/dashboard.json` in Grafana Cloud (Dashboards → New → Import → Upload JSON).
 
-# So Tailscale state survives an overlayfs root (see next section)
-sudo systemctl enable --now var-lib-tailscale.mount
-
-sudo tailscale up   # opens an auth URL
-```
-
-Install Tailscale on your dev machine too, log in with the same account, and `ssh <user>@<tailscale-ip>` from anywhere.
-
----
-
-## Read-only root filesystem
-
-Recommended for unattended remote deployments — the root partition resets on every reboot, so a stray write or SD-card glitch can't corrupt the system. The data partition stays writable so the buffer and Tailscale state persist.
-
-> **Do not use `raspi-config` → Overlay File System on Bookworm if you rely on a separate data partition.** The overlay applies to *all* mounted partitions by default, making your data partition non-persistent. This is documented upstream ([raspberrypi/bookworm-feedback#137](https://github.com/raspberrypi/bookworm-feedback/issues/137), closed by design; proposed fix [RPi-Distro/raspi-config#225](https://github.com/RPi-Distro/raspi-config/pull/225) was never merged). Configure manually instead:
-
-```bash
-echo 'overlayroot=tmpfs:recurse=0' | sudo tee /etc/overlayroot.local.conf
-sudo reboot
-```
-
-`recurse=0` is the critical flag — without it the data partition gets overlaid too.
-
-Before enabling overlayroot, confirm `install.sh` has already:
-- Bind-mounted `/var/lib/tailscale/` → `/opt/towerwatch/data/tailscale-state/`
-- Configured `fake-hwclock` to write to the data partition
-
----
-
-## Deploying updates
-
-From any machine with SSH to the Pi:
-
-```bash
-bash deploy.sh <user>@<host-or-tailscale-ip>
-# e.g. bash deploy.sh pi@towerwatch.local
-```
-
-The script SSHes in, `git pull --ff-only`s the repo, copies `pi/*.py` to `/opt/towerwatch/`, and restarts the systemd unit.
-
-`deploy-local.sh` is a gitignored wrapper that hardcodes your host.
-
-### Manual deploy
-
-```bash
-ssh <user>@<host>
-cd ~/towerwatch && git pull --ff-only
-sudo cp pi/towerwatch.py pi/config.py pi/probes/*.py /opt/towerwatch/
-sudo systemctl restart towerwatch
-journalctl -u towerwatch -f
-```
-
-### Dashboard updates
-
-Re-import `grafana/dashboard.json` in Grafana Cloud (Dashboards → New → Import → Upload JSON). No Pi access required.
+See [`docs/runbook.md#remote-deploy`](docs/runbook.md#remote-deploy) for post-deploy verification, failure modes, and manual fallback.
 
 ---
 
@@ -261,17 +212,6 @@ If your connection is metered, treat this as a hard constraint. At defaults the 
 
 ---
 
-## Optional: cellular-router signal probe
-
-`pi/probes/m6.py` polls the admin API of a **Netgear Nighthawk M6** 5G/LTE hotspot for RSRP, RSRQ, SINR, and current band. If you have a different router, either:
-
-- Disable the probe by clearing `M6_ADMIN_URL` in `config.py`, or
-- Write a sibling module in `pi/probes/` that exposes the same metric shape.
-
-For an M6 specifically: connect to its Wi-Fi, visit `http://192.168.1.1`, enable the Ethernet port and Plugged-In Mode in Advanced Settings, then set the admin password in `secrets.py`.
-
----
-
 ## For AI assistants
 
-If you're an AI agent working in this repo, read **`CLAUDE.md`** first. It contains the authoritative working instructions: delegation patterns, data-budget guardrails, deployment conventions, and the metric-naming invariants that must not be "cleaned up." This README is for humans onboarding to the project; `CLAUDE.md` is for you.
+If you're an AI agent working in this repo, read **[`CLAUDE.md`](CLAUDE.md)** first. It contains the authoritative working instructions: delegation patterns, data-budget guardrails, deployment conventions, and the metric-naming invariants that must not be "cleaned up." This README is for humans onboarding to the project; `CLAUDE.md` is for you.

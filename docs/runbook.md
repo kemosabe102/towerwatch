@@ -78,7 +78,7 @@ curl -v -u "<GRAFANA_INSTANCE_ID>:<GRAFANA_API_KEY>" \
 
 ## Loki push failing
 
-**Symptom:** Prom has metrics but Loki has no recent log events. Note: non-2xx Loki responses are currently swallowed silently (known gap — see bench test 4).
+**Symptom:** Prom has metrics but Loki has no recent log events. Note: non-2xx Loki responses are currently swallowed silently (known gap — see [bench test 4](bench-tests.md)).
 
 **Check:**
 ```bash
@@ -220,7 +220,7 @@ timedatectl show   # NTPSynchronized should flip to yes
 
 If NTP can't sync (carrier blocks NTP): `fake-hwclock` will at least keep time sane across reboots. Check `/etc/fake-hwclock.data`.
 
-**Known gap:** Negative push-gap (clock stepped backward) produces a bogus annotation (bench test 8, expected-failure). Delete the bogus annotation manually via Grafana UI or:
+**Known gap:** Negative push-gap (clock stepped backward) produces a bogus annotation ([bench test 8](bench-tests.md), expected-failure). Delete the bogus annotation manually via Grafana UI or:
 ```bash
 curl -X DELETE -H "Authorization: Bearer <GRAFANA_ANNOTATION_TOKEN>" \
   "https://towerwatch.grafana.net/api/annotations/<id>"
