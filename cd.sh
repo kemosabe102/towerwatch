@@ -1,62 +1,50 @@
 #!/bin/bash
+# =============================================================
+# Towerwatch CD Script — deploy to a remote Pi over SSH.
+# Run from your dev machine after ci.sh succeeds.
+#
+# Usage:
+#   ./cd.sh <user@host>
+#   e.g. ./cd.sh admin@towerwatch.local
+#        ./cd.sh admin@100.76.154.81   (Tailscale)
+#
+# Requires: pi/version.txt stamped by ci.sh (refuses to deploy if stale).
+# =============================================================
 set -euo pipefail
 
-# =============================================================
-# Towerwatch CD Script — ship to the Pi.
-# Run from your dev machine after ./ci.sh succeeds.
-#
-# Usage: bash cd.sh <user@host> [repo_dir] [install_dir]
-#
-# Arguments:
-#   user@host    SSH target (required)
-#   repo_dir     Git repo path on Pi (default: /home/admin/towerwatch)
-#   install_dir  Service install path (default: /opt/towerwatch)
-# =============================================================
+PI_HOST="${1:?Usage: cd.sh <user@host>}"
 
-if [ $# -lt 1 ]; then
-    echo "Usage: bash cd.sh <user@host> [repo_dir] [install_dir]"
-    echo "  Example: bash cd.sh pi@towerwatch.local"
-    exit 1
-fi
+REPO_DIR="~/towerwatch"
+INSTALL_DIR="/opt/towerwatch"
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$REPO_ROOT"
-
-# --- CI freshness check -----------------------------------------------------
-# version.txt must exist and be at least as new as any .py file in pi/.
-# Protects against deploying an un-stamped (or stale-stamp) tree.
-if [[ ! -s pi/version.txt ]]; then
-    echo "ERROR: pi/version.txt missing. Run ./ci.sh first."
-    exit 1
-fi
-STAMP_MTIME=$(stat -c %Y pi/version.txt 2>/dev/null || stat -f %m pi/version.txt)
-NEWER=$(find pi -name "*.py" -newer pi/version.txt -print -quit)
-if [[ -n "$NEWER" ]]; then
-    echo "ERROR: $NEWER is newer than pi/version.txt — run ./ci.sh again."
-    exit 1
-fi
-
-PI_HOST="$1"
-REPO_DIR="${2:-/home/admin/towerwatch}"
-INSTALL_DIR="${3:-/opt/towerwatch}"
-
-VERSION_STAMP="$(cat pi/version.txt)"
+# Guard: version.txt must exist and be at least as new as every .py under pi/
 echo "=== Towerwatch Deploy to $PI_HOST ==="
-echo "    Version: $VERSION_STAMP"
+if [[ ! -s pi/version.txt ]]; then
+    echo "ERROR: pi/version.txt is missing or empty. Run ./ci.sh first."
+    exit 1
+fi
 
-# SCP gitignored files the Pi needs but git pull won't deliver.
+VERSION_TS=$(date -r pi/version.txt +%s 2>/dev/null || stat -c %Y pi/version.txt 2>/dev/null || echo 0)
+for f in pi/*.py pi/probes/*.py; do
+    F_TS=$(date -r "$f" +%s 2>/dev/null || stat -c %Y "$f" 2>/dev/null || echo 0)
+    if [[ "$F_TS" -gt "$VERSION_TS" ]]; then
+        echo "ERROR: $f is newer than pi/version.txt — re-run ./ci.sh."
+        exit 1
+    fi
+done
+
+VERSION="$(cat pi/version.txt)"
+echo "    Version: $VERSION"
+
+# Step 0: upload version.txt and credentials to Pi
 echo "[0/3] Uploading version.txt and credentials.py..."
 scp pi/version.txt "$PI_HOST:$REPO_DIR/pi/version.txt"
 if [[ -f pi/credentials.py ]]; then
     scp pi/credentials.py "$PI_HOST:/tmp/towerwatch-credentials.py"
-    ssh "$PI_HOST" "sudo mv /tmp/towerwatch-credentials.py $INSTALL_DIR/credentials.py && sudo chown towerwatch:towerwatch $INSTALL_DIR/credentials.py && sudo chmod 600 $INSTALL_DIR/credentials.py"
-else
-    echo "  WARNING: pi/credentials.py not found locally — skipping credentials deploy."
-    echo "           Ensure /opt/towerwatch/credentials.py is up to date on the Pi."
 fi
 
-ssh "$PI_HOST" bash -s "$REPO_DIR" "$INSTALL_DIR" << 'REMOTE'
-set -euo pipefail
+# Steps 1–3 run on the Pi
+ssh "$PI_HOST" bash -s "$REPO_DIR" "$INSTALL_DIR" "$VERSION" << 'REMOTE'
 REPO_DIR="$1"
 INSTALL_DIR="$2"
 
@@ -64,17 +52,22 @@ INSTALL_DIR="$2"
 echo "[1/3] Pulling latest code..."
 cd "$REPO_DIR" && git pull --ff-only
 sudo cp pi/towerwatch.py pi/config.py pi/loki.py pi/grafana.py \
-    pi/events.py pi/scheduling.py pi/startup.py pi/version.txt "$INSTALL_DIR/"
+    pi/events.py pi/scheduling.py pi/startup.py pi/lifecycle.py pi/tick.py \
+    pi/version.txt "$INSTALL_DIR/"
 sudo cp -r pi/probes "$INSTALL_DIR/"
 sudo chown towerwatch:towerwatch \
     "$INSTALL_DIR/towerwatch.py" "$INSTALL_DIR/config.py" \
     "$INSTALL_DIR/loki.py" "$INSTALL_DIR/grafana.py" \
     "$INSTALL_DIR/events.py" "$INSTALL_DIR/scheduling.py" \
-    "$INSTALL_DIR/startup.py" "$INSTALL_DIR/version.txt"
+    "$INSTALL_DIR/startup.py" "$INSTALL_DIR/lifecycle.py" \
+    "$INSTALL_DIR/tick.py" "$INSTALL_DIR/version.txt"
 echo "  Files copied to $INSTALL_DIR (version: $(cat $INSTALL_DIR/version.txt))"
 
-# Step 1.5: Clean up legacy metrics buffer (replaced by Loki log buffer)
-sudo rm -f "$INSTALL_DIR/data/buffer/metrics.csv" "$INSTALL_DIR/data/buffer/metrics.csv.tmp"
+# Copy credentials if we uploaded them
+if [[ -f /tmp/towerwatch-credentials.py ]]; then
+    sudo mv /tmp/towerwatch-credentials.py "$INSTALL_DIR/credentials.py"
+    sudo chown towerwatch:towerwatch "$INSTALL_DIR/credentials.py"
+fi
 
 # Step 2: Restart service
 echo "[2/3] Restarting towerwatch service..."
@@ -82,12 +75,12 @@ sudo systemctl restart towerwatch
 
 # Step 3: Verify
 echo "[3/3] Verifying..."
-sleep 2
-if sudo systemctl is-active --quiet towerwatch; then
-    echo "=== Deploy complete — towerwatch is running ==="
-else
+sleep 10
+if ! systemctl is-active --quiet towerwatch; then
     echo "=== ERROR: towerwatch failed to start ==="
-    sudo journalctl -u towerwatch --no-pager -n 20
+    journalctl -u towerwatch --no-pager -n 30
     exit 1
 fi
+echo "=== Deploy OK — towerwatch is running ==="
+journalctl -u towerwatch --no-pager -n 5
 REMOTE
