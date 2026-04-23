@@ -1,77 +1,179 @@
-"""Characterization tests for probes/http.py — 4 tests."""
-from unittest.mock import patch, MagicMock
+"""Tests for HTTPLatencyProbe / HTTPThroughputProbe.
 
-import pytest
+Every collaborator is injected — no `patch`, no `monkeypatch`.
+"""
+import sys
+from pathlib import Path
+
 import requests
 
+_PI = Path(__file__).resolve().parents[1]
+if str(_PI) not in sys.path:
+    sys.path.insert(0, str(_PI))
 
-def _fake_response(content=b"x" * 10000, status=200):
-    resp = MagicMock()
-    resp.content = content
-    resp.status_code = status
-    resp.raise_for_status.return_value = None
-    return resp
+from tests.fakes import FakeClock, FakeLoki, FakeResponse, FakeSession
 
 
-def _reset_session():
-    import probes.http as http_mod
-    http_mod._http_session = None
+def _ok_resp(content=b"x" * 10_000):
+    return FakeResponse(status_code=200, content=content)
 
 
+# ---------------------------------------------------------------------------
+# Latency
+# ---------------------------------------------------------------------------
 def test_http_latency_happy_path():
-    import probes.http as http_mod
-    _reset_session()
-    with patch("probes.http.requests.Session") as MockSession:
-        MockSession.return_value.get.return_value = _fake_response()
-        with patch("probes.http.time.perf_counter", side_effect=[0.0, 0.080]):
-            result = http_mod.measure_http_latency()
-    assert result == 80
-    MockSession.return_value.get.assert_called_once()
-    _reset_session()
+    from probes.http import HTTPLatencyProbe
+    session = FakeSession(get_responses=[_ok_resp()])
+    probe = HTTPLatencyProbe(
+        session=session,
+        clock=FakeClock(perf=[0.0, 0.080]),
+        loki=FakeLoki(),
+    )
+    assert probe.measure() == 80
+    assert len(session.get_calls) == 1
 
 
-def test_http_latency_error_returns_zero():
-    import probes.http as http_mod
-    _reset_session()
-    with patch("probes.http.requests.Session") as MockSession:
-        MockSession.return_value.get.side_effect = requests.ConnectionError("down")
-        result = http_mod.measure_http_latency()
-    assert result == 0
-    _reset_session()
+def test_http_latency_connection_error_returns_zero():
+    from probes.http import HTTPLatencyProbe
+    probe = HTTPLatencyProbe(
+        session=FakeSession(get_responses=[requests.ConnectionError("down")]),
+        clock=FakeClock(perf=[0.0]),
+        loki=FakeLoki(),
+    )
+    assert probe.measure() == 0
 
 
+def test_http_latency_timeout_returns_zero():
+    from probes.http import HTTPLatencyProbe
+    probe = HTTPLatencyProbe(
+        session=FakeSession(get_responses=[requests.Timeout("slow")]),
+        clock=FakeClock(perf=[0.0]),
+        loki=FakeLoki(),
+    )
+    assert probe.measure() == 0
+
+
+def test_http_latency_raises_for_status_caught():
+    from probes.http import HTTPLatencyProbe
+    bad = FakeResponse(status_code=500, content=b"")
+    bad._raise = requests.HTTPError("500")
+    probe = HTTPLatencyProbe(
+        session=FakeSession(get_responses=[bad]),
+        clock=FakeClock(perf=[0.0, 0.010]),
+        loki=FakeLoki(),
+    )
+    assert probe.measure() == 0
+
+
+# ---------------------------------------------------------------------------
+# Throughput happy + guard paths
+# ---------------------------------------------------------------------------
 def test_http_throughput_happy_path():
-    import probes.http as http_mod
-    _reset_session()
-    content = b"x" * 1_000_000
-    with patch("probes.http.requests.Session") as MockSession:
-        MockSession.return_value.get.return_value = _fake_response(content=content)
-        with patch("probes.http.time.perf_counter", side_effect=[0.0, 1.0]):
-            result = http_mod.measure_http_throughput()
+    from probes.http import HTTPThroughputProbe
+    loki = FakeLoki()
+    probe = HTTPThroughputProbe(
+        session=FakeSession(get_responses=[_ok_resp(content=b"x" * 1_000_000)]),
+        clock=FakeClock(perf=[0.0, 1.0]),
+        loki=loki,
+    )
+    result = probe.measure()
+    assert result == {"http_throughput_ms": 1000, "http_throughput_mbps": 8.0}
+    # On success we emit the OK event
+    assert any(lp[2].get("event") and "throughput" in str(lp[2]["event"]).lower()
+               for lp in loki.log_and_pushes)
+
+
+def test_http_throughput_zero_elapsed_returns_zeros():
+    """Guard against division by zero when perf_counter returns identical values."""
+    from probes.http import HTTPThroughputProbe
+    loki = FakeLoki()
+    probe = HTTPThroughputProbe(
+        session=FakeSession(get_responses=[_ok_resp(content=b"x" * 1_000_000)]),
+        clock=FakeClock(perf=[0.0, 0.0]),
+        loki=loki,
+    )
+    assert probe.measure() == {"http_throughput_ms": 0, "http_throughput_mbps": 0}
+    # Failed event emitted with an `error=` containing the diagnostic message
+    assert any("invalid sample" in (lp[2].get("error") or "")
+               for lp in loki.log_and_pushes)
+
+
+def test_http_throughput_empty_body_returns_zeros():
+    from probes.http import HTTPThroughputProbe
+    loki = FakeLoki()
+    probe = HTTPThroughputProbe(
+        session=FakeSession(get_responses=[_ok_resp(content=b"")]),
+        clock=FakeClock(perf=[0.0, 1.0]),
+        loki=loki,
+    )
+    assert probe.measure() == {"http_throughput_ms": 0, "http_throughput_mbps": 0}
+    assert any("invalid sample" in (lp[2].get("error") or "")
+               for lp in loki.log_and_pushes)
+
+
+# ---------------------------------------------------------------------------
+# Throughput error paths
+# ---------------------------------------------------------------------------
+def test_http_throughput_timeout_returns_zeros():
+    from probes.http import HTTPThroughputProbe
+    loki = FakeLoki()
+    probe = HTTPThroughputProbe(
+        session=FakeSession(get_responses=[requests.Timeout("timed out")]),
+        clock=FakeClock(perf=[0.0]),
+        loki=loki,
+    )
+    assert probe.measure() == {"http_throughput_ms": 0, "http_throughput_mbps": 0}
+    assert any("timed out" in (lp[2].get("error") or "")
+               for lp in loki.log_and_pushes)
+
+
+def test_http_throughput_connection_error_returns_zeros():
+    from probes.http import HTTPThroughputProbe
+    probe = HTTPThroughputProbe(
+        session=FakeSession(get_responses=[requests.ConnectionError("reset")]),
+        clock=FakeClock(perf=[0.0]),
+        loki=FakeLoki(),
+    )
+    assert probe.measure() == {"http_throughput_ms": 0, "http_throughput_mbps": 0}
+
+
+def test_http_throughput_4xx_returns_zeros():
+    from probes.http import HTTPThroughputProbe
+    bad = FakeResponse(status_code=404, content=b"")
+    bad._raise = requests.HTTPError("404")
+    probe = HTTPThroughputProbe(
+        session=FakeSession(get_responses=[bad]),
+        clock=FakeClock(perf=[0.0, 0.01]),
+        loki=FakeLoki(),
+    )
+    assert probe.measure() == {"http_throughput_ms": 0, "http_throughput_mbps": 0}
+
+
+def test_http_throughput_short_body_uses_actual_bytes():
+    """Pins current behaviour: short body computes mbps off what arrived."""
+    from probes.http import HTTPThroughputProbe
+    probe = HTTPThroughputProbe(
+        session=FakeSession(get_responses=[_ok_resp(content=b"x" * 100)]),
+        clock=FakeClock(perf=[0.0, 1.0]),
+        loki=FakeLoki(),
+    )
+    result = probe.measure()
     assert result["http_throughput_ms"] == 1000
-    assert result["http_throughput_mbps"] == 8.0
-    _reset_session()
+    assert result["http_throughput_mbps"] == round((100 * 8) / 1.0 / 1_000_000, 2)
 
 
-def test_http_throughput_error_returns_zeros():
-    import probes.http as http_mod
-    _reset_session()
-    with patch("probes.http.requests.Session") as MockSession:
-        MockSession.return_value.get.side_effect = Exception("timeout")
-        result = http_mod.measure_http_throughput()
-    assert result == {"http_throughput_ms": 0, "http_throughput_mbps": 0}
-    _reset_session()
-
-
-def test_http_reuses_session():
-    """Both latency and throughput probes should share a cached Session."""
-    import probes.http as http_mod
-    _reset_session()
-    with patch("probes.http.requests.Session") as MockSession:
-        instance = MockSession.return_value
-        instance.get.return_value = _fake_response()
-        http_mod.measure_http_latency()
-        http_mod.measure_http_latency()
-    # Session constructor called only once if reused
-    assert MockSession.call_count == 1
-    _reset_session()
+# ---------------------------------------------------------------------------
+# Session injection pins: probe does NOT cache / share sessions across calls
+# ---------------------------------------------------------------------------
+def test_probe_uses_injected_session_across_measure_calls():
+    """Each call to .measure() reuses the injected session."""
+    from probes.http import HTTPLatencyProbe
+    session = FakeSession(get_responses=[_ok_resp(), _ok_resp()])
+    probe = HTTPLatencyProbe(
+        session=session,
+        clock=FakeClock(perf=[0.0, 0.01, 0.0, 0.02]),
+        loki=FakeLoki(),
+    )
+    probe.measure()
+    probe.measure()
+    assert len(session.get_calls) == 2

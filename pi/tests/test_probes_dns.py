@@ -1,47 +1,103 @@
-"""Characterization tests for probes/dns.py — 5 tests."""
+"""Tests for DNSProbe — no patch, fakes injected directly."""
+import socket
 import sys
-from unittest.mock import patch, MagicMock
-import time
+from pathlib import Path
 
-import pytest
+_PI = Path(__file__).resolve().parents[1]
+if str(_PI) not in sys.path:
+    sys.path.insert(0, str(_PI))
 
+from tests.fakes import FakeClock, FakeLoki, FakeResolver
 
-def _measure_dns_patched(ns, side_effect=None, resolve_return=None):
-    """Call measure_dns with a mocked resolver."""
-    import probes.dns as dns_mod
-
-    mock_resolver = MagicMock()
-    if side_effect:
-        mock_resolver.resolve.side_effect = side_effect
-    else:
-        mock_resolver.resolve.return_value = resolve_return or MagicMock()
-
-    with patch("probes.dns.dns.resolver.Resolver", return_value=mock_resolver):
-        with patch("probes.dns.time.perf_counter", side_effect=[0.0, 0.025]):
-            return dns_mod.measure_dns(ns)
+import dns.resolver
 
 
+def _make_probe(raises=None, result=None):
+    from probes.dns import DNSProbe
+    resolver = FakeResolver(result=result, raises=raises)
+    return DNSProbe(
+        "8.8.8.8",
+        resolver_factory=lambda: resolver,
+        clock=FakeClock(perf=[0.0, 0.025]),
+        loki=FakeLoki(),
+    ), resolver
+
+
+# ---------------------------------------------------------------------------
+# Happy path
+# ---------------------------------------------------------------------------
 def test_dns_success_returns_ms():
-    result = _measure_dns_patched("8.8.8.8")
-    assert result == 25   # round(0.025 * 1000)
+    probe, _ = _make_probe(result=[])
+    assert probe.measure() == 25
 
+
+# ---------------------------------------------------------------------------
+# Error paths → 0
+# ---------------------------------------------------------------------------
 def test_dns_nxdomain_returns_zero():
-    import dns.resolver
-    result = _measure_dns_patched("8.8.8.8", side_effect=dns.resolver.NXDOMAIN())
-    assert result == 0
+    probe, _ = _make_probe(raises=dns.resolver.NXDOMAIN())
+    assert probe.measure() == 0
 
-def test_dns_servfail_returns_zero():
-    import dns.resolver
-    result = _measure_dns_patched("8.8.8.8", side_effect=dns.resolver.NoAnswer())
-    assert result == 0
+
+def test_dns_no_answer_returns_zero():
+    probe, _ = _make_probe(raises=dns.resolver.NoAnswer())
+    assert probe.measure() == 0
+
 
 def test_dns_timeout_returns_zero():
-    import dns.resolver
-    result = _measure_dns_patched("8.8.8.8", side_effect=dns.resolver.Timeout())
-    assert result == 0
+    probe, _ = _make_probe(raises=dns.resolver.Timeout())
+    assert probe.measure() == 0
 
-def test_dns_sentinel_is_zero():
-    """Lock the current sentinel value (0.0 / 0). Pass 6 may change to None."""
-    import dns.resolver
-    result = _measure_dns_patched("1.1.1.1", side_effect=Exception("generic"))
-    assert result == 0
+
+def test_dns_generic_exception_returns_zero():
+    probe, _ = _make_probe(raises=Exception("generic"))
+    assert probe.measure() == 0
+
+
+def test_dns_no_nameservers_returns_zero():
+    probe, _ = _make_probe(raises=dns.resolver.NoNameservers())
+    assert probe.measure() == 0
+
+
+def test_dns_socket_error_returns_zero():
+    probe, _ = _make_probe(raises=socket.gaierror("unreachable"))
+    assert probe.measure() == 0
+
+
+def test_dns_oserror_returns_zero():
+    probe, _ = _make_probe(raises=OSError("network down"))
+    assert probe.measure() == 0
+
+
+# ---------------------------------------------------------------------------
+# Failure emits DNS failed event
+# ---------------------------------------------------------------------------
+def test_dns_failure_emits_event():
+    from probes.dns import DNSProbe
+    loki = FakeLoki()
+    probe = DNSProbe(
+        "1.1.1.1",
+        resolver_factory=lambda: FakeResolver(raises=dns.resolver.Timeout()),
+        clock=FakeClock(perf=[0.0]),
+        loki=loki,
+    )
+    probe.measure()
+    assert any(lp[2].get("event") == "dns_failed" for lp in loki.log_and_pushes)
+
+
+# ---------------------------------------------------------------------------
+# Nameserver/lifetime are applied to the resolver
+# ---------------------------------------------------------------------------
+def test_dns_resolver_configured_with_nameserver_and_lifetime():
+    from probes.dns import DNSProbe
+    resolver = FakeResolver(result=[])
+    probe = DNSProbe(
+        "1.1.1.1",
+        resolver_factory=lambda: resolver,
+        clock=FakeClock(perf=[0.0, 0.01]),
+        loki=FakeLoki(),
+        lifetime_s=3,
+    )
+    probe.measure()
+    assert resolver.nameservers == ["1.1.1.1"]
+    assert resolver.lifetime == 3

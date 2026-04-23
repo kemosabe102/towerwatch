@@ -1,104 +1,131 @@
-"""Tests for probes/gateway.py — vendor-agnostic gateway health probe."""
-import socket
+"""Tests for GatewayProbe — no patch, fakes injected directly."""
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
 
 _PI = Path(__file__).resolve().parents[1]
 if str(_PI) not in sys.path:
     sys.path.insert(0, str(_PI))
 
+from tests.fakes import FakeClock, FakeResponse, fake_socket_factory
+
+
+def _http_ok(text=""):
+    r = FakeResponse(status_code=200, text=text)
+    return r
+
+
+def _recording_get(responses):
+    """Return a callable compatible with requests.get that pops responses in order."""
+    queue = list(responses)
+    calls = []
+
+    def _get(url, **kwargs):
+        calls.append((url, kwargs))
+        if not queue:
+            raise AssertionError(f"no response queued for {url}")
+        r = queue.pop(0)
+        if isinstance(r, Exception):
+            raise r
+        if callable(r):
+            return r(url, kwargs)
+        return r
+
+    _get.calls = calls
+    return _get
+
 
 # ---------------------------------------------------------------------------
-# Baseline: TCP success
+# Baseline TCP + HTTP
 # ---------------------------------------------------------------------------
-def test_baseline_tcp_success(monkeypatch):
-    import probes.gateway as gw
-
-    monkeypatch.setattr(gw.config, "GATEWAY_VENDOR", "")
-
-    mock_sock = MagicMock()
-    mock_sock.connect.return_value = None
-    monkeypatch.setattr(gw.socket, "socket", lambda *a, **kw: mock_sock)
-
-    with patch("probes.gateway.requests.get") as mock_get:
-        mock_get.return_value = MagicMock(status_code=200)
-        result = gw.poll_gateway()
-
-    assert result["gateway_tcp_ms"] > 0 or result["gateway_tcp_ms"] == 0  # just no KeyError
-    assert "gateway_tcp_ms" in result
-    assert "gateway_http_ms" in result
+def test_baseline_tcp_and_http_success():
+    from probes.gateway import GatewayProbe
+    probe = GatewayProbe(
+        vendor="", ip="192.168.1.1", tcp_port=80, timeout_s=2,
+        socket_factory=fake_socket_factory(),
+        requests_get=_recording_get([_http_ok()]),
+        clock=FakeClock(perf=[0.0, 0.005, 0.0, 0.010]),
+    )
+    result = probe.poll()
+    assert result["gateway_tcp_ms"] == 5.0
+    assert result["gateway_http_ms"] == 10.0
 
 
-# ---------------------------------------------------------------------------
-# Baseline: HTTP failure returns 0
-# ---------------------------------------------------------------------------
-def test_baseline_http_failure(monkeypatch):
-    import probes.gateway as gw
-
-    monkeypatch.setattr(gw.config, "GATEWAY_VENDOR", "")
-
-    mock_sock = MagicMock()
-    mock_sock.connect.return_value = None
-    monkeypatch.setattr(gw.socket, "socket", lambda *a, **kw: mock_sock)
-
-    with patch("probes.gateway.requests.get", side_effect=OSError("unreachable")):
-        result = gw.poll_gateway()
-
+def test_baseline_http_failure_returns_zero():
+    from probes.gateway import GatewayProbe
+    probe = GatewayProbe(
+        vendor="", ip="192.168.1.1", tcp_port=80, timeout_s=2,
+        socket_factory=fake_socket_factory(),
+        requests_get=_recording_get([OSError("unreachable")]),
+        clock=FakeClock(perf=[0.0, 0.005, 0.0]),
+    )
+    result = probe.poll()
     assert result["gateway_http_ms"] == 0
-    assert "gateway_tcp_ms" in result
+    assert result["gateway_tcp_ms"] > 0
+
+
+def test_baseline_tcp_failure_returns_zero():
+    from probes.gateway import GatewayProbe
+    probe = GatewayProbe(
+        vendor="", ip="192.168.1.1", tcp_port=80, timeout_s=2,
+        socket_factory=fake_socket_factory(
+            connect_raises=OSError("refused")),
+        requests_get=_recording_get([_http_ok()]),
+        clock=FakeClock(perf=[0.0, 0.0, 0.01]),
+    )
+    result = probe.poll()
+    assert result["gateway_tcp_ms"] == 0
 
 
 # ---------------------------------------------------------------------------
-# M6 vendor: delegates to poll_m6_signal
+# M6 vendor delegation
 # ---------------------------------------------------------------------------
-def test_m6_vendor_delegates_to_m6_probe(monkeypatch):
-    import probes.gateway as gw
-
-    monkeypatch.setattr(gw.config, "GATEWAY_VENDOR", "m6")
-
-    mock_sock = MagicMock()
-    monkeypatch.setattr(gw.socket, "socket", lambda *a, **kw: mock_sock)
-
-    with patch("probes.gateway.requests.get", return_value=MagicMock(status_code=200)):
-        with patch("probes.m6.poll_m6_signal", return_value={"m6_rsrp": -85, "m6_rsrq": -12}):
-            result = gw.poll_gateway()
-
+def test_m6_vendor_delegates_via_injected_callable():
+    from probes.gateway import GatewayProbe
+    probe = GatewayProbe(
+        vendor="m6", ip="192.168.1.1", tcp_port=80, timeout_s=2,
+        socket_factory=fake_socket_factory(),
+        requests_get=_recording_get([_http_ok()]),
+        clock=FakeClock(perf=[0.0, 0.005, 0.0, 0.010]),
+        m6_poll=lambda: {"m6_rsrp": -85, "m6_rsrq": -12},
+    )
+    result = probe.poll()
     assert result["m6_rsrp"] == -85
     assert result["m6_rsrq"] == -12
     assert "gateway_tcp_ms" in result
 
 
 # ---------------------------------------------------------------------------
-# Orbi vendor: parses connected client count from XML
+# Orbi vendor XML parse
 # ---------------------------------------------------------------------------
-def test_orbi_vendor_parses_client_count(monkeypatch):
-    import probes.gateway as gw
+def test_orbi_vendor_parses_client_count():
+    from probes.gateway import GatewayProbe
+    xml_body = (
+        '<?xml version="1.0"?>'
+        "<DevInfo><ConnectedDeviceCount>12</ConnectedDeviceCount></DevInfo>"
+    )
 
-    monkeypatch.setattr(gw.config, "GATEWAY_VENDOR", "orbi")
-    monkeypatch.setattr(gw.config, "GATEWAY_IP", "192.168.1.1")
-    monkeypatch.setattr(gw.config, "GATEWAY_TIMEOUT_S", 5)
-
-    xml_body = """<?xml version="1.0"?>
-<DevInfo>
-  <ConnectedDeviceCount>12</ConnectedDeviceCount>
-</DevInfo>"""
-
-    mock_sock = MagicMock()
-    monkeypatch.setattr(gw.socket, "socket", lambda *a, **kw: mock_sock)
-
-    orbi_resp = MagicMock(status_code=200, text=xml_body)
-    orbi_resp.raise_for_status.return_value = None
-
-    def fake_get(url, timeout=5):
-        if "DEV_INFO" in url:
-            return orbi_resp
-        return MagicMock(status_code=200)
-
-    with patch("probes.gateway.requests.get", side_effect=fake_get):
-        result = gw.poll_gateway()
-
+    # Two HTTP responses: baseline http fetch then /api/DEV_INFO
+    probe = GatewayProbe(
+        vendor="orbi", ip="192.168.1.1", tcp_port=80, timeout_s=5,
+        socket_factory=fake_socket_factory(),
+        requests_get=_recording_get([
+            _http_ok(),
+            _http_ok(text=xml_body),
+        ]),
+        clock=FakeClock(perf=[0.0, 0.005, 0.0, 0.010]),
+    )
+    result = probe.poll()
     assert result["gateway_clients"] == 12
-    assert "gateway_tcp_ms" in result
+
+
+def test_orbi_vendor_missing_element_returns_no_clients():
+    from probes.gateway import GatewayProbe
+    xml_body = '<?xml version="1.0"?><DevInfo></DevInfo>'
+    probe = GatewayProbe(
+        vendor="orbi", ip="192.168.1.1", tcp_port=80, timeout_s=5,
+        socket_factory=fake_socket_factory(),
+        requests_get=_recording_get([_http_ok(), _http_ok(text=xml_body)]),
+        clock=FakeClock(perf=[0.0, 0.005, 0.0, 0.010]),
+    )
+    result = probe.poll()
+    assert "gateway_clients" not in result

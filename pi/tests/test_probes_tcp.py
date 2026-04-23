@@ -1,45 +1,69 @@
-"""Characterization tests for probes/tcp.py — 4 tests."""
+"""Tests for TCPProbe — no patch, fakes injected directly."""
 import socket
-from unittest.mock import patch, MagicMock
+import sys
+from pathlib import Path
 
-import pytest
+_PI = Path(__file__).resolve().parents[1]
+if str(_PI) not in sys.path:
+    sys.path.insert(0, str(_PI))
+
+from tests.fakes import FakeClock, FakeSocket, fake_socket_factory
 
 
 def test_tcp_connect_success_returns_ms():
-    import probes.tcp as tcp_mod
+    from probes.tcp import TCPProbe
+    factory = fake_socket_factory()
+    probe = TCPProbe(
+        socket_factory=factory,
+        clock=FakeClock(perf=[0.0, 0.015]),
+        host="127.0.0.1", port=443, timeout_s=3,
+    )
+    assert probe.measure() == 15
+    assert factory.sockets[0].connect_calls == [("127.0.0.1", 443)]
+    assert factory.sockets[0].closed is True
 
-    mock_sock = MagicMock(spec=socket.socket)
-    with patch("probes.tcp.socket.socket", return_value=mock_sock):
-        with patch("probes.tcp.time.perf_counter", side_effect=[0.0, 0.015]):
-            result = tcp_mod.measure_tcp_connect()
-    assert result == 15
-    mock_sock.connect.assert_called_once()
-    mock_sock.close.assert_called_once()
 
 def test_tcp_connect_refused_returns_zero():
-    import probes.tcp as tcp_mod
+    from probes.tcp import TCPProbe
+    factory = fake_socket_factory(connect_raises=ConnectionRefusedError("refused"))
+    probe = TCPProbe(
+        socket_factory=factory,
+        clock=FakeClock(perf=[0.0]),
+        host="127.0.0.1", port=443,
+    )
+    assert probe.measure() == 0
+    assert factory.sockets[0].closed is True
 
-    mock_sock = MagicMock(spec=socket.socket)
-    mock_sock.connect.side_effect = ConnectionRefusedError("refused")
-    with patch("probes.tcp.socket.socket", return_value=mock_sock):
-        result = tcp_mod.measure_tcp_connect()
-    assert result == 0
 
 def test_tcp_connect_timeout_returns_zero():
-    import probes.tcp as tcp_mod
+    from probes.tcp import TCPProbe
+    factory = fake_socket_factory(connect_raises=socket.timeout("timed out"))
+    probe = TCPProbe(
+        socket_factory=factory,
+        clock=FakeClock(perf=[0.0]),
+    )
+    assert probe.measure() == 0
 
-    mock_sock = MagicMock(spec=socket.socket)
-    mock_sock.connect.side_effect = socket.timeout("timed out")
-    with patch("probes.tcp.socket.socket", return_value=mock_sock):
-        result = tcp_mod.measure_tcp_connect()
-    assert result == 0
 
 def test_tcp_socket_closed_after_failure():
     """Socket must be closed even when connect raises."""
-    import probes.tcp as tcp_mod
+    from probes.tcp import TCPProbe
+    factory = fake_socket_factory(connect_raises=OSError("network unreachable"))
+    probe = TCPProbe(
+        socket_factory=factory,
+        clock=FakeClock(perf=[0.0]),
+    )
+    probe.measure()
+    assert factory.sockets[0].closed is True
 
-    mock_sock = MagicMock(spec=socket.socket)
-    mock_sock.connect.side_effect = OSError("network unreachable")
-    with patch("probes.tcp.socket.socket", return_value=mock_sock):
-        tcp_mod.measure_tcp_connect()
-    mock_sock.close.assert_called_once()
+
+def test_tcp_timeout_applied_to_socket():
+    from probes.tcp import TCPProbe
+    factory = fake_socket_factory()
+    probe = TCPProbe(
+        socket_factory=factory,
+        clock=FakeClock(perf=[0.0, 0.01]),
+        timeout_s=7,
+    )
+    probe.measure()
+    assert factory.sockets[0].timeout == 7

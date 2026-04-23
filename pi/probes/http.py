@@ -1,77 +1,134 @@
-"""HTTP latency and throughput probes."""
+"""HTTP latency and throughput probes.
+
+Both probes are class-based and take their collaborators (session, clock,
+loki sink) via the constructor. The module-level functions
+`measure_http_latency()` / `measure_http_throughput()` are thin back-compat
+wrappers that instantiate a default probe per call.
+"""
 
 import logging
-import time
 
 import requests
 
 import config
-from loki import log_and_push
+from clock import Clock, SystemClock
 from probes.base import Probe, ProbeResult
 
 log = logging.getLogger("towerwatch")
 
-_http_session: requests.Session | None = None
 
+class _ModuleLokiSink:
+    """Lazy façade that calls loki.log_and_push via the module-level shim.
 
-def _get_session() -> requests.Session:
-    global _http_session
-    if _http_session is None:
-        _http_session = requests.Session()
-    return _http_session
+    Used as the production default so probes don't require a LokiClient to
+    be threaded through construction.
+    """
 
-
-def measure_http_latency() -> float:
-    """Timed download of ~10KB CDN asset for latency proxy. Returns elapsed ms, 0 on failure."""
-    try:
-        start = time.perf_counter()
-        resp = _get_session().get(
-            config.HTTP_LATENCY_URL,
-            timeout=config.HTTP_LATENCY_TIMEOUT_S,
-        )
-        resp.raise_for_status()
-        _ = resp.content
-        return round((time.perf_counter() - start) * 1000)
-    except Exception as e:
-        log.warning("HTTP latency probe failed: %s", e)
-        return 0
-
-
-def measure_http_throughput() -> dict:
-    """Timed download of ~1MB CDN asset for throughput estimation.
-    Returns {http_throughput_ms, http_throughput_mbps}, zeros on failure."""
-    try:
-        start = time.perf_counter()
-        resp = _get_session().get(
-            config.HTTP_THROUGHPUT_URL,
-            timeout=config.HTTP_THROUGHPUT_TIMEOUT_S,
-        )
-        resp.raise_for_status()
-        size_bytes = len(resp.content)
-        elapsed_s = time.perf_counter() - start
-        throughput_mbps = round((size_bytes * 8) / elapsed_s / 1_000_000, 2)
-        elapsed_ms = round(elapsed_s * 1000)
-        log_and_push("INFO", f"Throughput: {throughput_mbps} Mbps ({elapsed_ms}ms)",
-                     event=config.LOG_EVENT_HTTP_THROUGHPUT_OK,
-                     throughput_mbps=throughput_mbps, elapsed_ms=elapsed_ms)
-        return {"http_throughput_ms": elapsed_ms, "http_throughput_mbps": throughput_mbps}
-    except Exception as e:
-        log_and_push("WARN", f"HTTP throughput test failed: {e}",
-                     event=config.LOG_EVENT_HTTP_THROUGHPUT_FAILED, error=str(e))
-        return {"http_throughput_ms": 0, "http_throughput_mbps": 0}
+    def log_and_push(self, level, message, **fields):
+        from loki import log_and_push
+        log_and_push(level, message, **fields)
 
 
 class HTTPLatencyProbe:
+    """Timed ~10 KB CDN fetch — returns elapsed ms (0 on failure)."""
+
     name = "http_latency"
 
+    def __init__(
+        self,
+        session=None,
+        clock: Clock | None = None,
+        loki=None,
+        url: str | None = None,
+        timeout_s: int | None = None,
+    ):
+        self._session = session if session is not None else requests.Session()
+        self._clock = clock if clock is not None else SystemClock()
+        self._loki = loki if loki is not None else _ModuleLokiSink()
+        self._url = url if url is not None else config.HTTP_LATENCY_URL
+        self._timeout_s = timeout_s if timeout_s is not None else config.HTTP_LATENCY_TIMEOUT_S
+
+    def measure(self) -> int:
+        try:
+            start = self._clock.perf_counter()
+            resp = self._session.get(self._url, timeout=self._timeout_s)
+            resp.raise_for_status()
+            _ = resp.content
+            return round((self._clock.perf_counter() - start) * 1000)
+        except Exception as e:
+            log.warning("HTTP latency probe failed: %s", e)
+            return 0
+
     def run(self) -> ProbeResult:
-        ms = measure_http_latency()
+        ms = self.measure()
         return ProbeResult(fields={"http_latency_ms": ms}, ok=ms > 0)
 
 
 class HTTPThroughputProbe:
+    """Timed ~1 MB CDN fetch — returns {http_throughput_ms, http_throughput_mbps}."""
+
     name = "http_throughput"
 
+    def __init__(
+        self,
+        session=None,
+        clock: Clock | None = None,
+        loki=None,
+        url: str | None = None,
+        timeout_s: int | None = None,
+    ):
+        self._session = session if session is not None else requests.Session()
+        self._clock = clock if clock is not None else SystemClock()
+        self._loki = loki if loki is not None else _ModuleLokiSink()
+        self._url = url if url is not None else config.HTTP_THROUGHPUT_URL
+        self._timeout_s = timeout_s if timeout_s is not None else config.HTTP_THROUGHPUT_TIMEOUT_S
+
+    def measure(self) -> dict:
+        try:
+            start = self._clock.perf_counter()
+            resp = self._session.get(self._url, timeout=self._timeout_s)
+            resp.raise_for_status()
+            size_bytes = len(resp.content)
+            elapsed_s = self._clock.perf_counter() - start
+            if elapsed_s <= 0 or size_bytes == 0:
+                raise ValueError(f"invalid sample: {size_bytes}B in {elapsed_s:.6f}s")
+            throughput_mbps = round((size_bytes * 8) / elapsed_s / 1_000_000, 2)
+            elapsed_ms = round(elapsed_s * 1000)
+            self._loki.log_and_push(
+                "INFO", f"Throughput: {throughput_mbps} Mbps ({elapsed_ms}ms)",
+                event=config.LOG_EVENT_HTTP_THROUGHPUT_OK,
+                throughput_mbps=throughput_mbps, elapsed_ms=elapsed_ms,
+            )
+            return {"http_throughput_ms": elapsed_ms, "http_throughput_mbps": throughput_mbps}
+        except Exception as e:
+            self._loki.log_and_push(
+                "WARN", f"HTTP throughput test failed: {e}",
+                event=config.LOG_EVENT_HTTP_THROUGHPUT_FAILED, error=str(e),
+            )
+            return {"http_throughput_ms": 0, "http_throughput_mbps": 0}
+
     def run(self) -> ProbeResult:
-        f = measure_http_throughput()
+        f = self.measure()
         return ProbeResult(fields=f, ok=f["http_throughput_ms"] > 0)
+
+
+# ---------------------------------------------------------------------------
+# Back-compat module-level wrappers. These each instantiate a default probe
+# lazily so module import remains side-effect-free.
+# ---------------------------------------------------------------------------
+_shared_latency_probe: HTTPLatencyProbe | None = None
+_shared_throughput_probe: HTTPThroughputProbe | None = None
+
+
+def measure_http_latency() -> int:
+    global _shared_latency_probe
+    if _shared_latency_probe is None:
+        _shared_latency_probe = HTTPLatencyProbe()
+    return _shared_latency_probe.measure()
+
+
+def measure_http_throughput() -> dict:
+    global _shared_throughput_probe
+    if _shared_throughput_probe is None:
+        _shared_throughput_probe = HTTPThroughputProbe()
+    return _shared_throughput_probe.measure()
