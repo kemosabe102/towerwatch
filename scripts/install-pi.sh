@@ -65,6 +65,23 @@ if [ ! -d "$VENV_DIR" ]; then
 fi
 "$VENV_DIR/bin/python" -m pip install --quiet --upgrade pip
 "$VENV_DIR/bin/python" -m pip install --quiet --upgrade "$REPO_DIR"
+
+# Credentials and the build-version stamp are intentionally gitignored, so
+# they don't ship inside the wheel. Copy them into the installed package
+# location post-install so runtime imports ("from towerwatch import credentials",
+# "Path(_version.txt)") resolve.
+SITE_PKG="$(ls -d "$VENV_DIR"/lib/python*/site-packages/towerwatch 2>/dev/null | head -1)"
+if [ -z "$SITE_PKG" ]; then
+    echo "ERROR: could not locate installed towerwatch package under $VENV_DIR"
+    exit 1
+fi
+if [ -f "$REPO_DIR/src/towerwatch/credentials.py" ]; then
+    cp "$REPO_DIR/src/towerwatch/credentials.py" "$SITE_PKG/credentials.py"
+    chmod 600 "$SITE_PKG/credentials.py"
+fi
+if [ -f "$REPO_DIR/src/towerwatch/_version.txt" ]; then
+    cp "$REPO_DIR/src/towerwatch/_version.txt" "$SITE_PKG/_version.txt"
+fi
 chown -R towerwatch:towerwatch "$INSTALL_DIR"
 
 # Warn if credentials.py is missing inside the repo (gitignored).

@@ -73,6 +73,19 @@ fi
 # repo lives under /home/admin (not readable by the towerwatch user), then
 # restore venv ownership. install-pi.sh uses the same pattern.
 sudo "$INSTALL_DIR/.venv/bin/python" -m pip install --quiet --upgrade "$REPO_DIR"
+
+# Gitignored files (credentials, version stamp) don't ship in the wheel —
+# copy them into the installed package dir post-install.
+SITE_PKG="$(ls -d "$INSTALL_DIR"/.venv/lib/python*/site-packages/towerwatch 2>/dev/null | head -1)"
+if [ -n "$SITE_PKG" ]; then
+    if [ -f "$REPO_DIR/src/towerwatch/credentials.py" ]; then
+        sudo cp "$REPO_DIR/src/towerwatch/credentials.py" "$SITE_PKG/credentials.py"
+        sudo chmod 600 "$SITE_PKG/credentials.py"
+    fi
+    if [ -f "$REPO_DIR/src/towerwatch/_version.txt" ]; then
+        sudo cp "$REPO_DIR/src/towerwatch/_version.txt" "$SITE_PKG/_version.txt"
+    fi
+fi
 sudo chown -R towerwatch:towerwatch "$INSTALL_DIR"
 
 # 2. Restart
