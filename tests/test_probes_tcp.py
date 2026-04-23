@@ -1,0 +1,70 @@
+"""Tests for TCPProbe — no patch, fakes injected directly."""
+
+from tests.fakes import FakeClock, fake_socket_factory
+
+
+def test_tcp_connect_success_returns_ms():
+    from towerwatch.probes.tcp import TCPProbe
+
+    factory = fake_socket_factory()
+    probe = TCPProbe(
+        socket_factory=factory,
+        clock=FakeClock(perf=[0.0, 0.015]),
+        host="127.0.0.1",
+        port=443,
+        timeout_s=3,
+    )
+    assert probe.measure() == 15
+    assert factory.sockets[0].connect_calls == [("127.0.0.1", 443)]
+    assert factory.sockets[0].closed is True
+
+
+def test_tcp_connect_refused_returns_zero():
+    from towerwatch.probes.tcp import TCPProbe
+
+    factory = fake_socket_factory(connect_raises=ConnectionRefusedError("refused"))
+    probe = TCPProbe(
+        socket_factory=factory,
+        clock=FakeClock(perf=[0.0]),
+        host="127.0.0.1",
+        port=443,
+    )
+    assert probe.measure() == 0
+    assert factory.sockets[0].closed is True
+
+
+def test_tcp_connect_timeout_returns_zero():
+    from towerwatch.probes.tcp import TCPProbe
+
+    factory = fake_socket_factory(connect_raises=TimeoutError("timed out"))
+    probe = TCPProbe(
+        socket_factory=factory,
+        clock=FakeClock(perf=[0.0]),
+    )
+    assert probe.measure() == 0
+
+
+def test_tcp_socket_closed_after_failure():
+    """Socket must be closed even when connect raises."""
+    from towerwatch.probes.tcp import TCPProbe
+
+    factory = fake_socket_factory(connect_raises=OSError("network unreachable"))
+    probe = TCPProbe(
+        socket_factory=factory,
+        clock=FakeClock(perf=[0.0]),
+    )
+    probe.measure()
+    assert factory.sockets[0].closed is True
+
+
+def test_tcp_timeout_applied_to_socket():
+    from towerwatch.probes.tcp import TCPProbe
+
+    factory = fake_socket_factory()
+    probe = TCPProbe(
+        socket_factory=factory,
+        clock=FakeClock(perf=[0.0, 0.01]),
+        timeout_s=7,
+    )
+    probe.measure()
+    assert factory.sockets[0].timeout == 7

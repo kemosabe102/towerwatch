@@ -1,0 +1,24 @@
+[Unit]
+Description=Towerwatch 5G Connection Quality Monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/opt/towerwatch/.venv/bin/towerwatch
+WorkingDirectory=/opt/towerwatch
+Environment=PYTHONUNBUFFERED=1
+Restart=on-failure
+RestartSec=10
+
+# Run as dedicated user (created by install.sh)
+User=towerwatch
+Group=towerwatch
+
+# Logging to journald
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=towerwatch
+
+[Install]
+WantedBy=multi-user.target
