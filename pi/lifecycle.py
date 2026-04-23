@@ -1,5 +1,8 @@
 """
 Process lifecycle helpers: runtime state, logging configuration, signal handling.
+
+All collaborators (signal module, IS_WINDOWS flag) are injectable — tests
+pass fakes, production uses defaults.
 """
 
 import logging
@@ -36,9 +39,22 @@ def configure_logging() -> None:
     )
 
 
-def install_signal_handlers(state: RuntimeState) -> None:
+def install_signal_handlers(
+    state: RuntimeState,
+    *,
+    is_windows: bool | None = None,
+    signal_module=signal,
+) -> None:
+    """Install SIGTERM handler that flips state.shutdown_requested.
+
+    On Windows (or when is_windows=True), this is a no-op.
+    """
+    if is_windows is None:
+        is_windows = IS_WINDOWS
+
     def _on_sigterm(signum, frame):
         log.info("SIGTERM received — shutting down gracefully")
         state.shutdown_requested = True
-    if not IS_WINDOWS:
-        signal.signal(signal.SIGTERM, _on_sigterm)
+
+    if not is_windows:
+        signal_module.signal(signal_module.SIGTERM, _on_sigterm)

@@ -1,74 +1,77 @@
-"""Tests for startup.wait_for_data_partition — 5 tests."""
-import subprocess
+"""Tests for startup.wait_for_data_partition — no patch, fakes injected."""
 import sys
-import time as time_mod
 from pathlib import Path
-from unittest.mock import patch
-
-import pytest
 
 _PI = Path(__file__).resolve().parents[1]
 if str(_PI) not in sys.path:
     sys.path.insert(0, str(_PI))
 
+from tests.fakes import FakeClock, FakeCompletedProcess, FakeEvents, FakeLoki, FakeSubprocess
+
 
 # ---------------------------------------------------------------------------
-# Windows path: skips mountpoint check, creates dir
+# Windows path: skips mountpoint, creates dir
 # ---------------------------------------------------------------------------
-def test_windows_creates_data_dir(tmp_path, monkeypatch):
-    import startup
-    monkeypatch.setattr(startup, "IS_WINDOWS", True)
+def test_windows_creates_data_dir(tmp_path):
+    from startup import wait_for_data_partition
     data = tmp_path / "data"
-    startup.wait_for_data_partition(data, timeout_s=1)
+    wait_for_data_partition(
+        data, timeout_s=1,
+        is_windows=True,
+        clock=FakeClock(),
+        subprocess_run=FakeSubprocess(),
+        loki=FakeLoki(),
+    )
     assert data.is_dir()
 
 
 # ---------------------------------------------------------------------------
-# Linux: mountpoint found → returns without timeout
+# Linux mountpoint present → returns immediately
 # ---------------------------------------------------------------------------
-def test_linux_mounted_returns_immediately(tmp_path, monkeypatch):
-    import startup
-    monkeypatch.setattr(startup, "IS_WINDOWS", False)
+def test_linux_mounted_returns_immediately(tmp_path):
+    from startup import wait_for_data_partition
     data = tmp_path / "data"
     data.mkdir()
 
-    def fake_run(cmd, **kwargs):
-        return type("R", (), {"returncode": 0})()
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-    monkeypatch.setattr(time_mod, "sleep", lambda s: None)
-    startup.wait_for_data_partition(data, timeout_s=5)
-    # No assertion needed — would hang if broken
+    clock = FakeClock(wall=[0.0, 0.5])  # start + one loop check
+    runner = FakeSubprocess(
+        FakeCompletedProcess(returncode=0)  # mountpoint -q returns 0
+    )
+    wait_for_data_partition(
+        data, timeout_s=5,
+        is_windows=False,
+        clock=clock,
+        subprocess_run=runner,
+        loki=FakeLoki(),
+    )
+    assert len(runner.calls) == 1
 
 
 # ---------------------------------------------------------------------------
-# Linux: mountpoint never found → timeout, dir created anyway
+# Linux not mounted → timeout, dir created anyway, partition_missing event
 # ---------------------------------------------------------------------------
-def test_linux_not_mounted_creates_dir_after_timeout(tmp_path, monkeypatch):
-    import startup
-    monkeypatch.setattr(startup, "IS_WINDOWS", False)
+def test_linux_not_mounted_creates_dir_after_timeout_and_emits_event(tmp_path):
+    from startup import wait_for_data_partition
     data = tmp_path / "missing_data"
 
-    calls = [0]
-
-    def fake_time():
-        v = calls[0]
-        calls[0] += 31
-        return float(v)
-
-    monkeypatch.setattr(time_mod, "time", fake_time)
-    monkeypatch.setattr(time_mod, "sleep", lambda s: None)
-
-    def fake_run(cmd, **kwargs):
-        return type("R", (), {"returncode": 1})()
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-    startup.wait_for_data_partition(data, timeout_s=1)
+    # Two clock reads: one for deadline, one for while check (exceeds deadline)
+    clock = FakeClock(wall=[0.0, 31.0])
+    events = FakeEvents()
+    loki = FakeLoki()
+    wait_for_data_partition(
+        data, timeout_s=1,
+        is_windows=False,
+        clock=clock,
+        subprocess_run=FakeSubprocess(),  # never called (dir doesn't exist yet)
+        loki=loki,
+        events=events,
+    )
     assert data.is_dir()
+    assert events.called("partition_missing")
 
 
 # ---------------------------------------------------------------------------
-# Marker round-trip: write then read
+# Marker round-trip
 # ---------------------------------------------------------------------------
 def test_marker_roundtrip(tmp_path):
     from startup import read_marker, write_marker

@@ -1,11 +1,16 @@
 """
 Per-tick probe collection and metric push logic.
+
+All seams are injected: `TickContext` carries the grafana/loki/scheduler
+collaborators plus a duck-typed `events` namespace and a `Clock`. Functions
+that branch on config constants (`PUSH_BATCH_SIZE`, `OUTAGE_GAP_THRESHOLD_S`,
+`LAST_PUSH_MARKER_FILE`, `BUILD_VERSION`) accept them as keyword arguments
+with production defaults drawn from `config.py`.
 """
 
 from __future__ import annotations
 
 import logging
-import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -13,6 +18,7 @@ from typing import TYPE_CHECKING
 import config as _config
 import events as events_mod
 import startup as startup_mod
+from clock import Clock, SystemClock
 from probes.ping import run_ping
 from probes.tcp import measure_tcp_connect
 from probes.dns import measure_dns
@@ -27,11 +33,21 @@ if TYPE_CHECKING:
 log = logging.getLogger("towerwatch")
 
 
+def _default_clock() -> Clock:
+    return SystemClock()
+
+
 @dataclass
 class TickContext:
     grafana: GrafanaClient | None
     loki: LokiClient | None
     scheduler: Scheduler | None
+    events: object = events_mod  # duck-typed; tests pass FakeEvents
+    clock: Clock = None  # type: ignore[assignment]
+
+    def __post_init__(self):
+        if self.clock is None:
+            self.clock = _default_clock()
 
 
 def format_influx_line(fields: dict, timestamp: int) -> str:
@@ -48,19 +64,19 @@ def update_connection_state(ctx: TickContext, state, connected: bool, timestamp:
         if state.outage_start:
             duration = timestamp - state.outage_start
             state.total_outage_s += duration
-            events_mod.connection_restored(ctx.loki, down_duration_s=duration)
+            ctx.events.connection_restored(ctx.loki, down_duration_s=duration)
         state.outage_start = 0
     elif not connected and state.connected:
         state.outage_start = timestamp
         state.outage_count += 1
         log.warning("Connection DOWN")
-        events_mod.connection_down(ctx.loki)
+        ctx.events.connection_down(ctx.loki)
     state.connected = connected
 
 
 def collect_probes(ctx: TickContext) -> tuple[dict, bool]:
     fields = {}
-    now = time.time()
+    now = ctx.clock.time()
 
     any_connected = False
     for target_ip, target_label in _config.PROBE_TARGETS:
@@ -88,9 +104,28 @@ def collect_probes(ctx: TickContext) -> tuple[dict, bool]:
     return fields, any_connected
 
 
-def push_batch(ctx: TickContext, state, line: str, any_connected: bool) -> None:
+def push_batch(
+    ctx: TickContext,
+    state,
+    line: str,
+    any_connected: bool,
+    *,
+    batch_size: int | None = None,
+    gap_threshold_s: int | None = None,
+    marker_file: str | Path | None = None,
+    build_version: str | None = None,
+) -> None:
+    if batch_size is None:
+        batch_size = _config.PUSH_BATCH_SIZE
+    if gap_threshold_s is None:
+        gap_threshold_s = _config.OUTAGE_GAP_THRESHOLD_S
+    if marker_file is None:
+        marker_file = _config.LAST_PUSH_MARKER_FILE
+    if build_version is None:
+        build_version = _config.BUILD_VERSION
+
     state.metric_batch.append(line)
-    if len(state.metric_batch) < _config.PUSH_BATCH_SIZE:
+    if len(state.metric_batch) < batch_size:
         return
     batch = state.metric_batch[:]
     state.metric_batch.clear()
@@ -100,19 +135,21 @@ def push_batch(ctx: TickContext, state, line: str, any_connected: bool) -> None:
         log.warning("Metric push failed — batch dropped (%d lines)", len(batch))
         return
     log.info("Pushed %d lines", len(batch))
-    now = time.time()
+    now = ctx.clock.time()
     gap = now - state.last_successful_push_ts
-    if gap >= _config.OUTAGE_GAP_THRESHOLD_S:
+    if gap >= gap_threshold_s:
         gap_s = int(gap)
-        text = f"Outage: {gap_s // 60} min — network_unreachable (v {_config.BUILD_VERSION})"
+        text = f"Outage: {gap_s // 60} min — network_unreachable (v {build_version})"
         if ctx.grafana:
             ctx.grafana.push_annotation(
                 int(state.last_successful_push_ts * 1000), int(now * 1000),
-                text, reason="network_unreachable", version=_config.BUILD_VERSION,
+                text, reason="network_unreachable", version=build_version,
             )
-        events_mod.outage_recorded(ctx.loki, gap_seconds=gap_s,
-                                   reason="network_unreachable", version=_config.BUILD_VERSION)
+        ctx.events.outage_recorded(
+            ctx.loki, gap_seconds=gap_s,
+            reason="network_unreachable", version=build_version,
+        )
     state.last_successful_push_ts = now
-    startup_mod.write_marker(Path(_config.LAST_PUSH_MARKER_FILE), now, atomic=True)
+    startup_mod.write_marker(Path(marker_file), now, atomic=True)
     if ctx.loki:
         ctx.loki.flush()

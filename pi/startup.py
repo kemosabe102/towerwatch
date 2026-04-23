@@ -1,5 +1,9 @@
 """
 Startup helpers: data-partition guard, marker IO, outage classification.
+
+All I/O collaborators (time, subprocess, loki) are injectable with production
+defaults. The `is_windows` flag is a parameter, not a module-level branch,
+so tests don't need to patch it.
 """
 
 import logging
@@ -12,6 +16,7 @@ from pathlib import Path
 
 import config
 import events as events_mod
+from clock import Clock, SystemClock
 
 log = logging.getLogger("towerwatch")
 
@@ -73,19 +78,35 @@ def classify_outage(
 # ---------------------------------------------------------------------------
 # Data partition guard
 # ---------------------------------------------------------------------------
-def wait_for_data_partition(path: Path = None, timeout_s: int = 30) -> None:
+def wait_for_data_partition(
+    path: Path | str | None = None,
+    timeout_s: int = 30,
+    *,
+    is_windows: bool | None = None,
+    clock: Clock | None = None,
+    subprocess_run=subprocess.run,
+    loki=None,
+    events=events_mod,
+) -> None:
     """Block until the data partition is mounted or timeout. Skips on Windows."""
     if path is None:
         path = Path(config.DATA_DIR)
-    if IS_WINDOWS:
+    path = Path(path)
+    if is_windows is None:
+        is_windows = IS_WINDOWS
+    if clock is None:
+        clock = SystemClock()
+
+    if is_windows:
         path.mkdir(parents=True, exist_ok=True)
         log.info("Windows: using local data dir %s", path)
         return
-    deadline = _time.time() + timeout_s
-    while _time.time() < deadline:
+
+    deadline = clock.time() + timeout_s
+    while clock.time() < deadline:
         if path.is_dir():
             try:
-                result = subprocess.run(
+                result = subprocess_run(
                     ["mountpoint", "-q", str(path)],
                     capture_output=True, timeout=5,
                 )
@@ -94,29 +115,47 @@ def wait_for_data_partition(path: Path = None, timeout_s: int = 30) -> None:
                     return
             except Exception:
                 pass
-        _time.sleep(1)
+        clock.sleep(1)
     log.warning("Data partition not detected at %s — buffering to local dir", path)
-    try:
-        from loki import _get_singleton
-        events_mod.partition_missing(_get_singleton(), path=str(path))
-    except Exception:
-        pass
+    if loki is None:
+        try:
+            from loki import _get_singleton
+            loki = _get_singleton()
+        except Exception:
+            loki = None
+    if loki is not None:
+        try:
+            events.partition_missing(loki, path=str(path))
+        except Exception:
+            pass
     path.mkdir(parents=True, exist_ok=True)
 
 
 # ---------------------------------------------------------------------------
 # Startup outage reconciliation
 # ---------------------------------------------------------------------------
-def reconcile_previous_outage(grafana, loki, cfg) -> float | None:
-    """Check markers from the previous run and post an annotation if an outage is detected.
-    Returns the last_push timestamp if found, else None."""
+def reconcile_previous_outage(
+    grafana,
+    loki,
+    cfg,
+    *,
+    clock: Clock | None = None,
+    events=events_mod,
+) -> float | None:
+    """Check markers from the previous run and post an annotation if an
+    outage is detected. Returns the last_push timestamp if found, else None."""
+    if clock is None:
+        clock = SystemClock()
+
     last_push = read_marker(Path(cfg.LAST_PUSH_MARKER_FILE))
     last_alive = read_marker(Path(cfg.LAST_ALIVE_MARKER_FILE))
     if last_push is None:
         return None
-    startup_now = _time.time()
+    startup_now = clock.time()
     outage = classify_outage(
-        now=startup_now, last_push_ts=last_push, last_alive_ts=last_alive,
+        now=startup_now,
+        last_push_ts=last_push,
+        last_alive_ts=last_alive,
         gap_threshold_s=cfg.OUTAGE_GAP_THRESHOLD_S,
     )
     if outage:
@@ -126,6 +165,8 @@ def reconcile_previous_outage(grafana, loki, cfg) -> float | None:
             int(last_push * 1000), int(startup_now * 1000),
             text, reason=kind.value, version=cfg.BUILD_VERSION,
         )
-        events_mod.outage_recorded(loki, gap_seconds=int(gap_s),
-                                   reason=kind.value, version=cfg.BUILD_VERSION)
+        events.outage_recorded(
+            loki, gap_seconds=int(gap_s),
+            reason=kind.value, version=cfg.BUILD_VERSION,
+        )
     return last_push

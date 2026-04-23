@@ -54,3 +54,29 @@ def test_influx_target_labels_baked_in_field_names():
 def test_influx_timestamp_seconds_precision():
     line = _fmt({"connected": 1}, ts=1700000000)
     assert line.endswith(" 1700000000")
+
+
+def test_influx_none_values_dropped():
+    """None-valued fields must be omitted — they'd crash Influx."""
+    line = _fmt({"rtt_avg_google": 12, "http_latency_ms": None, "connected": 1})
+    assert "http_latency_ms" not in line
+    assert "rtt_avg_google=12" in line
+    assert "connected=1" in line
+
+
+def test_influx_small_float_no_scientific_notation():
+    """Tiny floats must not produce '1e-12' which Influx rejects."""
+    line = _fmt({"jitter_google": 0.001})
+    # Python's default float repr for 0.001 is '0.001' — not scientific
+    assert "jitter_google=0.001" in line
+    assert "e-" not in line and "E-" not in line
+
+
+def test_influx_string_field_value_pinned():
+    """String values are currently serialised as-is (no quoting).
+    This test pins the current behaviour so a future change is visible.
+    NOTE: unquoted strings are technically invalid Influx line protocol.
+    Fix is tracked as a follow-up; do not silently change without updating this test."""
+    line = _fmt({"version": "abc1234"})
+    # Current behaviour: value appears unquoted
+    assert "version=abc1234" in line
