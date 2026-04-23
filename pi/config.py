@@ -11,11 +11,27 @@ from pathlib import Path
 # before cd.sh ships the tree. On the Pi the file lives at /opt/towerwatch/version.txt.
 # If the file is missing we try `git rev-parse` for local dev; if that fails too, we
 # mark the build as "dev"/"unknown" rather than crash.
-def _load_build_version() -> tuple[str, str]:
-    candidates = [
-        Path(__file__).parent / "version.txt",            # repo-local (Windows dev)
-        Path("/opt/towerwatch/version.txt"),              # Pi install path
-    ]
+def _load_build_version(
+    *,
+    candidates=None,
+    env=None,
+    check_output=subprocess.check_output,
+) -> tuple[str, str]:
+    """Load (BUILD_VERSION, BUILD_DATE) from version.txt or git.
+
+    All I/O is injectable for tests:
+      - `candidates`: list of Paths to try for version.txt
+      - `env`: dict-like, consulted for TOWERWATCH_SKIP_GIT_VERSION
+      - `check_output`: stand-in for subprocess.check_output
+    """
+    if candidates is None:
+        candidates = [
+            Path(__file__).parent / "version.txt",            # repo-local (Windows dev)
+            Path("/opt/towerwatch/version.txt"),              # Pi install path
+        ]
+    if env is None:
+        env = os.environ
+
     for p in candidates:
         try:
             if p.is_file():
@@ -29,15 +45,15 @@ def _load_build_version() -> tuple[str, str]:
             continue
     # Fallback: ask git directly (works in-repo when version.txt hasn't been written yet).
     # Set TOWERWATCH_SKIP_GIT_VERSION=1 to suppress this subprocess call (e.g. in tests).
-    if os.environ.get("TOWERWATCH_SKIP_GIT_VERSION") == "1":
+    if env.get("TOWERWATCH_SKIP_GIT_VERSION") == "1":
         return "dev", "unknown"
     try:
         repo_root = Path(__file__).resolve().parents[1]
-        version = subprocess.check_output(
+        version = check_output(
             ["git", "rev-parse", "--short", "HEAD"],
             cwd=repo_root, stderr=subprocess.DEVNULL, timeout=2,
         ).decode().strip()
-        build_date = subprocess.check_output(
+        build_date = check_output(
             ["git", "log", "-1", "--format=%cI"],
             cwd=repo_root, stderr=subprocess.DEVNULL, timeout=2,
         ).decode().strip()
