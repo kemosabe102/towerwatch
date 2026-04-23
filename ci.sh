@@ -31,12 +31,29 @@ fi
 
 echo "=== Towerwatch CI ($MODE) ==="
 
+# Guard: every tracked *.sh must have the executable bit set in the git index.
+# Windows filesystems don't preserve +x, but the index does — Linux CI runners
+# read the index mode, so a 100644 shell script fails with exit 126 there.
+missing_x="$(git ls-files --stage '*.sh' | awk '$1 != "100755" {print $4}')"
+if [[ -n "$missing_x" ]]; then
+    echo "ERROR: these tracked *.sh files are not executable in the git index:"
+    echo "$missing_x" | sed 's/^/  /'
+    echo "Fix with: git update-index --chmod=+x <path>"
+    exit 1
+fi
+
 # Ensure credentials.py exists (gitignored in real deployments; CI needs a stub
-# so pyright can resolve `from towerwatch import credentials`).
+# so pyright can resolve `from towerwatch import credentials`). On dev machines
+# a real credentials.py is already present — skip stubbing.
+STUBBED_CREDS=0
 if [[ ! -f src/towerwatch/credentials.py ]]; then
     cp src/towerwatch/credentials.py.example src/towerwatch/credentials.py
+    STUBBED_CREDS=1
     echo "  (stubbed src/towerwatch/credentials.py from .example for CI)"
 fi
+# Always verify the .example itself is format-clean, so GitHub's stub step
+# won't hit "Would reformat: credentials.py" on a hosted runner.
+$PY -m ruff format --check src/towerwatch/credentials.py.example >/dev/null
 
 # Step 1: ruff lint (replaces py_compile + import walk)
 echo "[1/5] ruff check..."
