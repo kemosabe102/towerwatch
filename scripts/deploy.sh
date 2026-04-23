@@ -69,9 +69,11 @@ if [[ -f /tmp/towerwatch-credentials.py ]]; then
     cp /tmp/towerwatch-credentials.py "$REPO_DIR/src/towerwatch/credentials.py"
     rm -f /tmp/towerwatch-credentials.py
 fi
-# Install into the production venv. The venv is owned by towerwatch user;
-# run pip as that user to avoid permission fights.
-sudo -u towerwatch "$INSTALL_DIR/.venv/bin/python" -m pip install --quiet --upgrade "$REPO_DIR"
+# Install into the production venv. We run pip as root because the checked-out
+# repo lives under /home/admin (not readable by the towerwatch user), then
+# restore venv ownership. install-pi.sh uses the same pattern.
+sudo "$INSTALL_DIR/.venv/bin/python" -m pip install --quiet --upgrade "$REPO_DIR"
+sudo chown -R towerwatch:towerwatch "$INSTALL_DIR"
 
 # 2. Restart
 echo "[2/3] Restarting towerwatch service..."

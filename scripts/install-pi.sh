@@ -55,14 +55,17 @@ if ! id -u towerwatch &>/dev/null; then
 fi
 
 # --- Create install dir and venv; pip install the repo ---
+# We create and populate the venv as root (since it lives in /opt and we may
+# need to write to /home/admin/towerwatch which `towerwatch` user can't read),
+# then chown to the towerwatch user afterward.
 echo "[4/9] Creating $VENV_DIR and installing package..."
 mkdir -p "$INSTALL_DIR"
-chown towerwatch:towerwatch "$INSTALL_DIR"
 if [ ! -d "$VENV_DIR" ]; then
-    sudo -u towerwatch python3 -m venv "$VENV_DIR"
+    python3 -m venv "$VENV_DIR"
 fi
-sudo -u towerwatch "$VENV_DIR/bin/python" -m pip install --quiet --upgrade pip
-sudo -u towerwatch "$VENV_DIR/bin/python" -m pip install --quiet --upgrade "$REPO_DIR"
+"$VENV_DIR/bin/python" -m pip install --quiet --upgrade pip
+"$VENV_DIR/bin/python" -m pip install --quiet --upgrade "$REPO_DIR"
+chown -R towerwatch:towerwatch "$INSTALL_DIR"
 
 # Warn if credentials.py is missing inside the repo (gitignored).
 if [ ! -f "$REPO_DIR/src/towerwatch/credentials.py" ]; then
