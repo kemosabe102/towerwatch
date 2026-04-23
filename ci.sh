@@ -31,6 +31,13 @@ fi
 
 echo "=== Towerwatch CI ($MODE) ==="
 
+# Ensure credentials.py exists (gitignored in real deployments; CI needs a stub
+# so pyright can resolve `from towerwatch import credentials`).
+if [[ ! -f src/towerwatch/credentials.py ]]; then
+    cp src/towerwatch/credentials.py.example src/towerwatch/credentials.py
+    echo "  (stubbed src/towerwatch/credentials.py from .example for CI)"
+fi
+
 # Step 1: ruff lint (replaces py_compile + import walk)
 echo "[1/5] ruff check..."
 $PY -m ruff check src tests
