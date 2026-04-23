@@ -2,31 +2,36 @@
 Per-tick probe collection and metric push logic.
 """
 
+from __future__ import annotations
+
 import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import config as _config
 import events as events_mod
 import startup as startup_mod
-from scheduling import Scheduler
-
-# Lazy imports for probe modules (imported here to keep towerwatch.py clean)
 from probes.ping import run_ping
 from probes.tcp import measure_tcp_connect
 from probes.dns import measure_dns
 from probes.http import measure_http_latency, measure_http_throughput
 from probes.gateway import poll_gateway
 
+if TYPE_CHECKING:
+    from grafana import GrafanaClient
+    from loki import LokiClient
+    from scheduling import Scheduler
+
 log = logging.getLogger("towerwatch")
 
 
 @dataclass
 class TickContext:
-    grafana: object   # grafana_mod.GrafanaClient
-    loki: object      # loki_mod.LokiClient
-    scheduler: object # scheduling.Scheduler
+    grafana: GrafanaClient | None
+    loki: LokiClient | None
+    scheduler: Scheduler | None
 
 
 def format_influx_line(fields: dict, timestamp: int) -> str:
