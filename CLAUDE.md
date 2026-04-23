@@ -14,25 +14,28 @@ Agent-facing guide. The user-facing README is imported below and is the source o
 
 Every code change goes through **CI then CD**, in that order, run from the dev machine:
 
-1. `./ci.sh` — fast mode (≤15s): `py_compile` + import check + clean-tree check + stamps `pi/version.txt` with `<short-hash> <iso-date>`.
+1. `./ci.sh` — fast mode: ruff lint + format-check, pyright, pytest, clean-tree check, stamps `src/towerwatch/_version.txt` with `<short-hash> <iso-date>`.
 2. `./ci.sh full` — fast + a 30s smoke run. Run before deploying.
-3. `./cd.sh <user@host>` — SSHes to the Pi, `git pull --ff-only`, copies `pi/*.py`, `pi/probes/*.py`, and `pi/version.txt` into `/opt/towerwatch/`, then restarts the service. **Refuses to deploy** unless `pi/version.txt` exists and is at least as new as every `.py` under `pi/`.
+3. `./scripts/deploy.sh <user@host>` — SSHes to the Pi, `git pull --ff-only` on the current branch, `pip install --upgrade .` into `/opt/towerwatch/.venv`, then restarts the service. **Refuses to deploy** unless `src/towerwatch/_version.txt` exists and is at least as new as every `.py` under `src/`.
 
 Failure modes to expect:
 - **Dirty working tree** blocks stamping. Commit or stash first (or `./ci.sh fast --allow-dirty` for local experiments — do not deploy the result).
-- **`cd.sh` says version.txt is stale**: a `.py` changed after the last stamp. Re-run `./ci.sh`.
+- **`scripts/deploy.sh` says _version.txt is stale**: a `.py` changed after the last stamp. Re-run `./ci.sh`.
 
-`deploy.sh` still exists as a thin shim that calls `cd.sh` — old muscle memory keeps working.
+`cd.sh` is a thin shim that execs `scripts/deploy.sh` — old muscle memory keeps working.
 
-`BUILD_VERSION` / `BUILD_DATE` are loaded by `config.py` from `version.txt`; they appear in the `service_restarted` WARN log and in outage-annotation text. Don't re-derive them from `git` on the Pi — version authority lives on the dev machine.
+`BUILD_VERSION` / `BUILD_DATE` are loaded by `config.py` from `_version.txt`; they appear in the `service_restarted` WARN log and in outage-annotation text. Don't re-derive them from `git` on the Pi — version authority lives on the dev machine.
 
 ## Editing entry points
 
 Work the code in this order:
 
-1. `pi/config.py` — all tunable constants (targets, intervals, URLs, buffer paths, `LOG_EVENT_*` identifiers). Source of truth for behaviour.
-2. `pi/towerwatch.py` — the 60 s main loop.
-3. `pi/probes/` — per-probe modules (ping, dns, tcp, http, m6, ookla).
+1. `src/towerwatch/config.py` — all tunable constants (targets, intervals, URLs, buffer paths, `LOG_EVENT_*` identifiers). Source of truth for behaviour.
+2. `src/towerwatch/app.py` + `src/towerwatch/tick.py` — the 60 s main loop and per-tick orchestration. `main.py` is the compose root.
+3. `src/towerwatch/probes/` — per-probe modules (ping, dns, tcp, http, m6, ookla).
+4. `src/towerwatch/clients/` — GrafanaClient + LokiClient (outbound HTTP adapters).
+
+See [`docs/architecture.md`](docs/architecture.md) for the design narrative.
 
 ## Invariants — do not "clean up"
 
@@ -59,8 +62,8 @@ Router signal polling and speedtest fail gracefully off-network — that's expec
 
 ## Deploy gotchas
 
-- **`cd.sh` deploys secrets:** `pi/secrets.py` is SCP'd to `/opt/towerwatch/secrets.py` on every deploy. Keep `pi/secrets.py` up to date on the dev machine — it is the source of truth for credentials. `/opt/towerwatch/` is owned by `towerwatch:towerwatch`; `cd.sh` stages via `/tmp` then `sudo mv` to work around the permission boundary.
-- **`deploy-local.sh` is a gitignored wrapper** that hardcodes the host. Use `deploy.sh <user>@<host>` in docs and suggestions.
+- **`scripts/deploy.sh` deploys credentials:** `src/towerwatch/credentials.py` is SCP'd to the checked-out repo on the Pi on every deploy, *before* `pip install` runs. Keep the dev-machine copy up to date — it's the source of truth for credentials. `/opt/towerwatch/` is owned by `towerwatch:towerwatch`; deploy stages the file via `/tmp` then moves it into the repo tree.
+- **`deploy-local.sh` is a gitignored wrapper** that hardcodes the host. Use `scripts/deploy.sh <user>@<host>` in docs and suggestions.
 - **Outage-annotation token needs `datasources:read`:** The `GRAFANA_ANNOTATION_TOKEN` service account is used by both towerwatch (annotations write) and the bench harness (datasource resolution + Loki/Prom reads). It needs `annotations:read`, `annotations:write`, and `datasources:read` in the Grafana service account permissions.
 - **`GRAFANA_API_KEY` is push-only:** it authenticates Prometheus/Loki write endpoints, not the Grafana stack API. Do not use it for read queries.
 

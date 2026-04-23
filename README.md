@@ -15,6 +15,7 @@ A continuous network-quality probe for a Raspberry Pi. Ships latency, jitter, pa
 
 | Document | Purpose |
 |---|---|
+| [`docs/architecture.md`](docs/architecture.md) | Design narrative — composition root, Protocols, TickContext, testing philosophy |
 | [`docs/runbook.md`](docs/runbook.md) | Symptom-indexed ops runbook — start here at 2am |
 | [`docs/setup-pi.md`](docs/setup-pi.md) | Tailscale + read-only root hardening for unattended deployments |
 | [`docs/probe-m6.md`](docs/probe-m6.md) | Optional Netgear M6 cellular signal probe — setup or port to another router |
@@ -81,21 +82,25 @@ Metric names are flattened: `towerwatch_{field}_{target_label}` (e.g. `towerwatc
 
 ```
 towerwatch/
-├── pi/
-│   ├── towerwatch.py       # Main monitoring loop
+├── src/towerwatch/         # The package — installed via `pip install .`
+│   ├── main.py             # compose_root() + main() — [project.scripts] entry
+│   ├── app.py              # run_loop(ctx, state) — the 60 s main loop
 │   ├── config.py           # All tunable constants (intervals, targets, URLs)
-│   ├── secrets.py.example  # Credential template — copy to secrets.py
-│   ├── requirements.txt    # Python dependencies
-│   ├── install.sh          # One-shot Pi setup (systemd, data partition, deps)
-│   ├── towerwatch.service  # systemd unit
+│   ├── credentials.py.example  # Credential template — copy to credentials.py
+│   ├── clients/            # GrafanaClient, LokiClient (outbound HTTP)
 │   └── probes/             # Per-probe modules (ping, dns, tcp, http, m6, ookla)
-├── pi/bench/               # Failure-mode test harness
-├── docs/                   # Detailed guides (setup, probe config, ops)
-├── grafana/
-│   └── dashboard.json      # Importable Grafana Cloud dashboard
-├── ci.sh                   # Fast validation: compile, import, version stamp
-├── cd.sh                   # Deploy: pull, copy, restart
-├── CLAUDE.md               # Instructions for AI assistants
+├── tests/                  # pytest suite (hand-written fakes, no MagicMock)
+├── pi/bench/               # Failure-mode test harness (imports installed pkg)
+├── docs/                   # Architecture, runbook, probe guides
+├── grafana/dashboard.json  # Importable Grafana Cloud dashboard
+├── scripts/
+│   ├── install-pi.sh       # One-time Pi setup (venv, systemd, data partition)
+│   ├── deploy.sh           # Per-deploy: git pull, pip install, restart
+│   └── towerwatch.service  # systemd unit
+├── pyproject.toml          # Single source of truth (PEP 621)
+├── ci.sh                   # Local CI: ruff + pyright + pytest + version stamp
+├── cd.sh                   # Shim → scripts/deploy.sh
+├── CLAUDE.md               # Agent-facing invariants
 └── README.md
 ```
 
@@ -113,7 +118,7 @@ Any Raspberry Pi with wired Ethernet will work. This project was developed on a 
 | Heatsink / case | Recommended if running 24/7 in a warm location. |
 | Ethernet cable | Cat5e or better to the router under test. |
 
-The probes don't care what's on the other end of the cable — 5G hotspot, fixed-wireless modem, fibre ONT, or LAN uplink. The optional cellular signal probe (`pi/probes/m6.py`) disables itself cleanly if the router isn't reachable — see [`docs/probe-m6.md`](docs/probe-m6.md).
+The probes don't care what's on the other end of the cable — 5G hotspot, fixed-wireless modem, fibre ONT, or LAN uplink. The optional cellular signal probe (`src/towerwatch/probes/m6.py`) disables itself cleanly if the router isn't reachable — see [`docs/probe-m6.md`](docs/probe-m6.md).
 
 ---
 
@@ -136,13 +141,13 @@ sudo apt update && sudo apt upgrade -y
 
 ```bash
 git clone <your-fork-url> towerwatch
-cd towerwatch/pi
-cp secrets.py.example secrets.py
-# Edit secrets.py — see "Configuration" below
-sudo bash install.sh
+cd towerwatch
+cp src/towerwatch/credentials.py.example src/towerwatch/credentials.py
+# Edit credentials.py — see "Configuration" below
+sudo bash scripts/install-pi.sh
 ```
 
-`install.sh` installs Python deps, the Ookla Speedtest CLI, mounts the data partition at `/opt/towerwatch/data`, installs the systemd unit, and starts the service.
+`scripts/install-pi.sh` installs system deps, the Ookla Speedtest CLI, creates `/opt/towerwatch/.venv`, `pip install`s the package into it, mounts the data partition at `/opt/towerwatch/data`, installs the systemd unit (pointing at `.venv/bin/towerwatch`), and enables the service.
 
 ### 4. Verify
 
@@ -160,10 +165,11 @@ In Grafana Cloud:
 Cross-platform — see [`CLAUDE.md`](CLAUDE.md) §Windows dev mechanics for path/flag differences.
 
 ```bash
-cd pi
-cp secrets.py.example secrets.py
-pip install -r requirements.txt
-python towerwatch.py
+# From repo root; uv is optional but recommended.
+uv venv && uv pip install -e ".[dev]"
+cp src/towerwatch/credentials.py.example src/towerwatch/credentials.py
+# ...edit credentials.py...
+python -m towerwatch       # or: .venv/bin/towerwatch
 ```
 
 Optional: drop the Ookla CLI binary in `pi/speedtest_bin/` for manual speedtests. The cellular signal probe fails gracefully off-network.
@@ -174,8 +180,8 @@ Optional: drop the Ookla CLI binary in `pi/speedtest_bin/` for manual speedtests
 
 All tuning lives in two files:
 
-- **`pi/config.py`** — non-secret constants: probe targets, intervals, push URLs, buffer paths, log event names. Read the top of the file; it's the source of truth.
-- **`pi/secrets.py`** — gitignored. Created from `secrets.py.example`. Contains:
+- **`src/towerwatch/config.py`** — non-secret constants: probe targets, intervals, push URLs, buffer paths, log event names. Read the top of the file; it's the source of truth.
+- **`src/towerwatch/credentials.py`** — gitignored. Created from `credentials.py.example`. Contains:
   - Grafana Cloud Prometheus creds (`GRAFANA_INSTANCE_ID`, `GRAFANA_API_KEY`)
   - Loki creds (`LOKI_URL`, `LOKI_USER`, `LOKI_TOKEN`) — Loki has a **different** instance ID from Prometheus
   - Optional: router admin password, Grafana annotation service-account token
@@ -190,7 +196,7 @@ To enable sticky outage annotations: create a service account in your Grafana st
 
 ## Deploy
 
-Run `./ci.sh full && ./cd.sh <user@host>` from your dev machine. `ci.sh` stamps `pi/version.txt`; `cd.sh` copies files and restarts the service.
+Run `./ci.sh full && ./scripts/deploy.sh <user@host>` from your dev machine. `ci.sh` stamps `src/towerwatch/_version.txt` (after ruff, pyright, pytest); `scripts/deploy.sh` SSHes in, `git pull`s, `pip install`s into the Pi's venv, and restarts the service. `./cd.sh` still works as a shim.
 
 For dashboard updates: re-import `grafana/dashboard.json` in Grafana Cloud (Dashboards → New → Import → Upload JSON).
 
