@@ -5,7 +5,7 @@ import socket
 
 from towerwatch import config
 from towerwatch.clock import Clock, SystemClock
-from towerwatch.probes.base import Probe, ProbeResult
+from towerwatch.probes.base import ProbeResult
 
 log = logging.getLogger("towerwatch")
 
@@ -40,7 +40,7 @@ class TCPProbe:
             start = self._clock.perf_counter()
             sock.connect((self._host, self._port))
             return round((self._clock.perf_counter() - start) * 1000)
-        except (OSError, socket.timeout) as e:
+        except (TimeoutError, OSError) as e:
             log.warning("TCP connect failed: %s", e)
             return 0
         finally:

@@ -1,10 +1,6 @@
 """Tests for startup.reconcile_previous_outage — no patch, fakes injected."""
-import sys
-from pathlib import Path
 
-_PI = Path(__file__).resolve().parents[1]
-if str(_PI) not in sys.path:
-    sys.path.insert(0, str(_PI))
+from pathlib import Path
 
 from tests.fakes import FakeClock, FakeEvents, FakeGrafana, FakeLoki
 
@@ -22,13 +18,16 @@ class _Cfg:
 # ---------------------------------------------------------------------------
 def test_reconcile_no_marker_returns_none(tmp_path):
     from towerwatch.startup import reconcile_previous_outage
+
     grafana = FakeGrafana()
     loki = FakeLoki()
     events = FakeEvents()
     cfg = _Cfg(tmp_path)
 
     result = reconcile_previous_outage(
-        grafana, loki, cfg,
+        grafana,
+        loki,
+        cfg,
         clock=FakeClock(wall=[1_700_000_000.0]),
         events=events,
     )
@@ -42,6 +41,7 @@ def test_reconcile_no_marker_returns_none(tmp_path):
 # ---------------------------------------------------------------------------
 def test_reconcile_small_gap_no_annotation(tmp_path):
     from towerwatch.startup import reconcile_previous_outage, write_marker
+
     grafana = FakeGrafana()
     loki = FakeLoki()
     events = FakeEvents()
@@ -52,7 +52,9 @@ def test_reconcile_small_gap_no_annotation(tmp_path):
     write_marker(Path(cfg.LAST_PUSH_MARKER_FILE), last_push)
 
     result = reconcile_previous_outage(
-        grafana, loki, cfg,
+        grafana,
+        loki,
+        cfg,
         clock=FakeClock(wall=[last_push + 30]),
         events=events,
     )
@@ -66,6 +68,7 @@ def test_reconcile_small_gap_no_annotation(tmp_path):
 # ---------------------------------------------------------------------------
 def test_reconcile_large_gap_fires_annotation(tmp_path):
     from towerwatch.startup import reconcile_previous_outage, write_marker
+
     grafana = FakeGrafana()
     loki = FakeLoki()
     events = FakeEvents()
@@ -75,7 +78,9 @@ def test_reconcile_large_gap_fires_annotation(tmp_path):
     write_marker(Path(cfg.LAST_PUSH_MARKER_FILE), last_push)
 
     result = reconcile_previous_outage(
-        grafana, loki, cfg,
+        grafana,
+        loki,
+        cfg,
         clock=FakeClock(wall=[last_push + 700]),  # 700s gap > 600
         events=events,
     )
@@ -89,6 +94,7 @@ def test_reconcile_large_gap_fires_annotation(tmp_path):
 # ---------------------------------------------------------------------------
 def test_reconcile_network_unreachable_when_last_alive_recent(tmp_path):
     from towerwatch.startup import reconcile_previous_outage, write_marker
+
     grafana = FakeGrafana()
     loki = FakeLoki()
     events = FakeEvents()
@@ -102,7 +108,9 @@ def test_reconcile_network_unreachable_when_last_alive_recent(tmp_path):
     write_marker(Path(cfg.LAST_ALIVE_MARKER_FILE), last_alive)
 
     reconcile_previous_outage(
-        grafana, loki, cfg,
+        grafana,
+        loki,
+        cfg,
         clock=FakeClock(wall=[now]),
         events=events,
     )

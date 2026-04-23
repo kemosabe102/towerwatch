@@ -1,19 +1,15 @@
 """Tests for DNSProbe — no patch, fakes injected directly."""
+
 import socket
-import sys
-from pathlib import Path
-
-_PI = Path(__file__).resolve().parents[1]
-if str(_PI) not in sys.path:
-    sys.path.insert(0, str(_PI))
-
-from tests.fakes import FakeClock, FakeLoki, FakeResolver
 
 import dns.resolver
+
+from tests.fakes import FakeClock, FakeLoki, FakeResolver
 
 
 def _make_probe(raises=None, result=None):
     from towerwatch.probes.dns import DNSProbe
+
     resolver = FakeResolver(result=result, raises=raises)
     return DNSProbe(
         "8.8.8.8",
@@ -74,6 +70,7 @@ def test_dns_oserror_returns_zero():
 # ---------------------------------------------------------------------------
 def test_dns_failure_emits_event():
     from towerwatch.probes.dns import DNSProbe
+
     loki = FakeLoki()
     probe = DNSProbe(
         "1.1.1.1",
@@ -90,6 +87,7 @@ def test_dns_failure_emits_event():
 # ---------------------------------------------------------------------------
 def test_dns_resolver_configured_with_nameserver_and_lifetime():
     from towerwatch.probes.dns import DNSProbe
+
     resolver = FakeResolver(result=[])
     probe = DNSProbe(
         "1.1.1.1",

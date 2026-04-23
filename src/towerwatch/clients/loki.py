@@ -17,8 +17,10 @@ from towerwatch import config
 
 try:
     from towerwatch import credentials
-except ImportError:
-    raise ImportError("credentials.py not found. Copy credentials.py.example to credentials.py and fill in values.")
+except ImportError as e:
+    raise ImportError(
+        "credentials.py not found. Copy credentials.py.example to credentials.py and fill in values."
+    ) from e
 
 log = logging.getLogger("towerwatch")
 
@@ -63,19 +65,23 @@ class LokiClient:
             host_tag=cfg.INFLUX_HOST_TAG,
         )
 
-    def _build_payload(self, level: str, message: str, extra: dict = None) -> dict:
+    def _build_payload(self, level: str, message: str, extra: dict | None = None) -> dict:
         return {
-            "streams": [{
-                "stream": {
-                    "job": "towerwatch",
-                    "host": self._host_tag,
-                    "level": level.lower(),
-                },
-                "values": [[
-                    str(int(time.time() * 1e9)),
-                    json.dumps({"msg": message, **(extra or {})}),
-                ]],
-            }]
+            "streams": [
+                {
+                    "stream": {
+                        "job": "towerwatch",
+                        "host": self._host_tag,
+                        "level": level.lower(),
+                    },
+                    "values": [
+                        [
+                            str(int(time.time() * 1e9)),
+                            json.dumps({"msg": message, **(extra or {})}),
+                        ]
+                    ],
+                }
+            ]
         }
 
     def _post(self, payload: dict) -> None:
@@ -89,9 +95,7 @@ class LokiClient:
             timeout=self._push_timeout,
         )
         if resp.status_code >= 300:
-            raise requests.HTTPError(
-                f"Loki returned {resp.status_code}", response=resp
-            )
+            raise requests.HTTPError(f"Loki returned {resp.status_code}", response=resp)
 
     def _buffer(self, payload: dict) -> None:
         """Append payload as a JSON line to the buffer file. fsync'd. Evicts oldest on overflow."""
@@ -99,14 +103,14 @@ class LokiClient:
         buf.parent.mkdir(parents=True, exist_ok=True)
         if buf.exists() and buf.stat().st_size >= self._buffer_max_bytes:
             lines = buf.read_text(encoding="utf-8").splitlines()
-            keep = lines[max(1, len(lines) // 10):]
+            keep = lines[max(1, len(lines) // 10) :]
             buf.write_text("\n".join(keep) + "\n", encoding="utf-8")
         with open(buf, "a", encoding="utf-8") as f:
             f.write(json.dumps(payload) + "\n")
             f.flush()
             os.fsync(f.fileno())
 
-    def push(self, level: str, message: str, extra: dict = None) -> None:
+    def push(self, level: str, message: str, extra: dict | None = None) -> None:
         """Push a structured log entry. Filters by push_level; buffers to disk on failure."""
         if _LOG_LEVELS.get(level, 0) < _LOG_LEVELS.get(self._push_level, 1):
             return
@@ -132,7 +136,7 @@ class LokiClient:
         buf = self._buffer_path
         if not buf.exists() or buf.stat().st_size == 0:
             return 0
-        lines = [l.strip() for l in buf.read_text(encoding="utf-8").splitlines() if l.strip()]
+        lines = [ln.strip() for ln in buf.read_text(encoding="utf-8").splitlines() if ln.strip()]
         if not lines:
             buf.unlink()
             return 0
@@ -153,8 +157,11 @@ class LokiClient:
         if consumed == len(lines):
             buf.unlink()
             log.info("Log buffer flushed: %d entries delivered", delivered)
-            self.push("WARN", f"Log buffer flushed: {delivered} entries",
-                      {"event": config.LOG_EVENT_LOG_BUFFER_FLUSHED, "count": delivered})
+            self.push(
+                "WARN",
+                f"Log buffer flushed: {delivered} entries",
+                {"event": config.LOG_EVENT_LOG_BUFFER_FLUSHED, "count": delivered},
+            )
         elif consumed > 0:
             remaining = lines[consumed:]
             buf.write_text("\n".join(remaining) + "\n", encoding="utf-8")
@@ -174,7 +181,7 @@ def _get_singleton() -> LokiClient:
     return _singleton
 
 
-def _build_loki_payload(level: str, message: str, extra: dict = None) -> dict:
+def _build_loki_payload(level: str, message: str, extra: dict | None = None) -> dict:
     return _get_singleton()._build_payload(level, message, extra)
 
 
@@ -186,7 +193,7 @@ def _post_loki(payload: dict) -> None:
     _get_singleton()._post(payload)
 
 
-def push_log(level: str, message: str, extra: dict = None) -> None:
+def push_log(level: str, message: str, extra: dict | None = None) -> None:
     _get_singleton().push(level, message, extra)
 
 

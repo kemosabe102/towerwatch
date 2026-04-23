@@ -1,6 +1,6 @@
 """Probe protocol and ProbeResult dataclass — shared contract for all probes."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Protocol
 
 

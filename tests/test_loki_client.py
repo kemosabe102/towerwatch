@@ -1,14 +1,10 @@
 """Tests for LokiClient — no patch, post_fn injected."""
+
 import json
-import sys
 from pathlib import Path
 
 import pytest
 import requests
-
-_PI = Path(__file__).resolve().parents[1]
-if str(_PI) not in sys.path:
-    sys.path.insert(0, str(_PI))
 
 from tests.fakes import FakeResponse
 
@@ -29,9 +25,9 @@ class RecordingPost:
         return FakeResponse(status_code=self._status, text=self._body or "")
 
 
-def _make_client(tmp_path, *, push_level="WARN", url="http://fake-loki",
-                 post_fn=None):
+def _make_client(tmp_path, *, push_level="WARN", url="http://fake-loki", post_fn=None):
     from towerwatch.clients.loki import LokiClient
+
     return LokiClient(
         url=url,
         user="user",
@@ -93,8 +89,7 @@ def test_flush_delivers_in_order(tmp_path):
     buf.parent.mkdir(parents=True)
 
     payloads = [client._build_payload("WARN", f"msg{i}") for i in range(3)]
-    buf.write_text("\n".join(json.dumps(p) for p in payloads) + "\n",
-                   encoding="utf-8")
+    buf.write_text("\n".join(json.dumps(p) for p in payloads) + "\n", encoding="utf-8")
 
     count = client.flush()
     assert count == 3
@@ -118,21 +113,24 @@ def test_flush_preserves_remaining_on_failure(tmp_path):
                 raise OSError("gone")
 
     client = FlakyClient(
-        url="http://fake-loki", user="u", token="t",
+        url="http://fake-loki",
+        user="u",
+        token="t",
         buffer_path=str(tmp_path / "buffer" / "loki.jsonl"),
         buffer_max_bytes=256 * 1024,
-        push_level="WARN", push_timeout=5, host_tag="towerwatch",
+        push_level="WARN",
+        push_timeout=5,
+        host_tag="towerwatch",
     )
     buf = Path(str(tmp_path / "buffer" / "loki.jsonl"))
     buf.parent.mkdir(parents=True)
     payloads = [client._build_payload("WARN", f"e{i}") for i in range(4)]
-    buf.write_text("\n".join(json.dumps(p) for p in payloads) + "\n",
-                   encoding="utf-8")
+    buf.write_text("\n".join(json.dumps(p) for p in payloads) + "\n", encoding="utf-8")
 
     count = client.flush()
     assert count == 2
     assert buf.exists()
-    remaining = [l for l in buf.read_text().splitlines() if l.strip()]
+    remaining = [line for line in buf.read_text().splitlines() if line.strip()]
     assert len(remaining) == 2
 
 

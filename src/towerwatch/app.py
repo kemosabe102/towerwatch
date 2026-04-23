@@ -4,6 +4,7 @@ The body here is the former `pi/towerwatch.py:main()` post-composition.
 Tests drive `run_loop` directly with a fake context and a state whose
 `shutdown_requested` flips after N ticks.
 """
+
 from __future__ import annotations
 
 import logging
@@ -43,9 +44,7 @@ def run_loop(ctx: TickContext, state: RuntimeState) -> None:
         build_date=config.BUILD_DATE,
         platform=sys.platform,
     )
-    events_mod.service_started(
-        loki, log_level=config.LOKI_PUSH_LEVEL, platform=sys.platform
-    )
+    events_mod.service_started(loki, log_level=config.LOKI_PUSH_LEVEL, platform=sys.platform)
 
     state.metric_batch.append(format_influx_line({"service_restart": 1}, int(time.time())))
 

@@ -3,10 +3,10 @@
 Kept deliberately separate from `app.py` so tests can instantiate a TickContext
 with fakes and call `app.run_loop` without touching production wiring.
 """
+
 from __future__ import annotations
 
 import logging
-import sys
 
 from towerwatch import app, config
 from towerwatch.clients import grafana as grafana_mod
@@ -22,12 +22,12 @@ def compose_root() -> tuple[TickContext, RuntimeState]:
     """Instantiate and wire every collaborator needed for one process lifetime."""
     try:
         from towerwatch import credentials
-    except ImportError:
+    except ImportError as e:
         print(
             "ERROR: credentials.py not found. "
             "Copy credentials.py.example to credentials.py and fill in values."
         )
-        raise SystemExit(1)
+        raise SystemExit(1) from e
 
     state = RuntimeState()
     configure_logging()

@@ -9,16 +9,16 @@ import logging
 import requests
 
 from towerwatch import config
-from towerwatch.probes.base import Probe, ProbeResult
+from towerwatch.probes.base import ProbeResult
 
 log = logging.getLogger("towerwatch")
 
 
 _M6_FIELD_MAP = [
-    ('m6_rsrp', ('RSRP', 'rsrp'), int),
-    ('m6_rsrq', ('RSRQ', 'rsrq'), int),
-    ('m6_sinr', ('SINR', 'sinr'), int),
-    ('m6_band', ('curBand', 'band'), lambda v: int(v) if str(v).isdigit() else 0),
+    ("m6_rsrp", ("RSRP", "rsrp"), int),
+    ("m6_rsrq", ("RSRQ", "rsrq"), int),
+    ("m6_sinr", ("SINR", "sinr"), int),
+    ("m6_band", ("curBand", "band"), lambda v: int(v) if str(v).isdigit() else 0),
 ]
 
 
@@ -35,13 +35,15 @@ def _extract_m6_fields(data: dict) -> dict:
 class _ModuleLokiSink:
     def log_and_push(self, level, message, **fields):
         from towerwatch.clients.loki import log_and_push
+
         log_and_push(level, message, **fields)
 
 
 def _default_session_factory() -> requests.Session:
     s = requests.Session()
     from towerwatch import credentials
-    s.auth = ('admin', credentials.M6_ADMIN_PASSWORD)
+
+    s.auth = ("admin", credentials.M6_ADMIN_PASSWORD)
     return s
 
 
@@ -66,6 +68,7 @@ class M6Probe:
     def _get_session(self) -> requests.Session:
         if self._session is None:
             self._session = self._session_factory()
+        assert self._session is not None
         return self._session
 
     def _invalidate_session(self) -> None:
@@ -78,14 +81,15 @@ class M6Probe:
             if resp.status_code == 401:
                 self._invalidate_session()
                 self._loki.log_and_push(
-                    'WARN', 'M6 auth expired',
+                    "WARN",
+                    "M6 auth expired",
                     event=config.LOG_EVENT_M6_AUTH_EXPIRED,
                 )
                 return {}
             resp.raise_for_status()
             return _extract_m6_fields(resp.json())
         except Exception as e:
-            log.debug('M6 poll failed: %s', e)
+            log.debug("M6 poll failed: %s", e)
             return {}
 
     def run(self) -> ProbeResult:

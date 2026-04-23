@@ -17,6 +17,10 @@ data/
 # CI build artifact (stamped by ci.sh, not source) — new path
 src/towerwatch/_version.txt
 
+# Virtual env
+.venv/
+*.egg-info/
+
 # Local deploy wrapper (contains host-specific config)
 deploy-local.sh
 

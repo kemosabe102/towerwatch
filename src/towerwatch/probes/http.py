@@ -12,7 +12,7 @@ import requests
 
 from towerwatch import config
 from towerwatch.clock import Clock, SystemClock
-from towerwatch.probes.base import Probe, ProbeResult
+from towerwatch.probes.base import ProbeResult
 
 log = logging.getLogger("towerwatch")
 
@@ -26,6 +26,7 @@ class _ModuleLokiSink:
 
     def log_and_push(self, level, message, **fields):
         from towerwatch.clients.loki import log_and_push
+
         log_and_push(level, message, **fields)
 
 
@@ -95,15 +96,19 @@ class HTTPThroughputProbe:
             throughput_mbps = round((size_bytes * 8) / elapsed_s / 1_000_000, 2)
             elapsed_ms = round(elapsed_s * 1000)
             self._loki.log_and_push(
-                "INFO", f"Throughput: {throughput_mbps} Mbps ({elapsed_ms}ms)",
+                "INFO",
+                f"Throughput: {throughput_mbps} Mbps ({elapsed_ms}ms)",
                 event=config.LOG_EVENT_HTTP_THROUGHPUT_OK,
-                throughput_mbps=throughput_mbps, elapsed_ms=elapsed_ms,
+                throughput_mbps=throughput_mbps,
+                elapsed_ms=elapsed_ms,
             )
             return {"http_throughput_ms": elapsed_ms, "http_throughput_mbps": throughput_mbps}
         except Exception as e:
             self._loki.log_and_push(
-                "WARN", f"HTTP throughput test failed: {e}",
-                event=config.LOG_EVENT_HTTP_THROUGHPUT_FAILED, error=str(e),
+                "WARN",
+                f"HTTP throughput test failed: {e}",
+                event=config.LOG_EVENT_HTTP_THROUGHPUT_FAILED,
+                error=str(e),
             )
             return {"http_throughput_ms": 0, "http_throughput_mbps": 0}
 

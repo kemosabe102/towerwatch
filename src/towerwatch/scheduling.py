@@ -5,6 +5,7 @@ Scheduling helpers: daily throughput slots, HTTP latency interval, heartbeat cad
 import logging
 import random as _random
 import time as _time
+from typing import Any
 
 from towerwatch import config
 
@@ -18,8 +19,8 @@ class Scheduler:
         http_latency_interval_s: int,
         http_throughput_tests_per_day: int,
         heartbeat_interval_s: int,
-        clock=_time,
-        rng=_random,
+        clock: Any = _time,
+        rng: Any = _random,
     ):
         self._latency_interval = http_latency_interval_s
         self._throughput_n = http_throughput_tests_per_day
@@ -56,10 +57,21 @@ class Scheduler:
     def _rebuild_schedule(self, now: float) -> None:
         n = self._throughput_n
         local = self._clock.localtime(now)
-        midnight = self._clock.mktime(self._clock.struct_time((
-            local.tm_year, local.tm_mon, local.tm_mday,
-            0, 0, 0, 0, 0, local.tm_isdst,
-        )))
+        midnight = self._clock.mktime(
+            self._clock.struct_time(
+                (
+                    local.tm_year,
+                    local.tm_mon,
+                    local.tm_mday,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    local.tm_isdst,
+                )
+            )
+        )
         slot_size = 86400 / n
         schedule = []
         for i in range(n):
@@ -70,9 +82,10 @@ class Scheduler:
                 schedule.append(t)
         schedule.sort()
         self._throughput_schedule = schedule
-        log.info("Throughput schedule: %s",
-                 [self._clock.strftime("%H:%M", self._clock.localtime(t))
-                  for t in schedule])
+        log.info(
+            "Throughput schedule: %s",
+            [self._clock.strftime("%H:%M", self._clock.localtime(t)) for t in schedule],
+        )
 
     def should_run_throughput(self, now: float) -> bool:
         today = self._clock.localtime(now).tm_yday

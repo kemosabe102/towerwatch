@@ -1,20 +1,13 @@
 """Tests for scheduling.Scheduler — retargeted from towerwatch._build_daily_throughput_schedule."""
-import sys
+
 import time as time_mod
-from pathlib import Path
-from unittest.mock import patch
-
-import pytest
-
-_PI = Path(__file__).resolve().parents[1]
-if str(_PI) not in sys.path:
-    sys.path.insert(0, str(_PI))
 
 from towerwatch.scheduling import Scheduler
 
 
 def _make_scheduler(n=4, now=None):
     from towerwatch import config
+
     s = Scheduler(
         http_latency_interval_s=config.HTTP_LATENCY_INTERVAL_S,
         http_throughput_tests_per_day=n,
@@ -51,10 +44,21 @@ def test_schedule_is_sorted():
 def test_schedule_skips_past_due_slots():
     """Called at 23:59:59 — all 4 slots (each 6h wide) are past."""
     local = time_mod.localtime()
-    midnight = time_mod.mktime(time_mod.struct_time((
-        local.tm_year, local.tm_mon, local.tm_mday,
-        0, 0, 0, 0, 0, local.tm_isdst,
-    )))
+    midnight = time_mod.mktime(
+        time_mod.struct_time(
+            (
+                local.tm_year,
+                local.tm_mon,
+                local.tm_mday,
+                0,
+                0,
+                0,
+                0,
+                0,
+                local.tm_isdst,
+            )
+        )
+    )
     just_before_midnight = midnight + 86400 - 1
     s = _make_scheduler(n=4, now=just_before_midnight)
     assert len(s._throughput_schedule) == 0
@@ -71,6 +75,7 @@ def test_schedule_slot_count_config_respected():
 # ---------------------------------------------------------------------------
 def test_heartbeat_not_yet_due():
     from towerwatch import config
+
     s = Scheduler.from_config(config)
     s._last_heartbeat_ts = 0.0
     assert s.should_heartbeat(1.0) is False
@@ -78,6 +83,7 @@ def test_heartbeat_not_yet_due():
 
 def test_heartbeat_due_after_interval():
     from towerwatch import config
+
     s = Scheduler.from_config(config)
     s._last_heartbeat_ts = 0.0
     assert s.should_heartbeat(float(config.HEARTBEAT_INTERVAL_S + 1)) is True
@@ -89,6 +95,7 @@ def test_heartbeat_due_after_interval():
 def test_day_rollover_rebuilds_schedule():
     """should_run_throughput triggers a schedule rebuild when tm_yday changes."""
     from towerwatch import config
+
     rng_calls = []
 
     class DeterministicRng:
@@ -113,7 +120,6 @@ def test_day_rollover_rebuilds_schedule():
 # ---------------------------------------------------------------------------
 def test_rng_injection_controls_schedule():
     """With a fixed RNG, the schedule is deterministic."""
-    from towerwatch import config
 
     class FixedRng:
         def uniform(self, a, b):
@@ -121,10 +127,21 @@ def test_rng_injection_controls_schedule():
 
     now = time_mod.time()
     local = time_mod.localtime(now)
-    midnight = time_mod.mktime(time_mod.struct_time((
-        local.tm_year, local.tm_mon, local.tm_mday,
-        0, 0, 0, 0, 0, local.tm_isdst,
-    )))
+    midnight = time_mod.mktime(
+        time_mod.struct_time(
+            (
+                local.tm_year,
+                local.tm_mon,
+                local.tm_mday,
+                0,
+                0,
+                0,
+                0,
+                0,
+                local.tm_isdst,
+            )
+        )
+    )
     slot_size = 86400 / 4
     expected = sorted(
         midnight + i * slot_size + slot_size / 2

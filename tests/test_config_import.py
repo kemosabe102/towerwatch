@@ -1,15 +1,10 @@
 """Tests for config._load_build_version — no patch, deps injected directly."""
-import sys
-from pathlib import Path
-
-_PI = Path(__file__).resolve().parents[1]
-if str(_PI) not in sys.path:
-    sys.path.insert(0, str(_PI))
 
 
 def test_config_import_does_not_spawn_subprocess_when_version_txt_present():
     """config.py must have a non-empty BUILD_VERSION after import."""
     from towerwatch import config as cfg_module
+
     assert cfg_module.BUILD_VERSION, "BUILD_VERSION must be non-empty after import"
 
 
@@ -40,6 +35,7 @@ def test_load_build_version_skips_subprocess_when_env_set(tmp_path):
 def test_load_build_version_reads_version_txt_when_present(tmp_path):
     """When version.txt exists and is readable, the loader returns its contents."""
     from towerwatch import config as cfg_module
+
     vfile = tmp_path / "version.txt"
     vfile.write_text("abc1234 2026-01-01T00:00:00Z\n", encoding="utf-8")
 
@@ -47,7 +43,8 @@ def test_load_build_version_reads_version_txt_when_present(tmp_path):
         candidates=[vfile],
         env={},
         check_output=lambda *a, **kw: (_ for _ in ()).throw(
-            AssertionError("must not fall through to git")),
+            AssertionError("must not fall through to git")
+        ),
     )
     assert version == "abc1234"
     assert build_date == "2026-01-01T00:00:00Z"

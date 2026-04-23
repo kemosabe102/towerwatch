@@ -4,30 +4,31 @@ Regression tests for log-buffer flush behaviour.
 No monkeypatch — all seams are injected directly into LokiClient
 and wait_for_data_partition.
 """
+
 import json
-import sys
 from pathlib import Path
 
-_PI = Path(__file__).resolve().parents[1]
-if str(_PI) not in sys.path:
-    sys.path.insert(0, str(_PI))
-
-from tests.fakes import FakeClock, FakeCompletedProcess, FakeEvents, FakeLoki, FakeSubprocess
+from tests.fakes import FakeClock, FakeEvents, FakeLoki, FakeSubprocess
 
 
 def _make_payload(msg: str) -> dict:
     return {
-        "streams": [{
-            "stream": {"job": "towerwatch", "host": "towerwatch", "level": "warn"},
-            "values": [["1700000000000000000", json.dumps({"msg": msg})]],
-        }]
+        "streams": [
+            {
+                "stream": {"job": "towerwatch", "host": "towerwatch", "level": "warn"},
+                "values": [["1700000000000000000", json.dumps({"msg": msg})]],
+            }
+        ]
     }
 
 
 def _make_client(buf_path):
     from towerwatch.clients.loki import LokiClient
+
     return LokiClient(
-        url="http://fake", user="u", token="t",
+        url="http://fake",
+        user="u",
+        token="t",
         buffer_path=str(buf_path),
         buffer_max_bytes=256 * 1024,
     )
@@ -59,8 +60,11 @@ def test_flush_delivers_all_lines_and_removes_buffer(tmp_path):
             posted.append(payload)
 
     test_client = TestClient(
-        url="http://fake", user="u", token="t",
-        buffer_path=str(buf_path), buffer_max_bytes=256 * 1024,
+        url="http://fake",
+        user="u",
+        token="t",
+        buffer_path=str(buf_path),
+        buffer_max_bytes=256 * 1024,
     )
     test_client.flush()
 
@@ -92,14 +96,17 @@ def test_flush_preserves_remaining_on_network_failure(tmp_path):
                 raise OSError("network gone")
 
     client = FlakyClient(
-        url="http://fake", user="u", token="t",
-        buffer_path=str(buf_path), buffer_max_bytes=256 * 1024,
+        url="http://fake",
+        user="u",
+        token="t",
+        buffer_path=str(buf_path),
+        buffer_max_bytes=256 * 1024,
     )
     client.flush()
 
     assert client.call_count == 2
     assert buf_path.exists()
-    remaining = [l for l in buf_path.read_text().splitlines() if l.strip()]
+    remaining = [line for line in buf_path.read_text().splitlines() if line.strip()]
     assert len(remaining) == 2
 
 
@@ -108,11 +115,13 @@ def test_flush_preserves_remaining_on_network_failure(tmp_path):
 # ---------------------------------------------------------------------------
 def test_wait_for_data_partition_no_nameerror(tmp_path):
     from towerwatch.startup import wait_for_data_partition
+
     missing = tmp_path / "nonexistent_data"
     # First clock.time() call = deadline = 0 + 1 = 1
     # Second clock.time() call inside loop = 31 → loop exits
     wait_for_data_partition(
-        missing, timeout_s=1,
+        missing,
+        timeout_s=1,
         is_windows=False,
         clock=FakeClock(wall=[0.0, 31.0]),
         subprocess_run=FakeSubprocess(),

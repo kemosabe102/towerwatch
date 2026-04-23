@@ -12,7 +12,7 @@ import subprocess
 import sys
 
 from towerwatch import config
-from towerwatch.probes.base import Probe, ProbeResult
+from towerwatch.probes.base import ProbeResult
 
 log = logging.getLogger("towerwatch")
 
@@ -22,16 +22,14 @@ IS_WINDOWS = sys.platform == "win32"
 class _ModuleLokiSink:
     def log_and_push(self, level, message, **fields):
         from towerwatch.clients.loki import log_and_push
+
         log_and_push(level, message, **fields)
 
 
-def _build_ping_cmd(target: str, count: int, timeout_s: int,
-                    is_windows: bool) -> list[str]:
+def _build_ping_cmd(target: str, count: int, timeout_s: int, is_windows: bool) -> list[str]:
     if is_windows:
-        return ["ping", "-n", str(count),
-                "-w", str(timeout_s * 1000), target]
-    return ["ping", "-c", str(count),
-            "-W", str(timeout_s), target]
+        return ["ping", "-n", str(count), "-w", str(timeout_s * 1000), target]
+    return ["ping", "-c", str(count), "-W", str(timeout_s), target]
 
 
 def _parse_rtt_stats(stdout: str, is_windows: bool) -> tuple[int, int, int, float]:
@@ -39,7 +37,8 @@ def _parse_rtt_stats(stdout: str, is_windows: bool) -> tuple[int, int, int, floa
     if is_windows:
         m = re.search(
             r"Minimum\s*=\s*([\d.]+)ms.*Maximum\s*=\s*([\d.]+)ms.*Average\s*=\s*([\d.]+)ms",
-            stdout, re.DOTALL,
+            stdout,
+            re.DOTALL,
         )
         if m:
             return int(float(m.group(1))), int(float(m.group(3))), int(float(m.group(2))), 0.0
@@ -49,8 +48,12 @@ def _parse_rtt_stats(stdout: str, is_windows: bool) -> tuple[int, int, int, floa
         stdout,
     )
     if m:
-        return (round(float(m.group(1))), round(float(m.group(2))),
-                round(float(m.group(3))), float(m.group(4)))
+        return (
+            round(float(m.group(1))),
+            round(float(m.group(2))),
+            round(float(m.group(3))),
+            float(m.group(4)),
+        )
     return 0, 0, 0, 0.0
 
 
@@ -62,7 +65,7 @@ def _calc_jitter(rtts: list[float], mdev: float) -> int:
     return round(mdev)
 
 
-def _parse_ping_output(stdout: str, is_windows: bool = None) -> dict:
+def _parse_ping_output(stdout: str, is_windows: bool | None = None) -> dict:
     """Parse ping output into {rtt_avg, rtt_min, rtt_max, jitter, pkt_loss, connected}."""
     if is_windows is None:
         is_windows = IS_WINDOWS
@@ -80,15 +83,24 @@ def _parse_ping_output(stdout: str, is_windows: bool = None) -> dict:
         rtts = [float(m) for m in re.findall(r"time=([\d.]+)", stdout)]
 
     return {
-        "rtt_avg": rtt_avg, "rtt_min": rtt_min, "rtt_max": rtt_max,
-        "jitter": _calc_jitter(rtts, mdev), "pkt_loss": pkt_loss,
+        "rtt_avg": rtt_avg,
+        "rtt_min": rtt_min,
+        "rtt_max": rtt_max,
+        "jitter": _calc_jitter(rtts, mdev),
+        "pkt_loss": pkt_loss,
         "connected": pkt_loss < 100,
     }
 
 
 def _zero_result() -> dict:
-    return {"rtt_avg": 0, "rtt_min": 0, "rtt_max": 0,
-            "jitter": 0, "pkt_loss": 100, "connected": False}
+    return {
+        "rtt_avg": 0,
+        "rtt_min": 0,
+        "rtt_max": 0,
+        "jitter": 0,
+        "pkt_loss": 100,
+        "connected": False,
+    }
 
 
 class PingProbe:
@@ -117,24 +129,25 @@ class PingProbe:
         """Run one ping burst. Returns the parsed field dict."""
         try:
             result = self._subprocess_run(
-                _build_ping_cmd(self.target_ip, self._count, self._timeout_s,
-                                self._is_windows),
-                capture_output=True, text=True,
+                _build_ping_cmd(self.target_ip, self._count, self._timeout_s, self._is_windows),
+                capture_output=True,
+                text=True,
                 timeout=self._timeout_s * self._count + 5,
             )
         except (subprocess.TimeoutExpired, OSError) as e:
             self._loki.log_and_push(
-                "WARN", f"Ping {self.target_ip} failed",
+                "WARN",
+                f"Ping {self.target_ip} failed",
                 event=config.LOG_EVENT_PING_FAILED,
-                target=self.target_ip, error=str(e),
+                target=self.target_ip,
+                error=str(e),
             )
             return _zero_result()
         return _parse_ping_output(result.stdout, is_windows=self._is_windows)
 
     def run(self) -> ProbeResult:
         fields_raw = self.run_ping()
-        labeled = {f"{k}_{self.label}": v for k, v in fields_raw.items()
-                   if k != "connected"}
+        labeled = {f"{k}_{self.label}": v for k, v in fields_raw.items() if k != "connected"}
         labeled[f"connected_{self.label}"] = 1 if fields_raw["connected"] else 0
         return ProbeResult(fields=labeled, ok=fields_raw["connected"])
 

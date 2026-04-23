@@ -7,7 +7,7 @@ behaviour without reaching into module internals.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 
@@ -47,6 +47,7 @@ class FakeClock:
 @dataclass
 class FakeResponse:
     """Stand-in for requests.Response."""
+
     status_code: int = 200
     content: bytes = b""
     text: str = ""
@@ -146,6 +147,7 @@ class FakeSocket:
 def fake_socket_factory(connect_raises=None):
     """Returns a callable compatible with `socket.socket(...)`. Each call
     returns a fresh FakeSocket, recorded on the factory's `.sockets` list."""
+
     class _Factory:
         def __init__(self):
             self.sockets: list[FakeSocket] = []
@@ -164,6 +166,7 @@ def fake_socket_factory(connect_raises=None):
 @dataclass
 class FakeCompletedProcess:
     """Stand-in for subprocess.CompletedProcess."""
+
     stdout: str = ""
     stderr: str = ""
     returncode: int = 0
@@ -250,6 +253,7 @@ class FakeEvents:
     def __getattr__(self, name):
         def _record(*args, **kwargs):
             self.calls.append((name, args, kwargs))
+
         return _record
 
     def names(self) -> list[str]:
@@ -276,15 +280,16 @@ class FakeGrafana:
         self.push_calls.append(list(lines))
         return self._push_ok
 
-    def push_annotation(self, time_ms, time_end_ms, text, *,
-                        reason=None, version=None):
-        self.annotation_calls.append({
-            "time_ms": time_ms,
-            "time_end_ms": time_end_ms,
-            "text": text,
-            "reason": reason,
-            "version": version,
-        })
+    def push_annotation(self, time_ms, time_end_ms, text, *, reason=None, version=None):
+        self.annotation_calls.append(
+            {
+                "time_ms": time_ms,
+                "time_end_ms": time_end_ms,
+                "text": text,
+                "reason": reason,
+                "version": version,
+            }
+        )
         return self._annotation_ok
 
 
@@ -298,6 +303,7 @@ class FakeSignal:
         self.handlers: dict[int, Any] = {}
         # Mirror the real module's constants so code referencing them works.
         import signal as _real_signal
+
         self.SIGTERM = _real_signal.SIGTERM
         self.SIGINT = _real_signal.SIGINT
 

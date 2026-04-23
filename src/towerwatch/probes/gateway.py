@@ -4,6 +4,7 @@ Baseline (always): TCP connect + HTTP response time to GATEWAY_IP.
 M6 (GATEWAY_VENDOR="m6"): delegates to probes.m6.M6Probe for radio metrics.
 Orbi (GATEWAY_VENDOR="orbi"): unauthenticated /api/DEV_INFO for connected client count.
 """
+
 import logging
 import socket
 import xml.etree.ElementTree as ET
@@ -12,7 +13,7 @@ import requests
 
 from towerwatch import config
 from towerwatch.clock import Clock, SystemClock
-from towerwatch.probes.base import Probe, ProbeResult
+from towerwatch.probes.base import ProbeResult
 
 log = logging.getLogger("towerwatch")
 
@@ -54,7 +55,8 @@ class GatewayProbe:
             t0 = self._clock.perf_counter()
             sock.connect((self._ip, self._tcp_port))
             fields["gateway_tcp_ms"] = round(
-                (self._clock.perf_counter() - t0) * 1000, 1,
+                (self._clock.perf_counter() - t0) * 1000,
+                1,
             )
         except OSError:
             fields["gateway_tcp_ms"] = 0
@@ -64,7 +66,8 @@ class GatewayProbe:
             t0 = self._clock.perf_counter()
             self._requests_get(f"http://{self._ip}/", timeout=self._timeout_s)
             fields["gateway_http_ms"] = round(
-                (self._clock.perf_counter() - t0) * 1000, 1,
+                (self._clock.perf_counter() - t0) * 1000,
+                1,
             )
         except Exception:
             fields["gateway_http_ms"] = 0
@@ -73,12 +76,13 @@ class GatewayProbe:
     def _probe_orbi(self) -> dict:
         try:
             resp = self._requests_get(
-                f"http://{self._ip}/api/DEV_INFO", timeout=self._timeout_s,
+                f"http://{self._ip}/api/DEV_INFO",
+                timeout=self._timeout_s,
             )
             resp.raise_for_status()
             root = ET.fromstring(resp.text)
             el = root.find(".//ConnectedDeviceCount")
-            if el is not None:
+            if el is not None and el.text is not None:
                 return {"gateway_clients": int(el.text)}
         except Exception as e:
             log.debug("Orbi DEV_INFO failed: %s", e)
@@ -89,6 +93,7 @@ class GatewayProbe:
         if self._vendor == "m6":
             if self._m6_poll is None:
                 from towerwatch.probes.m6 import poll_m6_signal
+
                 self._m6_poll = poll_m6_signal
             fields.update(self._m6_poll())
         elif self._vendor == "orbi":

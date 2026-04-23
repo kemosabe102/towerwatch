@@ -10,9 +10,9 @@ import logging
 import os
 import subprocess
 import sys
-import time as _time
 from enum import Enum
 from pathlib import Path
+from typing import Any
 
 from towerwatch import config
 from towerwatch import events as events_mod
@@ -84,9 +84,9 @@ def wait_for_data_partition(
     *,
     is_windows: bool | None = None,
     clock: Clock | None = None,
-    subprocess_run=subprocess.run,
-    loki=None,
-    events=events_mod,
+    subprocess_run: Any = subprocess.run,
+    loki: Any = None,
+    events: Any = events_mod,
 ) -> None:
     """Block until the data partition is mounted or timeout. Skips on Windows."""
     if path is None:
@@ -108,7 +108,8 @@ def wait_for_data_partition(
             try:
                 result = subprocess_run(
                     ["mountpoint", "-q", str(path)],
-                    capture_output=True, timeout=5,
+                    capture_output=True,
+                    timeout=5,
                 )
                 if result.returncode == 0:
                     log.info("Data partition mounted at %s", path)
@@ -120,6 +121,7 @@ def wait_for_data_partition(
     if loki is None:
         try:
             from towerwatch.clients.loki import _get_singleton
+
             loki = _get_singleton()
         except Exception:
             loki = None
@@ -135,12 +137,12 @@ def wait_for_data_partition(
 # Startup outage reconciliation
 # ---------------------------------------------------------------------------
 def reconcile_previous_outage(
-    grafana,
-    loki,
-    cfg,
+    grafana: Any,
+    loki: Any,
+    cfg: Any,
     *,
     clock: Clock | None = None,
-    events=events_mod,
+    events: Any = events_mod,
 ) -> float | None:
     """Check markers from the previous run and post an annotation if an
     outage is detected. Returns the last_push timestamp if found, else None."""
@@ -162,11 +164,16 @@ def reconcile_previous_outage(
         kind, gap_s = outage
         text = f"Outage: {int(gap_s) // 60} min — {kind.value} (v {cfg.BUILD_VERSION})"
         grafana.push_annotation(
-            int(last_push * 1000), int(startup_now * 1000),
-            text, reason=kind.value, version=cfg.BUILD_VERSION,
+            int(last_push * 1000),
+            int(startup_now * 1000),
+            text,
+            reason=kind.value,
+            version=cfg.BUILD_VERSION,
         )
         events.outage_recorded(
-            loki, gap_seconds=int(gap_s),
-            reason=kind.value, version=cfg.BUILD_VERSION,
+            loki,
+            gap_seconds=int(gap_s),
+            reason=kind.value,
+            version=cfg.BUILD_VERSION,
         )
     return last_push

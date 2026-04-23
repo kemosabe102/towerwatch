@@ -7,6 +7,7 @@ events namespace) are injectable. Production uses sensible defaults.
 import base64
 import gzip
 import logging
+from typing import Any
 
 import requests
 
@@ -27,6 +28,7 @@ class _LazyLokiSink:
     def _get(self):
         if self._cached is None:
             from towerwatch.clients.loki import _get_singleton
+
             self._cached = _get_singleton()
         return self._cached
 
@@ -51,8 +53,8 @@ class GrafanaClient:
         instance_id: str,
         api_key: str,
         annotation_token: str = "",
-        session_factory=requests.Session,
-        annotation_post=requests.post,
+        session_factory: Any = requests.Session,
+        annotation_post: Any = requests.post,
         push_timeout: int = 10,
         annotations_timeout: int = 5,
         compress: bool = True,
@@ -72,6 +74,7 @@ class GrafanaClient:
         self._loki = loki if loki is not None else _LazyLokiSink()
         if events is None:
             from towerwatch import events as _events_mod
+
             events = _events_mod
         self._events = events
         self._session: requests.Session | None = None
@@ -96,6 +99,7 @@ class GrafanaClient:
             auth = "Basic " + base64.b64encode(creds.encode()).decode()
             s.headers.update({"Authorization": auth, "Content-Type": "text/plain"})
             self._session = s
+        assert self._session is not None
         return self._session
 
     def _invalidate_session(self) -> None:
@@ -112,7 +116,9 @@ class GrafanaClient:
             body = body_raw
         try:
             resp = self._get_session().post(
-                self._push_url, data=body, headers=headers,
+                self._push_url,
+                data=body,
+                headers=headers,
                 timeout=self._push_timeout,
             )
             if resp.status_code < 300:

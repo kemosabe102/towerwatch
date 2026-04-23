@@ -1,13 +1,8 @@
 """Tests for GrafanaClient — no patch, all collaborators injected."""
+
 import base64
-import sys
-from pathlib import Path
 
 import requests
-
-_PI = Path(__file__).resolve().parents[1]
-if str(_PI) not in sys.path:
-    sys.path.insert(0, str(_PI))
 
 from tests.fakes import FakeEvents, FakeLoki, FakeResponse, FakeSession
 
@@ -66,16 +61,15 @@ def _build_client(
 # ---------------------------------------------------------------------------
 def test_session_reused_across_calls():
     client, session, _ = _build_client(
-        push_responses=[FakeResponse(status_code=204),
-                        FakeResponse(status_code=204)])
+        push_responses=[FakeResponse(status_code=204), FakeResponse(status_code=204)]
+    )
     client.push_metrics(["line1"])
     client.push_metrics(["line2"])
     assert len(session.post_calls) == 2
 
 
 def test_auth_header_baked_into_session():
-    client, session, _ = _build_client(
-        push_responses=[FakeResponse(status_code=204)])
+    client, session, _ = _build_client(push_responses=[FakeResponse(status_code=204)])
     client.push_metrics(["l1"])
     expected = "Basic " + base64.b64encode(b"12345:secret").decode()
     assert session.headers.get("Authorization") == expected
@@ -86,41 +80,35 @@ def test_auth_header_baked_into_session():
 # HTTP status handling
 # ---------------------------------------------------------------------------
 def test_push_metrics_2xx_returns_true():
-    client, _, _ = _build_client(
-        push_responses=[FakeResponse(status_code=204)])
+    client, _, _ = _build_client(push_responses=[FakeResponse(status_code=204)])
     assert client.push_metrics(["x connected=1 1700000000"]) is True
 
 
 def test_push_metrics_5xx_returns_false():
-    client, _, _ = _build_client(
-        push_responses=[FakeResponse(status_code=500)])
+    client, _, _ = _build_client(push_responses=[FakeResponse(status_code=500)])
     assert client.push_metrics(["line"]) is False
 
 
 def test_push_metrics_401_invalidates_session():
-    client, _, _ = _build_client(
-        push_responses=[FakeResponse(status_code=401)])
+    client, _, _ = _build_client(push_responses=[FakeResponse(status_code=401)])
     client.push_metrics(["line"])
     assert client._session is None
 
 
 def test_push_metrics_403_invalidates_session():
-    client, _, _ = _build_client(
-        push_responses=[FakeResponse(status_code=403)])
+    client, _, _ = _build_client(push_responses=[FakeResponse(status_code=403)])
     client.push_metrics(["line"])
     assert client._session is None
 
 
 def test_push_metrics_5xx_does_not_invalidate_session():
-    client, session, _ = _build_client(
-        push_responses=[FakeResponse(status_code=500)])
+    client, session, _ = _build_client(push_responses=[FakeResponse(status_code=500)])
     client.push_metrics(["line"])
     assert client._session is session
 
 
 def test_push_metrics_connection_error_invalidates_and_returns_false():
-    client, _, _ = _build_client(
-        push_responses=[requests.ConnectionError("network down")])
+    client, _, _ = _build_client(push_responses=[requests.ConnectionError("network down")])
     result = client.push_metrics(["line"])
     assert result is False
     assert client._session is None
@@ -141,7 +129,8 @@ def test_push_metrics_error_emits_metrics_push_failed_event():
 # ---------------------------------------------------------------------------
 def test_push_metrics_gzip_compressed():
     client, session, _ = _build_client(
-        push_responses=[FakeResponse(status_code=204)], compress=True)
+        push_responses=[FakeResponse(status_code=204)], compress=True
+    )
     client.push_metrics(["towerwatch,host=x f=1 1700000000"])
     kwargs = session.post_calls[0][1]
     body = kwargs.get("data", b"")
@@ -150,7 +139,8 @@ def test_push_metrics_gzip_compressed():
 
 def test_push_metrics_no_gzip_when_disabled():
     client, session, _ = _build_client(
-        push_responses=[FakeResponse(status_code=204)], compress=False)
+        push_responses=[FakeResponse(status_code=204)], compress=False
+    )
     client.push_metrics(["towerwatch,host=x f=1 1700000000"])
     kwargs = session.post_calls[0][1]
     body = kwargs.get("data", b"")
@@ -161,8 +151,7 @@ def test_push_metrics_no_gzip_when_disabled():
 # Annotation path
 # ---------------------------------------------------------------------------
 def test_annotation_payload_shape():
-    client, _, annotation_post = _build_client(
-        annotation_responses=[FakeResponse(status_code=200)])
+    client, _, annotation_post = _build_client(annotation_responses=[FakeResponse(status_code=200)])
     client.push_annotation(
         time_ms=1_700_000_000_000,
         time_end_ms=1_700_001_000_000,
@@ -205,8 +194,7 @@ def test_annotation_exception_emits_annotation_failed():
 
 
 def test_annotation_dev_version_omits_version_tag():
-    client, _, annotation_post = _build_client(
-        annotation_responses=[FakeResponse(status_code=200)])
+    client, _, annotation_post = _build_client(annotation_responses=[FakeResponse(status_code=200)])
     client.push_annotation(1000, 2000, "text", reason="r", version="dev")
     tags = annotation_post.calls[0][1]["json"]["tags"]
     assert not any(t.startswith("version:") for t in tags)

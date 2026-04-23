@@ -1,11 +1,7 @@
 """Tests for M6Probe — no patch, fakes injected directly."""
-import json
-import sys
-from pathlib import Path
 
-_PI = Path(__file__).resolve().parents[1]
-if str(_PI) not in sys.path:
-    sys.path.insert(0, str(_PI))
+import json
+from pathlib import Path
 
 from tests.fakes import FakeLoki, FakeResponse, FakeSession
 
@@ -16,6 +12,7 @@ def _build_probe(responses=None, loki=None):
     """Build an M6Probe with a session_factory returning a FakeSession queued
     with the given responses."""
     from towerwatch.probes.m6 import M6Probe
+
     session = FakeSession(get_responses=responses or [])
     return M6Probe(
         session_factory=lambda: session,
@@ -50,8 +47,9 @@ def test_m6_missing_keys_returns_empty():
 
 def test_m6_malformed_json_returns_empty():
     """resp.json() raises ValueError → empty dict."""
-    probe, _ = _build_probe(responses=[FakeResponse(status_code=200,
-                                                   _json=ValueError("malformed"))])
+    probe, _ = _build_probe(
+        responses=[FakeResponse(status_code=200, _json=ValueError("malformed"))]
+    )
     assert probe.poll() == {}
 
 

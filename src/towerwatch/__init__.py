@@ -1,4 +1,5 @@
 """Towerwatch — cellular/broadband network quality monitor."""
+
 from __future__ import annotations
 
 from towerwatch.config import BUILD_VERSION as __version__

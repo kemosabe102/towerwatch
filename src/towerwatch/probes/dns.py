@@ -6,7 +6,7 @@ import dns.resolver
 
 from towerwatch import config
 from towerwatch.clock import Clock, SystemClock
-from towerwatch.probes.base import Probe, ProbeResult
+from towerwatch.probes.base import ProbeResult
 
 log = logging.getLogger("towerwatch")
 
@@ -14,6 +14,7 @@ log = logging.getLogger("towerwatch")
 class _ModuleLokiSink:
     def log_and_push(self, level, message, **fields):
         from towerwatch.clients.loki import log_and_push
+
         log_and_push(level, message, **fields)
 
 
@@ -53,9 +54,11 @@ class DNSProbe:
             return round((self._clock.perf_counter() - start) * 1000)
         except Exception as e:
             self._loki.log_and_push(
-                "WARN", f"DNS {self.nameserver} failed",
+                "WARN",
+                f"DNS {self.nameserver} failed",
                 event=config.LOG_EVENT_DNS_FAILED,
-                nameserver=self.nameserver, error=str(e),
+                nameserver=self.nameserver,
+                error=str(e),
             )
             return 0
 

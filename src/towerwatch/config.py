@@ -6,9 +6,11 @@ import sys
 from pathlib import Path
 
 
-# --- Build version (stamped by ci.sh into version.txt; git fallback for dev) -----
-# Authoritative at deploy time: ci.sh writes "<short-hash> <iso-date>" into pi/version.txt
-# before cd.sh ships the tree. On the Pi the file lives at /opt/towerwatch/version.txt.
+# --- Build version (stamped by ci.sh into _version.txt; git fallback for dev) -----
+# Authoritative at deploy time: ci.sh writes "<short-hash> <iso-date>" into
+# src/towerwatch/_version.txt before deploy.sh ships the tree. On the Pi the file
+# ships inside the installed package at
+# /opt/towerwatch/.venv/lib/pythonX.Y/site-packages/towerwatch/_version.txt.
 # If the file is missing we try `git rev-parse` for local dev; if that fails too, we
 # mark the build as "dev"/"unknown" rather than crash.
 def _load_build_version(
@@ -26,8 +28,8 @@ def _load_build_version(
     """
     if candidates is None:
         candidates = [
-            Path(__file__).parent / "version.txt",            # repo-local (Windows dev)
-            Path("/opt/towerwatch/version.txt"),              # Pi install path
+            Path(__file__).parent / "_version.txt",  # shipped inside the package
+            Path("/opt/towerwatch/_version.txt"),  # legacy Pi install path
         ]
     if env is None:
         env = os.environ
@@ -48,15 +50,28 @@ def _load_build_version(
     if env.get("TOWERWATCH_SKIP_GIT_VERSION") == "1":
         return "dev", "unknown"
     try:
-        repo_root = Path(__file__).resolve().parents[1]
-        version = check_output(
-            ["git", "rev-parse", "--short", "HEAD"],
-            cwd=repo_root, stderr=subprocess.DEVNULL, timeout=2,
-        ).decode().strip()
-        build_date = check_output(
-            ["git", "log", "-1", "--format=%cI"],
-            cwd=repo_root, stderr=subprocess.DEVNULL, timeout=2,
-        ).decode().strip()
+        # src/towerwatch/config.py → parents[0]=towerwatch, [1]=src, [2]=repo root
+        repo_root = Path(__file__).resolve().parents[2]
+        version = (
+            check_output(
+                ["git", "rev-parse", "--short", "HEAD"],
+                cwd=repo_root,
+                stderr=subprocess.DEVNULL,
+                timeout=2,
+            )
+            .decode()
+            .strip()
+        )
+        build_date = (
+            check_output(
+                ["git", "log", "-1", "--format=%cI"],
+                cwd=repo_root,
+                stderr=subprocess.DEVNULL,
+                timeout=2,
+            )
+            .decode()
+            .strip()
+        )
         return version or "dev", build_date or "unknown"
     except (subprocess.SubprocessError, FileNotFoundError, OSError):
         return "dev", "unknown"
@@ -68,13 +83,13 @@ BUILD_VERSION, BUILD_DATE = _load_build_version()
 # Each tuple: (ip, label). Labels become Prometheus tag values — must be stable strings.
 # If the carrier gateway IP changes, update the IP here but keep the label "gateway".
 PROBE_TARGETS = [
-    ("8.8.8.8",       "google"),
-    ("1.1.1.1",       "cloudflare"),
-    ("192.168.1.1",   "gateway"),  # M6 router / carrier gateway
+    ("8.8.8.8", "google"),
+    ("1.1.1.1", "cloudflare"),
+    ("192.168.1.1", "gateway"),  # M6 router / carrier gateway
 ]
 
-PING_COUNT = 10          # Probes per burst
-PING_TIMEOUT_S = 10      # Total timeout for ping command
+PING_COUNT = 10  # Probes per burst
+PING_TIMEOUT_S = 10  # Total timeout for ping command
 
 # --- TCP Probe ---
 TCP_TARGET_HOST = "8.8.8.8"
@@ -87,11 +102,11 @@ DNS_QUERY_DOMAIN = "example.com"
 DNS_TIMEOUT_S = 5
 
 # --- Intervals ---
-METRIC_INTERVAL_S = 60       # Main loop: ping, TCP, DNS (was 30 — halved for data cap)
+METRIC_INTERVAL_S = 60  # Main loop: ping, TCP, DNS (was 30 — halved for data cap)
 
 # --- HTTP Latency Probe (frequent, small file) ---
 HTTP_LATENCY_URL = "https://speed.cloudflare.com/__down?bytes=10000"  # 10 KB
-HTTP_LATENCY_INTERVAL_S = 300   # 5 minutes
+HTTP_LATENCY_INTERVAL_S = 300  # 5 minutes
 HTTP_LATENCY_TIMEOUT_S = 30
 
 # --- HTTP Throughput Sample (random schedule, replaces Ookla for routine use) ---
@@ -111,10 +126,10 @@ SPEEDTEST_SERVER_ID = None
 STARTUP_GRACE_S = 15  # seconds to wait after startup before first probe cycle
 
 # --- Gateway Probe (vendor-agnostic baseline) ---
-GATEWAY_IP        = "192.168.1.1"
-GATEWAY_TCP_PORT  = 80
+GATEWAY_IP = "192.168.1.1"
+GATEWAY_TCP_PORT = 80
 GATEWAY_TIMEOUT_S = 5
-GATEWAY_VENDOR    = "m6"  # "m6" | "orbi" | "" (baseline only)
+GATEWAY_VENDOR = "m6"  # "m6" | "orbi" | "" (baseline only)
 
 # --- M6 Signal Metrics ---
 M6_ADMIN_URL = "http://192.168.1.1/api/model.json"
@@ -124,16 +139,15 @@ M6_TIMEOUT_S = 5
 # --- Grafana Cloud (metrics use _ms suffix throughout, not Prometheus-standard seconds) ---
 GRAFANA_PUSH_URL = os.environ.get(
     "GRAFANA_PUSH_URL_OVERRIDE",
-    "https://prometheus-prod-67-prod-us-west-0.grafana.net"
-    "/api/v1/push/influx/write?precision=s",
+    "https://prometheus-prod-67-prod-us-west-0.grafana.net/api/v1/push/influx/write?precision=s",
 )
 GRAFANA_PUSH_TIMEOUT_S = 10
 INFLUX_MEASUREMENT = "towerwatch"
 INFLUX_HOST_TAG = "towerwatch"
 
 # --- Push Optimization (batching + compression) ---
-PUSH_BATCH_SIZE = 2      # Accumulate N lines before pushing (at 60s = push every 2 min)
-PUSH_COMPRESS = True     # gzip Influx POST body
+PUSH_BATCH_SIZE = 2  # Accumulate N lines before pushing (at 60s = push every 2 min)
+PUSH_COMPRESS = True  # gzip Influx POST body
 
 # --- Local Buffering (platform-aware paths) ---
 LOKI_BUFFER_MAX_BYTES = 256 * 1024  # 256 KB — ~500 WARN entries, ~8h of outage
@@ -166,24 +180,24 @@ OUTAGE_GAP_THRESHOLD_S = 600  # 10 min — shorter gaps are normal batch/push la
 OUTAGE_ANNOTATION_TAGS = ["towerwatch", "outage", "auto"]
 
 # --- Log Event Identifiers (stable machine-readable keys for LogQL filtering) ---
-LOG_EVENT_SERVICE_STARTED    = "service_started"
-LOG_EVENT_SERVICE_RESTARTED  = "service_restarted"
-LOG_EVENT_CONN_DOWN          = "connection_down"
-LOG_EVENT_CONN_RESTORED      = "connection_restored"
-LOG_EVENT_PING_FAILED        = "ping_failed"
-LOG_EVENT_DNS_FAILED         = "dns_failed"
-LOG_EVENT_SPEEDTEST_OK       = "speedtest_complete"
-LOG_EVENT_SPEEDTEST_TIMEOUT  = "speedtest_timeout"
-LOG_EVENT_SPEEDTEST_FAILED   = "speedtest_failed"
-LOG_EVENT_M6_AUTH_EXPIRED    = "m6_auth_expired"
-LOG_EVENT_METRICS_PUSH_FAIL  = "metrics_push_failed"
+LOG_EVENT_SERVICE_STARTED = "service_started"
+LOG_EVENT_SERVICE_RESTARTED = "service_restarted"
+LOG_EVENT_CONN_DOWN = "connection_down"
+LOG_EVENT_CONN_RESTORED = "connection_restored"
+LOG_EVENT_PING_FAILED = "ping_failed"
+LOG_EVENT_DNS_FAILED = "dns_failed"
+LOG_EVENT_SPEEDTEST_OK = "speedtest_complete"
+LOG_EVENT_SPEEDTEST_TIMEOUT = "speedtest_timeout"
+LOG_EVENT_SPEEDTEST_FAILED = "speedtest_failed"
+LOG_EVENT_M6_AUTH_EXPIRED = "m6_auth_expired"
+LOG_EVENT_METRICS_PUSH_FAIL = "metrics_push_failed"
 LOG_EVENT_LOG_BUFFER_FLUSHED = "log_buffer_flushed"
-LOG_EVENT_PARTITION_MISSING  = "partition_not_detected"
-LOG_EVENT_HTTP_THROUGHPUT_OK     = "http_throughput_complete"
+LOG_EVENT_PARTITION_MISSING = "partition_not_detected"
+LOG_EVENT_HTTP_THROUGHPUT_OK = "http_throughput_complete"
 LOG_EVENT_HTTP_THROUGHPUT_FAILED = "http_throughput_failed"
-LOG_EVENT_HEARTBEAT              = "service_heartbeat"
-LOG_EVENT_OUTAGE_RECORDED        = "outage_recorded"
-LOG_EVENT_ANNOTATION_FAILED      = "annotation_push_failed"
+LOG_EVENT_HEARTBEAT = "service_heartbeat"
+LOG_EVENT_OUTAGE_RECORDED = "outage_recorded"
+LOG_EVENT_ANNOTATION_FAILED = "annotation_push_failed"
 
 # --- Heartbeat ---
 HEARTBEAT_INTERVAL_S = 3600  # Emit a WARN-level heartbeat to Loki once per hour

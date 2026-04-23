@@ -5,7 +5,7 @@ import logging
 import subprocess
 
 from towerwatch import config
-from towerwatch.probes.base import Probe, ProbeResult
+from towerwatch.probes.base import ProbeResult
 
 log = logging.getLogger("towerwatch")
 
@@ -15,10 +15,12 @@ class _ModuleLokiSink:
 
     def log_and_push(self, level, message, **fields):
         from towerwatch.clients.loki import log_and_push
+
         log_and_push(level, message, **fields)
 
     def push(self, level, message, extra=None):
         from towerwatch.clients.loki import push_log
+
         push_log(level, message, extra)
 
 
@@ -45,31 +47,45 @@ def run_speedtest(
         cmd += ["--server-id", str(server_id)]
     try:
         result = subprocess_run(
-            cmd, capture_output=True, text=True, timeout=timeout_s,
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
         )
         if result.returncode != 0:
             log.error("Speedtest failed with returncode %d", result.returncode)
-            loki.push("WARN", f"Speedtest failed (rc={result.returncode})",
-                      {"event": config.LOG_EVENT_SPEEDTEST_FAILED,
-                       "returncode": result.returncode})
+            loki.push(
+                "WARN",
+                f"Speedtest failed (rc={result.returncode})",
+                {"event": config.LOG_EVENT_SPEEDTEST_FAILED, "returncode": result.returncode},
+            )
             return {"download_mbps": 0, "upload_mbps": 0, "success": 0}
         data = json.loads(result.stdout)
         dl = round(data["download"]["bandwidth"] * 8 / 1_000_000, 2)
         ul = round(data["upload"]["bandwidth"] * 8 / 1_000_000, 2)
-        loki.log_and_push("INFO", f"Speedtest: {dl} Mbps down, {ul} Mbps up",
-                          event=config.LOG_EVENT_SPEEDTEST_OK,
-                          download_mbps=dl, upload_mbps=ul)
+        loki.log_and_push(
+            "INFO",
+            f"Speedtest: {dl} Mbps down, {ul} Mbps up",
+            event=config.LOG_EVENT_SPEEDTEST_OK,
+            download_mbps=dl,
+            upload_mbps=ul,
+        )
         return {"download_mbps": dl, "upload_mbps": ul, "success": 1}
     except subprocess.TimeoutExpired:
         log.error("Speedtest timed out after %ds", timeout_s)
-        loki.push("WARN", f"Speedtest timed out after {timeout_s}s",
-                  {"event": config.LOG_EVENT_SPEEDTEST_TIMEOUT,
-                   "timeout_s": timeout_s})
+        loki.push(
+            "WARN",
+            f"Speedtest timed out after {timeout_s}s",
+            {"event": config.LOG_EVENT_SPEEDTEST_TIMEOUT, "timeout_s": timeout_s},
+        )
         return {"download_mbps": 0, "upload_mbps": 0, "success": 0}
     except Exception as e:
         log.error("Speedtest failed: %s", e)
-        loki.push("WARN", f"Speedtest failed: {e}",
-                  {"event": config.LOG_EVENT_SPEEDTEST_FAILED, "error": str(e)})
+        loki.push(
+            "WARN",
+            f"Speedtest failed: {e}",
+            {"event": config.LOG_EVENT_SPEEDTEST_FAILED, "error": str(e)},
+        )
         return {"download_mbps": 0, "upload_mbps": 0, "success": 0}
 
 

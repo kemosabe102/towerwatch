@@ -1,16 +1,11 @@
 """Tests for tick.update_connection_state — no patch, fakes injected."""
-import sys
-from pathlib import Path
-
-_PI = Path(__file__).resolve().parents[1]
-if str(_PI) not in sys.path:
-    sys.path.insert(0, str(_PI))
 
 from tests.fakes import FakeClock, FakeEvents, FakeLoki
 
 
 def _make_ctx(events=None, loki=None, clock=None):
     from towerwatch.tick import TickContext
+
     return TickContext(
         grafana=None,
         loki=loki or FakeLoki(),
@@ -22,6 +17,7 @@ def _make_ctx(events=None, loki=None, clock=None):
 
 def _make_state():
     from towerwatch.lifecycle import RuntimeState
+
     return RuntimeState()
 
 
@@ -30,6 +26,7 @@ def _make_state():
 # ---------------------------------------------------------------------------
 def test_up_to_down_emits_connection_down():
     from towerwatch.tick import update_connection_state
+
     events = FakeEvents()
     ctx = _make_ctx(events=events)
     state = _make_state()
@@ -48,6 +45,7 @@ def test_up_to_down_emits_connection_down():
 # ---------------------------------------------------------------------------
 def test_down_to_up_emits_connection_restored_with_duration():
     from towerwatch.tick import update_connection_state
+
     events = FakeEvents()
     ctx = _make_ctx(events=events)
     state = _make_state()
@@ -58,7 +56,7 @@ def test_down_to_up_emits_connection_restored_with_duration():
 
     assert events.called("connection_restored")
     # Find the call and check kwargs
-    call = [c for c in events.calls if c[0] == "connection_restored"][0]
+    call = next(c for c in events.calls if c[0] == "connection_restored")
     assert call[2]["down_duration_s"] == 100
     assert state.connected is True
     assert state.outage_start == 0
@@ -70,6 +68,7 @@ def test_down_to_up_emits_connection_restored_with_duration():
 # ---------------------------------------------------------------------------
 def test_down_to_up_with_zero_outage_start_does_not_record_duration():
     from towerwatch.tick import update_connection_state
+
     events = FakeEvents()
     ctx = _make_ctx(events=events)
     state = _make_state()
@@ -87,6 +86,7 @@ def test_down_to_up_with_zero_outage_start_does_not_record_duration():
 # ---------------------------------------------------------------------------
 def test_already_connected_stays_connected():
     from towerwatch.tick import update_connection_state
+
     events = FakeEvents()
     ctx = _make_ctx(events=events)
     state = _make_state()
@@ -100,6 +100,7 @@ def test_already_connected_stays_connected():
 
 def test_already_disconnected_stays_disconnected():
     from towerwatch.tick import update_connection_state
+
     events = FakeEvents()
     ctx = _make_ctx(events=events)
     state = _make_state()

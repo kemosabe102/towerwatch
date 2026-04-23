@@ -1,10 +1,4 @@
 """Tests for GatewayProbe — no patch, fakes injected directly."""
-import sys
-from pathlib import Path
-
-_PI = Path(__file__).resolve().parents[1]
-if str(_PI) not in sys.path:
-    sys.path.insert(0, str(_PI))
 
 from tests.fakes import FakeClock, FakeResponse, fake_socket_factory
 
@@ -30,7 +24,7 @@ def _recording_get(responses):
             return r(url, kwargs)
         return r
 
-    _get.calls = calls
+    _get.calls = calls  # type: ignore[attr-defined]
     return _get
 
 
@@ -39,8 +33,12 @@ def _recording_get(responses):
 # ---------------------------------------------------------------------------
 def test_baseline_tcp_and_http_success():
     from towerwatch.probes.gateway import GatewayProbe
+
     probe = GatewayProbe(
-        vendor="", ip="192.168.1.1", tcp_port=80, timeout_s=2,
+        vendor="",
+        ip="192.168.1.1",
+        tcp_port=80,
+        timeout_s=2,
         socket_factory=fake_socket_factory(),
         requests_get=_recording_get([_http_ok()]),
         clock=FakeClock(perf=[0.0, 0.005, 0.0, 0.010]),
@@ -52,8 +50,12 @@ def test_baseline_tcp_and_http_success():
 
 def test_baseline_http_failure_returns_zero():
     from towerwatch.probes.gateway import GatewayProbe
+
     probe = GatewayProbe(
-        vendor="", ip="192.168.1.1", tcp_port=80, timeout_s=2,
+        vendor="",
+        ip="192.168.1.1",
+        tcp_port=80,
+        timeout_s=2,
         socket_factory=fake_socket_factory(),
         requests_get=_recording_get([OSError("unreachable")]),
         clock=FakeClock(perf=[0.0, 0.005, 0.0]),
@@ -65,10 +67,13 @@ def test_baseline_http_failure_returns_zero():
 
 def test_baseline_tcp_failure_returns_zero():
     from towerwatch.probes.gateway import GatewayProbe
+
     probe = GatewayProbe(
-        vendor="", ip="192.168.1.1", tcp_port=80, timeout_s=2,
-        socket_factory=fake_socket_factory(
-            connect_raises=OSError("refused")),
+        vendor="",
+        ip="192.168.1.1",
+        tcp_port=80,
+        timeout_s=2,
+        socket_factory=fake_socket_factory(connect_raises=OSError("refused")),
         requests_get=_recording_get([_http_ok()]),
         clock=FakeClock(perf=[0.0, 0.0, 0.01]),
     )
@@ -81,8 +86,12 @@ def test_baseline_tcp_failure_returns_zero():
 # ---------------------------------------------------------------------------
 def test_m6_vendor_delegates_via_injected_callable():
     from towerwatch.probes.gateway import GatewayProbe
+
     probe = GatewayProbe(
-        vendor="m6", ip="192.168.1.1", tcp_port=80, timeout_s=2,
+        vendor="m6",
+        ip="192.168.1.1",
+        tcp_port=80,
+        timeout_s=2,
         socket_factory=fake_socket_factory(),
         requests_get=_recording_get([_http_ok()]),
         clock=FakeClock(perf=[0.0, 0.005, 0.0, 0.010]),
@@ -99,19 +108,24 @@ def test_m6_vendor_delegates_via_injected_callable():
 # ---------------------------------------------------------------------------
 def test_orbi_vendor_parses_client_count():
     from towerwatch.probes.gateway import GatewayProbe
+
     xml_body = (
-        '<?xml version="1.0"?>'
-        "<DevInfo><ConnectedDeviceCount>12</ConnectedDeviceCount></DevInfo>"
+        '<?xml version="1.0"?><DevInfo><ConnectedDeviceCount>12</ConnectedDeviceCount></DevInfo>'
     )
 
     # Two HTTP responses: baseline http fetch then /api/DEV_INFO
     probe = GatewayProbe(
-        vendor="orbi", ip="192.168.1.1", tcp_port=80, timeout_s=5,
+        vendor="orbi",
+        ip="192.168.1.1",
+        tcp_port=80,
+        timeout_s=5,
         socket_factory=fake_socket_factory(),
-        requests_get=_recording_get([
-            _http_ok(),
-            _http_ok(text=xml_body),
-        ]),
+        requests_get=_recording_get(
+            [
+                _http_ok(),
+                _http_ok(text=xml_body),
+            ]
+        ),
         clock=FakeClock(perf=[0.0, 0.005, 0.0, 0.010]),
     )
     result = probe.poll()
@@ -120,9 +134,13 @@ def test_orbi_vendor_parses_client_count():
 
 def test_orbi_vendor_missing_element_returns_no_clients():
     from towerwatch.probes.gateway import GatewayProbe
+
     xml_body = '<?xml version="1.0"?><DevInfo></DevInfo>'
     probe = GatewayProbe(
-        vendor="orbi", ip="192.168.1.1", tcp_port=80, timeout_s=5,
+        vendor="orbi",
+        ip="192.168.1.1",
+        tcp_port=80,
+        timeout_s=5,
         socket_factory=fake_socket_factory(),
         requests_get=_recording_get([_http_ok(), _http_ok(text=xml_body)]),
         clock=FakeClock(perf=[0.0, 0.005, 0.0, 0.010]),

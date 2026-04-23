@@ -1,17 +1,8 @@
 """Tests for events.py — one per event function, asserting payload shape and level."""
-import json
-import sys
-from pathlib import Path
+
 from unittest.mock import MagicMock
 
-import pytest
-
-_PI = Path(__file__).resolve().parents[1]
-if str(_PI) not in sys.path:
-    sys.path.insert(0, str(_PI))
-
-from towerwatch import config
-from towerwatch import events
+from towerwatch import config, events
 
 
 def _make_loki():

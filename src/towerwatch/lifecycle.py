@@ -10,6 +10,7 @@ import signal
 import sys
 import time
 from dataclasses import dataclass, field
+from typing import Any
 
 from towerwatch import config
 
@@ -43,7 +44,7 @@ def install_signal_handlers(
     state: RuntimeState,
     *,
     is_windows: bool | None = None,
-    signal_module=signal,
+    signal_module: Any = signal,
 ) -> None:
     """Install SIGTERM handler that flips state.shutdown_requested.
 

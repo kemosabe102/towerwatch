@@ -1,11 +1,7 @@
 """Tests for PingProbe and ping parsers — no patch, fakes injected directly."""
-import subprocess
-import sys
-from pathlib import Path
 
-_PI = Path(__file__).resolve().parents[1]
-if str(_PI) not in sys.path:
-    sys.path.insert(0, str(_PI))
+import subprocess
+from pathlib import Path
 
 from tests.fakes import FakeCompletedProcess, FakeLoki, FakeSubprocess
 
@@ -21,6 +17,7 @@ def _read(name):
 # ---------------------------------------------------------------------------
 def _parse(txt, is_windows=False):
     import towerwatch.probes.ping as ping_mod
+
     return ping_mod._parse_ping_output(txt, is_windows=is_windows)
 
 
@@ -29,20 +26,24 @@ def test_linux_ok_rtt_avg():
     r = _parse(_read("ping_linux_ok.txt"), is_windows=False)
     assert r["rtt_avg"] == 12
 
+
 def test_linux_ok_rtt_min_max():
     r = _parse(_read("ping_linux_ok.txt"), is_windows=False)
     assert r["rtt_min"] == 12
     assert r["rtt_max"] == 13
+
 
 def test_linux_ok_pkt_loss_zero():
     r = _parse(_read("ping_linux_ok.txt"), is_windows=False)
     assert r["pkt_loss"] == 0
     assert r["connected"] is True
 
+
 def test_linux_50pct_loss():
     r = _parse(_read("ping_linux_loss.txt"), is_windows=False)
     assert r["pkt_loss"] == 50
     assert r["connected"] is True
+
 
 def test_linux_100pct_loss_not_connected():
     r = _parse("10 packets transmitted, 0 received, 100% packet loss", is_windows=False)
@@ -55,9 +56,11 @@ def test_windows_subms_rtt_nonzero():
     r = _parse(_read("ping_windows_subms.txt"), is_windows=True)
     assert r["rtt_avg"] > 0
 
+
 def test_windows_subms_mdev_nonzero():
     r = _parse(_read("ping_windows_subms.txt"), is_windows=True)
     assert r["rtt_min"] > 0
+
 
 def test_windows_ok_rtt():
     r = _parse(_read("ping_windows_ok.txt"), is_windows=True)
@@ -96,14 +99,19 @@ def test_malformed_rtt_summary_returns_zeros_and_100pct_loss():
 # ---------------------------------------------------------------------------
 def test_calc_jitter_zero_rtts_falls_back_to_mdev():
     import towerwatch.probes.ping as ping_mod
+
     assert ping_mod._calc_jitter([], mdev=5.5) == 6
+
 
 def test_calc_jitter_one_rtt_falls_back_to_mdev():
     import towerwatch.probes.ping as ping_mod
+
     assert ping_mod._calc_jitter([12.0], mdev=3.0) == 3
+
 
 def test_calc_jitter_two_rtts_uses_diff():
     import towerwatch.probes.ping as ping_mod
+
     assert ping_mod._calc_jitter([10.0, 15.0], mdev=99.0) == 5
 
 
@@ -112,8 +120,10 @@ def test_calc_jitter_two_rtts_uses_diff():
 # ---------------------------------------------------------------------------
 def _make_probe(outcomes, is_windows=False, loki=None):
     from towerwatch.probes.ping import PingProbe
+
     return PingProbe(
-        "8.8.8.8", "google",
+        "8.8.8.8",
+        "google",
         subprocess_run=FakeSubprocess(*outcomes),
         loki=loki or FakeLoki(),
         count=10,

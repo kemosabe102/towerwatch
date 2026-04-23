@@ -11,24 +11,19 @@ with production defaults drawn from `config.py`.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Any
 
 from towerwatch import config as _config
 from towerwatch import events as events_mod
 from towerwatch import startup as startup_mod
 from towerwatch.clock import Clock, SystemClock
+from towerwatch.probes.dns import measure_dns
+from towerwatch.probes.gateway import poll_gateway
+from towerwatch.probes.http import measure_http_latency, measure_http_throughput
 from towerwatch.probes.ping import run_ping
 from towerwatch.probes.tcp import measure_tcp_connect
-from towerwatch.probes.dns import measure_dns
-from towerwatch.probes.http import measure_http_latency, measure_http_throughput
-from towerwatch.probes.gateway import poll_gateway
-
-if TYPE_CHECKING:
-    from towerwatch.clients.grafana import GrafanaClient
-    from towerwatch.clients.loki import LokiClient
-    from towerwatch.scheduling import Scheduler
 
 log = logging.getLogger("towerwatch")
 
@@ -39,15 +34,15 @@ def _default_clock() -> Clock:
 
 @dataclass
 class TickContext:
-    grafana: GrafanaClient | None
-    loki: LokiClient | None
-    scheduler: Scheduler | None
-    events: object = events_mod  # duck-typed; tests pass FakeEvents
-    clock: Clock = None  # type: ignore[assignment]
+    """Per-tick orchestration context. All collaborators are duck-typed (Any) so
+    tests can pass hand-written fakes without inheriting from production classes —
+    the whole DI pattern here assumes structural typing over nominal."""
 
-    def __post_init__(self):
-        if self.clock is None:
-            self.clock = _default_clock()
+    grafana: Any = None
+    loki: Any = None
+    scheduler: Any = None
+    events: Any = events_mod
+    clock: Clock = field(default_factory=_default_clock)
 
 
 def format_influx_line(fields: dict, timestamp: int) -> str:
@@ -142,12 +137,17 @@ def push_batch(
         text = f"Outage: {gap_s // 60} min — network_unreachable (v {build_version})"
         if ctx.grafana:
             ctx.grafana.push_annotation(
-                int(state.last_successful_push_ts * 1000), int(now * 1000),
-                text, reason="network_unreachable", version=build_version,
+                int(state.last_successful_push_ts * 1000),
+                int(now * 1000),
+                text,
+                reason="network_unreachable",
+                version=build_version,
             )
         ctx.events.outage_recorded(
-            ctx.loki, gap_seconds=gap_s,
-            reason="network_unreachable", version=build_version,
+            ctx.loki,
+            gap_seconds=gap_s,
+            reason="network_unreachable",
+            version=build_version,
         )
     state.last_successful_push_ts = now
     startup_mod.write_marker(Path(marker_file), now, atomic=True)

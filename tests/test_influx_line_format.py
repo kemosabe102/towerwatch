@@ -4,17 +4,18 @@ Constraints enforced here:
   #1 — units are _ms (not seconds)
   #2 — target labels baked into field names (not Prometheus labels)
 """
-import pytest
 
 
 def _fmt(fields, ts=1700000000):
     from towerwatch.tick import format_influx_line
+
     return format_influx_line(fields, ts)
 
 
 def test_influx_measurement_and_host_tag():
     line = _fmt({"rtt_avg_google": 12})
     assert line.startswith("towerwatch,host=towerwatch ")
+
 
 def test_influx_field_ordering_stable():
     fields = {"rtt_avg_google": 12, "rtt_avg_cloudflare": 11, "connected": 1}
@@ -23,6 +24,7 @@ def test_influx_field_ordering_stable():
     assert "rtt_avg_google=12" in line
     assert "rtt_avg_cloudflare=11" in line
     assert "connected=1" in line
+
 
 def test_influx_ms_units_in_field_names():
     """Constraint #1: latency fields must carry _ms suffix, not be in seconds."""
@@ -39,6 +41,7 @@ def test_influx_ms_units_in_field_names():
     # Must NOT contain bare seconds-style names
     assert "tcp_connect_s=" not in line
 
+
 def test_influx_target_labels_baked_in_field_names():
     """Constraint #2: labels are in field names, not separate Prometheus labels."""
     fields = {"rtt_avg_google": 12, "rtt_avg_cloudflare": 11, "rtt_avg_gateway": 5}
@@ -49,7 +52,8 @@ def test_influx_target_labels_baked_in_field_names():
     assert "rtt_avg_gateway=5" in line
     # No separate label= key-value pairs (would look like target="google")
     assert 'target="google"' not in line
-    assert 'target=google' not in line
+    assert "target=google" not in line
+
 
 def test_influx_timestamp_seconds_precision():
     line = _fmt({"connected": 1}, ts=1700000000)

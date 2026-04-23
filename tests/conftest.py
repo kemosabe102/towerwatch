@@ -5,6 +5,7 @@
    if none is present (CI and fresh checkouts). When a real credentials.py
    exists locally, it's left alone.
 """
+
 from __future__ import annotations
 
 import sys
