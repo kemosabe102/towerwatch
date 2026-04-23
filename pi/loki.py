@@ -1,5 +1,8 @@
 """
 Loki log shipping — direct HTTP push, fire-and-forget with local buffering on failure.
+
+The HTTP transport is an injectable `post_fn` callable so tests can drive
+failures without patching `requests.post`.
 """
 
 import json
@@ -32,6 +35,7 @@ class LokiClient:
         buffer_max_bytes: int,
         push_level: str = "WARN",
         session_factory=requests.Session,
+        post_fn=requests.post,
         push_timeout: int = 5,
         host_tag: str = "towerwatch",
     ):
@@ -42,6 +46,7 @@ class LokiClient:
         self._buffer_max_bytes = buffer_max_bytes
         self._push_level = push_level
         self._session_factory = session_factory
+        self._post_fn = post_fn
         self._push_timeout = push_timeout
         self._host_tag = host_tag
 
@@ -77,7 +82,7 @@ class LokiClient:
         """POST a single Loki payload. Raises on network or HTTP error."""
         if not self._url:
             return
-        resp = requests.post(
+        resp = self._post_fn(
             self._url,
             json=payload,
             auth=(self._user, self._token),
@@ -137,7 +142,6 @@ class LokiClient:
             try:
                 payload = json.loads(line)
             except json.JSONDecodeError:
-                # Corrupt line — drop and keep going
                 consumed += 1
                 continue
             try:
@@ -145,7 +149,7 @@ class LokiClient:
                 delivered += 1
                 consumed += 1
             except Exception:
-                break  # Network gone — preserve remaining entries
+                break
         if consumed == len(lines):
             buf.unlink()
             log.info("Log buffer flushed: %d entries delivered", delivered)
@@ -159,7 +163,6 @@ class LokiClient:
 
 # ---------------------------------------------------------------------------
 # Module-level singleton + back-compat shims
-# These delegate to _singleton; call sites migrated to LokiClient in Pass 9.
 # ---------------------------------------------------------------------------
 _singleton: LokiClient | None = None
 

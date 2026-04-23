@@ -1,4 +1,8 @@
-"""Grafana Cloud transport — metrics push (Influx line protocol) and annotations."""
+"""Grafana Cloud transport — metrics push (Influx line protocol) and annotations.
+
+All I/O collaborators (session factory, annotation POST callable, loki sink,
+events namespace) are injectable. Production uses sensible defaults.
+"""
 
 import base64
 import gzip
@@ -11,6 +15,34 @@ import config
 log = logging.getLogger("towerwatch")
 
 
+class _LazyLokiSink:
+    """Lazy bridge to the module-level loki singleton.
+
+    Production callers can leave `loki=None` and the client will resolve
+    `loki._get_singleton()` the first time an event needs to be emitted.
+    """
+
+    _cached = None
+
+    def _get(self):
+        if self._cached is None:
+            from loki import _get_singleton
+            self._cached = _get_singleton()
+        return self._cached
+
+    def push(self, level, message, extra=None):
+        try:
+            self._get().push(level, message, extra)
+        except Exception:
+            pass
+
+    def log_and_push(self, level, message, **fields):
+        try:
+            self._get().log_and_push(level, message, **fields)
+        except Exception:
+            pass
+
+
 class GrafanaClient:
     def __init__(
         self,
@@ -20,9 +52,12 @@ class GrafanaClient:
         api_key: str,
         annotation_token: str = "",
         session_factory=requests.Session,
+        annotation_post=requests.post,
         push_timeout: int = 10,
         annotations_timeout: int = 5,
         compress: bool = True,
+        loki=None,
+        events=None,
     ):
         self._push_url = push_url
         self._annotations_url = annotations_url
@@ -30,9 +65,15 @@ class GrafanaClient:
         self._api_key = api_key
         self._annotation_token = annotation_token
         self._session_factory = session_factory
+        self._annotation_post = annotation_post
         self._push_timeout = push_timeout
         self._annotations_timeout = annotations_timeout
         self._compress = compress
+        self._loki = loki if loki is not None else _LazyLokiSink()
+        if events is None:
+            import events as _events_mod
+            events = _events_mod
+        self._events = events
         self._session: requests.Session | None = None
 
     @classmethod
@@ -62,8 +103,6 @@ class GrafanaClient:
 
     def push_metrics(self, lines: list[str]) -> bool:
         """Push Influx line protocol lines to Grafana Cloud. Returns True on success."""
-        import events as events_mod
-        from loki import _get_singleton
         body_raw = "\n".join(lines).encode("utf-8")
         headers = {}
         if self._compress:
@@ -73,19 +112,17 @@ class GrafanaClient:
             body = body_raw
         try:
             resp = self._get_session().post(
-                self._push_url,
-                data=body,
-                headers=headers,
+                self._push_url, data=body, headers=headers,
                 timeout=self._push_timeout,
             )
             if resp.status_code < 300:
                 return True
-            events_mod.metrics_push_failed(_get_singleton(), http_status=resp.status_code)
+            self._events.metrics_push_failed(self._loki, http_status=resp.status_code)
             if resp.status_code in (401, 403):
                 self._invalidate_session()
             return False
         except Exception as e:
-            events_mod.metrics_push_failed(_get_singleton(), error=str(e))
+            self._events.metrics_push_failed(self._loki, error=str(e))
             self._invalidate_session()
             return False
 
@@ -111,16 +148,14 @@ class GrafanaClient:
             "tags": tags,
             "text": text,
         }
-        import events as events_mod
-        from loki import _get_singleton
         try:
-            r = requests.post(
+            r = self._annotation_post(
                 self._annotations_url,
                 json=payload,
                 headers={"Authorization": f"Bearer {self._annotation_token}"},
                 timeout=self._annotations_timeout,
             )
             if r.status_code >= 300:
-                events_mod.annotation_failed(_get_singleton(), http_status=r.status_code)
+                self._events.annotation_failed(self._loki, http_status=r.status_code)
         except Exception as e:
-            events_mod.annotation_failed(_get_singleton(), error=str(e))
+            self._events.annotation_failed(self._loki, error=str(e))
