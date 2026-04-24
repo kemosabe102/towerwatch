@@ -97,7 +97,7 @@
         "hide": false,
         "iconColor": "blue",
         "name": "Deploys",
-        "expr": "{job=\"towerwatch\", host=\"$location\", level=\"warn\"} | json | event=`service_restarted`",
+        "expr": "{job=\"towerwatch\", host=\"$location\", level=\"info\"} | json | event=`service_restarted`",
         "titleFormat": "Deploy",
         "textFormat": "{{version}} ({{build_date}})"
       }
@@ -1005,7 +1005,7 @@
       },
       "targets": [
         {
-          "expr": "{job=\"towerwatch\", host=\"$location\", level=\"warn\"} | json | event=`service_restarted` | line_format \"{{.version}}  {{.build_date}}  {{.platform}}\"",
+          "expr": "{job=\"towerwatch\", host=\"$location\", level=\"info\"} | json | event=`service_restarted` | line_format \"{{.version}}  {{.build_date}}  {{.platform}}\"",
           "refId": "A",
           "datasource": {
             "type": "loki",
