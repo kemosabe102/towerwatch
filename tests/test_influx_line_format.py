@@ -84,3 +84,33 @@ def test_influx_string_field_value_pinned():
     line = _fmt({"version": "abc1234"})
     # Current behaviour: value appears unquoted
     assert "version=abc1234" in line
+
+
+def test_build_info_line_shape():
+    """Prom build_info gauge line: version and build_date are TAGS, build_info is the field."""
+    from towerwatch.tick import format_build_info_line
+
+    line = format_build_info_line(
+        ts=1700000000, version="abc1234", build_date="2026-04-23T16:30:25-07:00"
+    )
+    # Starts with measurement + host tag
+    assert line.startswith("towerwatch,host=towerwatch,")
+    # version and build_date are tags (before the first space)
+    tag_section = line.split(" ", 1)[0]
+    assert "version=abc1234" in tag_section
+    assert "build_date=2026-04-23T16:30:25-07:00" in tag_section
+    # build_info=1 is the only field (after the first space, before the timestamp)
+    field_section = line.split(" ")[1]
+    assert field_section == "build_info=1"
+    # Timestamp last
+    assert line.endswith(" 1700000000")
+
+
+def test_build_info_line_uses_config_defaults():
+    """When version/build_date are omitted, falls back to config.BUILD_VERSION/BUILD_DATE."""
+    from towerwatch import config
+    from towerwatch.tick import format_build_info_line
+
+    line = format_build_info_line(ts=1700000000)
+    assert f"version={config.BUILD_VERSION}" in line
+    assert f"build_date={config.BUILD_DATE}" in line

@@ -54,6 +54,30 @@ def format_influx_line(fields: dict, timestamp: int) -> str:
     )
 
 
+def format_build_info_line(
+    ts: int,
+    *,
+    version: str | None = None,
+    build_date: str | None = None,
+) -> str:
+    """Influx line for the `towerwatch_build_info` Prom gauge.
+
+    `version` and `build_date` are emitted as Influx **tags** (not fields) so
+    Grafana Cloud Prom ingest turns them into metric labels. Tag values are
+    unquoted strings by spec; field string values are not (see the pinned
+    characterization test in test_influx_line_format.py).
+    """
+    v = version if version is not None else _config.BUILD_VERSION
+    d = build_date if build_date is not None else _config.BUILD_DATE
+    return (
+        f"{_config.INFLUX_MEASUREMENT},"
+        f"host={_config.INFLUX_HOST_TAG},"
+        f"version={v},"
+        f"build_date={d} "
+        f"build_info=1 {ts}"
+    )
+
+
 def update_connection_state(ctx: TickContext, state, connected: bool, timestamp: int) -> None:
     if connected and not state.connected:
         if state.outage_start:
