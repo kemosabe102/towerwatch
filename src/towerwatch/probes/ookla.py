@@ -31,8 +31,14 @@ def run_speedtest(
     timeout_s: int | None = None,
     subprocess_run=subprocess.run,
     loki=None,
+    triggered_by: str | None = None,
 ) -> dict:
-    """Run Ookla speedtest CLI. Returns {download_mbps, upload_mbps, success}."""
+    """Run Ookla speedtest CLI. Returns {download_mbps, upload_mbps, success}.
+
+    `triggered_by` identifies the operator who launched the run (for manual
+    runs via towerwatch-speedtest); rides along in the Loki event so
+    dashboards can attribute spikes or anomalies to a specific user.
+    """
     if binary is None:
         binary = config.SPEEDTEST_BINARY
     if server_id is None:
@@ -63,12 +69,17 @@ def run_speedtest(
         data = json.loads(result.stdout)
         dl = round(data["download"]["bandwidth"] * 8 / 1_000_000, 2)
         ul = round(data["upload"]["bandwidth"] * 8 / 1_000_000, 2)
+        log_fields = {
+            "event": config.LOG_EVENT_SPEEDTEST_OK,
+            "download_mbps": dl,
+            "upload_mbps": ul,
+        }
+        if triggered_by:
+            log_fields["triggered_by"] = triggered_by
         loki.log_and_push(
             "INFO",
             f"Speedtest: {dl} Mbps down, {ul} Mbps up",
-            event=config.LOG_EVENT_SPEEDTEST_OK,
-            download_mbps=dl,
-            upload_mbps=ul,
+            **log_fields,
         )
         return {"download_mbps": dl, "upload_mbps": ul, "success": 1}
     except subprocess.TimeoutExpired:
@@ -99,12 +110,14 @@ class OoklaProbe:
         timeout_s: int | None = None,
         subprocess_run=subprocess.run,
         loki=None,
+        triggered_by: str | None = None,
     ):
         self._binary = binary
         self._server_id = server_id
         self._timeout_s = timeout_s
         self._subprocess_run = subprocess_run
         self._loki = loki
+        self._triggered_by = triggered_by
 
     def run(self) -> ProbeResult:
         f = run_speedtest(
@@ -113,5 +126,6 @@ class OoklaProbe:
             timeout_s=self._timeout_s,
             subprocess_run=self._subprocess_run,
             loki=self._loki,
+            triggered_by=self._triggered_by,
         )
         return ProbeResult(fields=f, ok=f["success"] == 1)

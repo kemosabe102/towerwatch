@@ -55,7 +55,7 @@
           "uid": "grafanacloud-towerwatch-prom"
         },
         "enable": true,
-        "expr": "towerwatch_connected{host=\"towerwatch\"} == 0",
+        "expr": "towerwatch_connected{host=\"$location\"} == 0",
         "hide": false,
         "iconColor": "red",
         "name": "Outages",
@@ -67,7 +67,7 @@
           "uid": "grafanacloud-towerwatch-prom"
         },
         "enable": true,
-        "expr": "absent_over_time(towerwatch_connected{host=\"towerwatch\"}[10m])",
+        "expr": "absent_over_time(towerwatch_connected{host=\"$location\"}[10m])",
         "hide": false,
         "iconColor": "dark-purple",
         "name": "Pi Offline",
@@ -97,7 +97,7 @@
         "hide": false,
         "iconColor": "blue",
         "name": "Deploys",
-        "expr": "{job=\"towerwatch\", level=\"warn\"} | json | event=`service_restarted`",
+        "expr": "{job=\"towerwatch\", host=\"$location\", level=\"warn\"} | json | event=`service_restarted`",
         "titleFormat": "Deploy",
         "textFormat": "{{version}} ({{build_date}})"
       }
@@ -127,7 +127,7 @@
       },
       "targets": [
         {
-          "expr": "avg_over_time((max_over_time(towerwatch_connected{host=\"towerwatch\"}[5m]))[$__range:5m]) * 100",
+          "expr": "avg_over_time((max_over_time(towerwatch_connected{host=\"$location\"}[5m]))[$__range:5m]) * 100",
           "legendFormat": "Uptime",
           "refId": "A",
           "datasource": {
@@ -195,7 +195,7 @@
       },
       "targets": [
         {
-          "expr": "last_over_time(towerwatch_connected{host=\"towerwatch\"}[5m])",
+          "expr": "last_over_time(towerwatch_connected{host=\"$location\"}[5m])",
           "legendFormat": "Status",
           "refId": "A",
           "datasource": {
@@ -272,7 +272,7 @@
       },
       "targets": [
         {
-          "expr": "topk(1, timestamp(towerwatch_build_info{host=\"towerwatch\"}))",
+          "expr": "topk(1, timestamp(towerwatch_build_info{host=\"$location\"}))",
           "legendFormat": "{{version}}",
           "refId": "A",
           "datasource": {
@@ -314,7 +314,7 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 12,
+        "x": 0,
         "y": 28
       },
       "id": 4,
@@ -327,7 +327,7 @@
       },
       "targets": [
         {
-          "expr": "towerwatch_pkt_loss_google{host=\"towerwatch\"}",
+          "expr": "towerwatch_pkt_loss_google{host=\"$location\"}",
           "legendFormat": "Google",
           "refId": "A",
           "datasource": {
@@ -336,7 +336,7 @@
           }
         },
         {
-          "expr": "towerwatch_pkt_loss_cloudflare{host=\"towerwatch\"}",
+          "expr": "towerwatch_pkt_loss_cloudflare{host=\"$location\"}",
           "legendFormat": "Cloudflare",
           "refId": "B",
           "datasource": {
@@ -345,7 +345,7 @@
           }
         },
         {
-          "expr": "towerwatch_pkt_loss_gateway{host=\"towerwatch\"}",
+          "expr": "towerwatch_pkt_loss_gateway{host=\"$location\"}",
           "legendFormat": "Gateway",
           "refId": "C",
           "datasource": {
@@ -480,7 +480,7 @@
       },
       "targets": [
         {
-          "expr": "towerwatch_dns_resolve_ms_8_8_8_8{host=\"towerwatch\"}",
+          "expr": "towerwatch_dns_resolve_ms_8_8_8_8{host=\"$location\"}",
           "legendFormat": "Google (8.8.8.8)",
           "refId": "A",
           "datasource": {
@@ -489,7 +489,7 @@
           }
         },
         {
-          "expr": "towerwatch_dns_resolve_ms_1_1_1_1{host=\"towerwatch\"}",
+          "expr": "towerwatch_dns_resolve_ms_1_1_1_1{host=\"$location\"}",
           "legendFormat": "Cloudflare (1.1.1.1)",
           "refId": "B",
           "datasource": {
@@ -604,7 +604,7 @@
       },
       "targets": [
         {
-          "expr": "towerwatch_tcp_connect_ms{host=\"towerwatch\"}",
+          "expr": "towerwatch_tcp_connect_ms{host=\"$location\"}",
           "legendFormat": "TCP Connect",
           "refId": "A",
           "datasource": {
@@ -687,7 +687,7 @@
       },
       "targets": [
         {
-          "expr": "towerwatch_http_latency_ms{host=\"towerwatch\"}",
+          "expr": "towerwatch_http_latency_ms{host=\"$location\"}",
           "legendFormat": "Latency",
           "refId": "A",
           "datasource": {
@@ -757,8 +757,8 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 0,
-        "y": 28
+        "x": 12,
+        "y": 45
       },
       "id": 9,
       "title": "Download / Upload Speed",
@@ -770,7 +770,7 @@
       },
       "targets": [
         {
-          "expr": "towerwatch_download_mbps{host=\"towerwatch\"}",
+          "expr": "towerwatch_download_mbps{host=\"$location\"}",
           "legendFormat": "Download",
           "refId": "A",
           "datasource": {
@@ -779,7 +779,7 @@
           }
         },
         {
-          "expr": "towerwatch_upload_mbps{host=\"towerwatch\"}",
+          "expr": "towerwatch_upload_mbps{host=\"$location\"}",
           "legendFormat": "Upload",
           "refId": "B",
           "datasource": {
@@ -858,9 +858,9 @@
     {
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 24,
         "x": 0,
-        "y": 36
+        "y": 53
       },
       "id": 12,
       "title": "M6 Signal Quality",
@@ -872,7 +872,7 @@
       },
       "targets": [
         {
-          "expr": "towerwatch_m6_rsrp{host=\"towerwatch\"}",
+          "expr": "towerwatch_m6_rsrp{host=\"$location\"}",
           "legendFormat": "RSRP (dBm)",
           "refId": "A",
           "datasource": {
@@ -881,7 +881,7 @@
           }
         },
         {
-          "expr": "towerwatch_m6_rsrq{host=\"towerwatch\"}",
+          "expr": "towerwatch_m6_rsrq{host=\"$location\"}",
           "legendFormat": "RSRQ (dB)",
           "refId": "B",
           "datasource": {
@@ -890,7 +890,7 @@
           }
         },
         {
-          "expr": "towerwatch_m6_sinr{host=\"towerwatch\"}",
+          "expr": "towerwatch_m6_sinr{host=\"$location\"}",
           "legendFormat": "SINR (dB)",
           "refId": "C",
           "datasource": {
@@ -941,7 +941,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 36
+        "y": 28
       },
       "id": 26,
       "title": "Gateway Health",
@@ -953,7 +953,7 @@
       },
       "targets": [
         {
-          "expr": "towerwatch_gateway_tcp_ms{host=\"towerwatch\"}",
+          "expr": "towerwatch_gateway_tcp_ms{host=\"$location\"}",
           "legendFormat": "TCP to Gateway",
           "refId": "A",
           "datasource": {
@@ -962,7 +962,7 @@
           }
         },
         {
-          "expr": "towerwatch_gateway_http_ms{host=\"towerwatch\"}",
+          "expr": "towerwatch_gateway_http_ms{host=\"$location\"}",
           "legendFormat": "HTTP to Gateway",
           "refId": "B",
           "datasource": {
@@ -993,7 +993,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 44
+        "y": 36
       },
       "id": 25,
       "title": "Service Restarts",
@@ -1005,7 +1005,7 @@
       },
       "targets": [
         {
-          "expr": "{job=\"towerwatch\", level=\"warn\"} | json | event=`service_restarted` | line_format \"{{.version}}  {{.build_date}}  {{.platform}}\"",
+          "expr": "{job=\"towerwatch\", host=\"$location\", level=\"warn\"} | json | event=`service_restarted` | line_format \"{{.version}}  {{.build_date}}  {{.platform}}\"",
           "refId": "A",
           "datasource": {
             "type": "loki",
@@ -1040,7 +1040,7 @@
             "uid": "grafanacloud-towerwatch-logs"
           },
           "editorMode": "code",
-          "expr": "{job=\"towerwatch\"} | json",
+          "expr": "{job=\"towerwatch\", host=\"$location\"} | json",
           "queryType": "range",
           "refId": "A"
         }
@@ -1049,7 +1049,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 44
+        "y": 36
       },
       "options": {
         "showLabels": false,
@@ -1082,7 +1082,7 @@
       },
       "targets": [
         {
-          "expr": "towerwatch_rtt_avg_google{host=\"towerwatch\"}",
+          "expr": "towerwatch_rtt_avg_google{host=\"$location\"}",
           "legendFormat": "RTT Avg",
           "refId": "A",
           "datasource": {
@@ -1091,7 +1091,7 @@
           }
         },
         {
-          "expr": "towerwatch_rtt_max_google{host=\"towerwatch\"}",
+          "expr": "towerwatch_rtt_max_google{host=\"$location\"}",
           "legendFormat": "RTT Max",
           "refId": "B",
           "datasource": {
@@ -1100,7 +1100,7 @@
           }
         },
         {
-          "expr": "towerwatch_jitter_google{host=\"towerwatch\"}",
+          "expr": "towerwatch_jitter_google{host=\"$location\"}",
           "legendFormat": "Jitter",
           "refId": "C",
           "datasource": {
@@ -1252,7 +1252,7 @@
       },
       "targets": [
         {
-          "expr": "towerwatch_rtt_avg_cloudflare{host=\"towerwatch\"}",
+          "expr": "towerwatch_rtt_avg_cloudflare{host=\"$location\"}",
           "legendFormat": "RTT Avg",
           "refId": "A",
           "datasource": {
@@ -1261,7 +1261,7 @@
           }
         },
         {
-          "expr": "towerwatch_rtt_max_cloudflare{host=\"towerwatch\"}",
+          "expr": "towerwatch_rtt_max_cloudflare{host=\"$location\"}",
           "legendFormat": "RTT Max",
           "refId": "B",
           "datasource": {
@@ -1270,7 +1270,7 @@
           }
         },
         {
-          "expr": "towerwatch_jitter_cloudflare{host=\"towerwatch\"}",
+          "expr": "towerwatch_jitter_cloudflare{host=\"$location\"}",
           "legendFormat": "Jitter",
           "refId": "C",
           "datasource": {
@@ -1422,7 +1422,7 @@
       },
       "targets": [
         {
-          "expr": "towerwatch_rtt_avg_gateway{host=\"towerwatch\"}",
+          "expr": "towerwatch_rtt_avg_gateway{host=\"$location\"}",
           "legendFormat": "RTT Avg",
           "refId": "A",
           "datasource": {
@@ -1431,7 +1431,7 @@
           }
         },
         {
-          "expr": "towerwatch_rtt_max_gateway{host=\"towerwatch\"}",
+          "expr": "towerwatch_rtt_max_gateway{host=\"$location\"}",
           "legendFormat": "RTT Max",
           "refId": "B",
           "datasource": {
@@ -1440,7 +1440,7 @@
           }
         },
         {
-          "expr": "towerwatch_jitter_gateway{host=\"towerwatch\"}",
+          "expr": "towerwatch_jitter_gateway{host=\"$location\"}",
           "legendFormat": "Jitter",
           "refId": "C",
           "datasource": {
@@ -1593,7 +1593,7 @@
       },
       "targets": [
         {
-          "expr": "towerwatch_http_throughput_mbps{host=\"towerwatch\"}",
+          "expr": "towerwatch_http_throughput_mbps{host=\"$location\"}",
           "legendFormat": "Throughput",
           "refId": "A",
           "datasource": {
@@ -1639,6 +1639,84 @@
           ]
         }
       }
+    },
+    {
+      "id": 27,
+      "title": "Manual Speedtest History",
+      "description": "Ookla speedtest runs triggered via `towerwatch-speedtest`. Sparse by design — each run uses ~400 MB. Legend shows who triggered each run.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 45
+      },
+      "targets": [
+        {
+          "expr": "towerwatch_speedtest_download_mbps{host=\"$location\"}",
+          "legendFormat": "Down · {{triggered_by}}",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "towerwatch_speedtest_upload_mbps{host=\"$location\"}",
+          "legendFormat": "Up · {{triggered_by}}",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Mbps",
+          "min": 0,
+          "custom": {
+            "drawStyle": "points",
+            "pointSize": 10,
+            "showPoints": "always",
+            "spanNulls": false,
+            "lineWidth": 0,
+            "fillOpacity": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "id": 28,
+      "type": "row",
+      "title": "Sparse & Manual (may show No data)",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 44
+      }
     }
   ],
   "schemaVersion": 38,
@@ -1648,7 +1726,26 @@
     "5g"
   ],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "name": "location",
+        "label": "Location",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "query": "label_values(towerwatch_connected, host)",
+        "refresh": 1,
+        "sort": 1,
+        "includeAll": false,
+        "multi": false,
+        "current": {
+          "text": "towerwatch",
+          "value": "towerwatch"
+        }
+      }
+    ]
   },
   "time": {
     "from": "now-24h",

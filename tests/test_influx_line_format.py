@@ -114,3 +114,22 @@ def test_build_info_line_uses_config_defaults():
     line = format_build_info_line(ts=1700000000)
     assert f"version={config.BUILD_VERSION}" in line
     assert f"build_date={config.BUILD_DATE}" in line
+
+
+def test_speedtest_line_shape():
+    """Manual speedtest line: host + triggered_by are tags; dl/ul Mbps are fields."""
+    from towerwatch.tick import format_speedtest_line
+
+    line = format_speedtest_line(
+        ts=1700000000,
+        download_mbps=123.45,
+        upload_mbps=45.67,
+        triggered_by="alice",
+    )
+    assert line.startswith("towerwatch,host=towerwatch,")
+    tag_section = line.split(" ", 1)[0]
+    assert "triggered_by=alice" in tag_section
+    field_section = line.split(" ")[1]
+    assert "speedtest_download_mbps=123.45" in field_section
+    assert "speedtest_upload_mbps=45.67" in field_section
+    assert line.endswith(" 1700000000")

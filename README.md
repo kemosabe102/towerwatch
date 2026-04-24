@@ -18,6 +18,7 @@ A continuous network-quality probe for a Raspberry Pi. Ships latency, jitter, pa
 | [`docs/architecture.md`](docs/architecture.md) | Design narrative — composition root, Protocols, TickContext, testing philosophy |
 | [`docs/runbook.md`](docs/runbook.md) | Symptom-indexed ops runbook — start here at 2am |
 | [`docs/setup-pi.md`](docs/setup-pi.md) | Tailscale + read-only root hardening for unattended deployments |
+| [`docs/manual-speedtest.md`](docs/manual-speedtest.md) | Non-technical user guide for triggering speedtests over SSH |
 | [`docs/probe-m6.md`](docs/probe-m6.md) | Optional Netgear M6 cellular signal probe — setup or port to another router |
 | [`docs/design.md`](docs/design.md) | Per-component code reference (functions, config tables, error patterns) |
 | [`docs/bench-tests.md`](docs/bench-tests.md) | Failure-mode bench test catalog |
@@ -182,6 +183,7 @@ All tuning lives in two files:
 
 - **`src/towerwatch/config.py`** — non-secret constants: probe targets, intervals, push URLs, buffer paths, log event names. Read the top of the file; it's the source of truth.
 - **`src/towerwatch/credentials.py`** — gitignored. Created from `credentials.py.example`. Contains:
+  - `LOCATION` — per-site identifier (e.g. `"home"`, `"remote-site-1"`); becomes the `host` metric tag and Loki stream label. Each Pi gets its own credentials.py with its own `LOCATION`.
   - Grafana Cloud Prometheus creds (`GRAFANA_INSTANCE_ID`, `GRAFANA_API_KEY`)
   - Loki creds (`LOKI_URL`, `LOKI_USER`, `LOKI_TOKEN`) — Loki has a **different** instance ID from Prometheus
   - Optional: router admin password, Grafana annotation service-account token
@@ -211,6 +213,23 @@ See [`docs/runbook.md#remote-deploy`](docs/runbook.md#remote-deploy) for post-de
 **Suggested alert:** a "no data" rule on `towerwatch_connected` — if no samples for 2+ hours, notify. This catches the case where the device itself has gone silent (power, SD-card failure, ISP outage exceeding the buffer).
 
 ---
+
+## Running multiple sites
+
+To compare two or more locations (e.g. home + remote site), deploy a separate Pi at each location with a distinct `LOCATION` value in its `credentials.py`. The dashboards support this out of the box:
+
+- **`grafana/dashboard.json`** — the main dashboard has a `$location` dropdown. Pick a site; all panels scope to it.
+- **`grafana/dashboard-compare.json`** — dedicated side-by-side dashboard with `$location_a` / `$location_b` selectors. Import it separately.
+
+To trigger a manual speedtest on a remote Pi from anywhere on your Tailnet:
+
+```bash
+ssh admin@<pi-tailscale-ip> towerwatch-speedtest --triggered-by <your-name>
+```
+
+Results (download/upload Mbps, tagged with the operator name) appear on the dashboard within a minute. Non-technical users: see [`docs/manual-speedtest.md`](docs/manual-speedtest.md).
+
+**Scaling:** Tailscale's free plan fits small teams comfortably. For dozens or hundreds of users (enterprise deployments), options include Tailscale ACLs with a paid plan, a future HTTP trigger endpoint behind SSO, or a dedicated jump host — out of scope for this repo today.
 
 ## Data budget
 

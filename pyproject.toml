@@ -38,6 +38,7 @@ dev = [
 
 [project.scripts]
 towerwatch = "towerwatch.main:main"
+towerwatch-speedtest = "towerwatch.speedtest_cli:main"
 
 [project.urls]
 Homepage = "https://github.com/kemosabe102/towerwatch"

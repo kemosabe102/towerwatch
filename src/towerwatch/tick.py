@@ -78,6 +78,28 @@ def format_build_info_line(
     )
 
 
+def format_speedtest_line(
+    ts: int,
+    *,
+    download_mbps: float,
+    upload_mbps: float,
+    triggered_by: str,
+) -> str:
+    """Influx line for a manual Ookla speedtest run.
+
+    `triggered_by` is emitted as a tag (not a field), matching the build_info
+    pattern — Grafana Cloud Prom ingest turns tags into metric labels so
+    dashboards can group/filter by operator.
+    """
+    return (
+        f"{_config.INFLUX_MEASUREMENT},"
+        f"host={_config.INFLUX_HOST_TAG},"
+        f"triggered_by={triggered_by} "
+        f"speedtest_download_mbps={download_mbps},"
+        f"speedtest_upload_mbps={upload_mbps} {ts}"
+    )
+
+
 def update_connection_state(ctx: TickContext, state, connected: bool, timestamp: int) -> None:
     if connected and not state.connected:
         if state.outage_start:

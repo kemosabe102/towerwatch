@@ -143,7 +143,24 @@ GRAFANA_PUSH_URL = os.environ.get(
 )
 GRAFANA_PUSH_TIMEOUT_S = 10
 INFLUX_MEASUREMENT = "towerwatch"
-INFLUX_HOST_TAG = "towerwatch"
+
+
+def _load_location() -> str:
+    """Read the per-site LOCATION from credentials.py with a safe fallback.
+
+    LOCATION is the `host` Influx tag and Loki stream label — it identifies
+    which Pi the metric/log came from. Defaults to "towerwatch" so historical
+    single-site deployments keep their existing label.
+    """
+    try:
+        from towerwatch import credentials
+
+        return getattr(credentials, "LOCATION", "towerwatch") or "towerwatch"
+    except ImportError:
+        return "towerwatch"
+
+
+INFLUX_HOST_TAG = _load_location()
 
 # --- Push Optimization (batching + compression) ---
 PUSH_BATCH_SIZE = 2  # Accumulate N lines before pushing (at 60s = push every 2 min)
