@@ -10,11 +10,18 @@ You've been asked to help verify a network's speed at a site where a Towerwatch 
 
 - A Tailscale invitation email.
 - The Pi's Tailscale IP (looks like `100.x.y.z`).
-- The SSH login name (usually `admin`).
 
-## Step 1 — Install Tailscale
+That's it. With Tailscale SSH enabled (the operator handles this once), you don't need a password or an SSH key — your Tailnet identity is the auth.
 
-Download from <https://tailscale.com/download> for your OS. Sign in with the email address the operator invited. Once installed, you should see the Pi in your device list (if the operator has shared it with you).
+## Step 1 — Join the Tailnet
+
+1. **Accept the invite.** Click the link in the Tailscale invitation email and sign in with the email address the operator used.
+2. **Install Tailscale** from <https://tailscale.com/download> for your OS:
+   - Windows: `.exe` installer.
+   - macOS: Mac App Store or direct download.
+   - Linux: one-line `curl -fsSL https://tailscale.com/install.sh | sh`.
+3. **Sign in** through the Tailscale app using the same email.
+4. Verify it's working: open the Tailscale app (or run `tailscale status`) and confirm the Pi appears in your device list.
 
 ## Step 2 — Run the speedtest
 
@@ -39,7 +46,7 @@ Example:
 ssh admin@100.76.154.81 towerwatch-speedtest --triggered-by alice
 ```
 
-If SSH prompts for a password, ask the operator.
+The first time you connect, Tailscale may briefly open a browser window asking you to authorize this device — that's the Tailscale-SSH check-in, not an SSH password prompt. One click and you're in. Subsequent connections skip the check-in.
 
 ## What you'll see
 
@@ -56,7 +63,9 @@ The operator will also see your result on their Grafana dashboard within a minut
 ## Troubleshooting
 
 - **"Connection timed out"** — the Pi may be offline, or Tailscale hasn't finished connecting on your machine. Open the Tailscale app and check that both you and the Pi show "Connected."
-- **"Permission denied (publickey)"** — the operator needs to add your SSH key or give you the password.
+- **Prompts for an SSH password** — the operator hasn't enabled Tailscale SSH on the Pi yet. Ask them to run `sudo tailscale up --ssh` on it.
+- **Browser check-in didn't open on first connect** — open the Tailscale app, sign out, sign back in, and try again. The check-in only appears when Tailscale can reach the OS browser; headless terminals may not trigger it.
+- **"Permission denied (publickey)"** — same cause as the password prompt above: Tailscale SSH isn't enabled on the Pi. Ask the operator.
 - **"command not found: towerwatch-speedtest"** — the Pi hasn't been redeployed since this feature was added. Ask the operator to run `./scripts/deploy.sh`.
 
 ## Why ~400 MB?
