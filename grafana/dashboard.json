@@ -272,7 +272,7 @@
       },
       "targets": [
         {
-          "expr": "last_over_time(towerwatch_build_info{host=\"towerwatch\"}[$__range])",
+          "expr": "topk(1, timestamp(towerwatch_build_info{host=\"towerwatch\"}))",
           "legendFormat": "{{version}}",
           "refId": "A",
           "datasource": {
