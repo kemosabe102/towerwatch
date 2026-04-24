@@ -59,20 +59,26 @@ REPO_DIR="$1"
 INSTALL_DIR="$2"
 
 # 1. Pull latest and install into the existing venv
-echo "[1/3] git pull && pip install ."
+echo "[1/3] git checkout main && git pull && pip install ."
 cd "$REPO_DIR"
 git fetch origin
-BRANCH="$(git symbolic-ref --short HEAD 2>/dev/null || echo main)"
-git pull --ff-only origin "$BRANCH"
+# Pin the Pi to `main`. Previously this script pulled the Pi's current branch,
+# which silently left the Pi on whatever feature branch was last checked out —
+# deploys appeared to succeed while installing stale code. Pin explicitly.
+git checkout main
+git pull --ff-only origin main
 # Move any uploaded credentials into place before install (package needs it at import time).
 if [[ -f /tmp/towerwatch-credentials.py ]]; then
     cp /tmp/towerwatch-credentials.py "$REPO_DIR/src/towerwatch/credentials.py"
     rm -f /tmp/towerwatch-credentials.py
 fi
-# Install into the production venv. We run pip as root because the checked-out
-# repo lives under /home/admin (not readable by the towerwatch user), then
-# restore venv ownership. install-pi.sh uses the same pattern.
-sudo "$INSTALL_DIR/.venv/bin/python" -m pip install --quiet --upgrade "$REPO_DIR"
+# Install into the production venv. `--force-reinstall --no-deps` is required
+# because pyproject.toml has a static version (0.1.0); without it pip sees
+# "same version already installed" and skips copying updated .py files. We run
+# pip as root because the checked-out repo lives under /home/admin (not
+# readable by the towerwatch user), then restore venv ownership.
+# install-pi.sh uses the same pattern.
+sudo "$INSTALL_DIR/.venv/bin/python" -m pip install --quiet --force-reinstall --no-deps "$REPO_DIR"
 
 # Gitignored files (credentials, version stamp) don't ship in the wheel —
 # copy them into the installed package dir post-install.
