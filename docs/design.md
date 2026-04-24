@@ -388,7 +388,7 @@ Stream labels: `{job="towerwatch", host="towerwatch", level="warn"}`. Each log v
 
 | Panel | Type | Metric(s) | Notes |
 |-------|------|-----------|-------|
-| Connection Uptime | stat | `towerwatch_connected` | % over range. Red <95%, yellow 95–99.5%, green ≥99.5% |
+| Connection Uptime | stat | `towerwatch_connected` | % of 5-min buckets over range with ≥1 up-sample (lenient to probe/push gaps). Red <95%, yellow 95–99.5%, green ≥99.5% |
 | Current Status | stat | `towerwatch_connected` | Live UP/DOWN mapping |
 | Speedtest Health | stat | `towerwatch_speedtest_success` | Last 12h |
 | Google (8.8.8.8) | timeseries | `rtt_avg_google`, `rtt_max_google`, `jitter_google` | Log2 scale |

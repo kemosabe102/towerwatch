@@ -127,7 +127,7 @@
       },
       "targets": [
         {
-          "expr": "clamp_max(sum_over_time(towerwatch_connected{host=\"towerwatch\"}[$__range]) / scalar(vector($__range_s / 60)) * 100, 100)",
+          "expr": "avg_over_time((max_over_time(towerwatch_connected{host=\"towerwatch\"}[5m]))[$__range:5m]) * 100",
           "legendFormat": "Uptime",
           "refId": "A",
           "datasource": {
