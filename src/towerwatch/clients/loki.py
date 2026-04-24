@@ -158,7 +158,7 @@ class LokiClient:
             buf.unlink()
             log.info("Log buffer flushed: %d entries delivered", delivered)
             self.push(
-                "WARN",
+                "INFO",
                 f"Log buffer flushed: {delivered} entries",
                 {"event": config.LOG_EVENT_LOG_BUFFER_FLUSHED, "count": delivered},
             )

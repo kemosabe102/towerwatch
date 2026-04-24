@@ -13,7 +13,7 @@ from towerwatch import config
 
 def service_restarted(loki, *, version: str, build_date: str, platform: str) -> None:
     loki.push(
-        "WARN",
+        "INFO",
         "Service restarted",
         {
             "event": config.LOG_EVENT_SERVICE_RESTARTED,
@@ -71,7 +71,7 @@ def outage_recorded(loki, *, gap_seconds: int, reason: str, version: str) -> Non
 
 def service_heartbeat(loki, *, uptime_h: float, version: str, build_date: str) -> None:
     loki.push(
-        "WARN",
+        "INFO",
         "Service heartbeat",
         {
             "event": config.LOG_EVENT_HEARTBEAT,
@@ -113,7 +113,7 @@ def annotation_failed(loki, *, http_status: int | None = None, error: str | None
 
 def log_buffer_flushed(loki, *, count: int) -> None:
     loki.push(
-        "WARN",
+        "INFO",
         f"Log buffer flushed: {count} entries",
         {
             "event": config.LOG_EVENT_LOG_BUFFER_FLUSHED,

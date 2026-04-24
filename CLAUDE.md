@@ -24,7 +24,7 @@ Failure modes to expect:
 
 `cd.sh` is a thin shim that execs `scripts/deploy.sh` — old muscle memory keeps working.
 
-`BUILD_VERSION` / `BUILD_DATE` are loaded by `config.py` from `_version.txt`; they appear in the `service_restarted` WARN log and in outage-annotation text. Don't re-derive them from `git` on the Pi — version authority lives on the dev machine.
+`BUILD_VERSION` / `BUILD_DATE` are loaded by `config.py` from `_version.txt`; they appear in the `service_restarted` log and in outage-annotation text. Don't re-derive them from `git` on the Pi — version authority lives on the dev machine.
 
 ## Editing entry points
 
@@ -41,7 +41,7 @@ See [`docs/architecture.md`](docs/architecture.md) for the design narrative.
 
 - **Metric units are `_ms`, not seconds.** Prometheus convention says seconds; dashboards query `_ms`. Don't normalise.
 - **Target labels are baked into field names** (`rtt_avg_google`, `jitter_cloudflare`), not Prometheus label selectors. Dashboards query by metric name — do not refactor into labels.
-- **`LOKI_PUSH_LEVEL = "WARN"` in production.** `INFO` will flood Loki and burn the data budget. Only flip to `INFO` for local dev.
+- **`LOKI_PUSH_LEVEL = "INFO"`; per-tick logs must NOT use `loki.push`/`loki.log_and_push`.** The Loki gate is informational, not the throttle. The actual throttle is: anything that fires every tick (~1/min) or every push (~30/hour) stays out of the Loki call surface entirely — use stdlib `log.debug`/`log.info` only. `loki.push` is reserved for events that fire per-restart, per-state-change, or at most a few times per day. New event types must justify their cadence against the ~230 MB/month data budget.
 - **Buffer capped at 256 KB** (`LOKI_BUFFER_MAX_BYTES`) — the data partition is 1 GB; don't raise this without thinking.
 - **Data budget is a hard constraint, not a guideline.** Any change that adds network traffic (new probes, larger samples, higher frequencies, smaller batches) must be justified against the ~230 MB/month baseline. Ookla stays manual-only.
 

@@ -25,7 +25,7 @@ def test_service_restarted_level_and_event():
     loki = _make_loki()
     events.service_restarted(loki, version="abc1234", build_date="2026-01-01", platform="linux")
     level, msg, extra = _pushed(loki)
-    assert level == "WARN"
+    assert level == "INFO"
     assert extra["event"] == config.LOG_EVENT_SERVICE_RESTARTED
     assert extra["version"] == "abc1234"
 
@@ -75,7 +75,7 @@ def test_service_heartbeat_level_and_uptime():
         build_date="2026-04-23T16:30:25-07:00",
     )
     level, msg, extra = _pushed(loki)
-    assert level == "WARN"
+    assert level == "INFO"
     assert extra["event"] == config.LOG_EVENT_HEARTBEAT
     assert extra["uptime_h"] == 2.5
     assert extra["version"] == "abc1234"
@@ -113,6 +113,6 @@ def test_log_buffer_flushed_count():
     loki = _make_loki()
     events.log_buffer_flushed(loki, count=7)
     level, msg, extra = _pushed(loki)
-    assert level == "WARN"
+    assert level == "INFO"
     assert extra["event"] == config.LOG_EVENT_LOG_BUFFER_FLUSHED
     assert extra["count"] == 7

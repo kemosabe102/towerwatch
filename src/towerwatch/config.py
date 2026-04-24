@@ -167,7 +167,7 @@ LOG_LEVEL = "INFO"  # DEBUG for verbose output
 
 # --- Loki (Structured Log Shipping) ---
 LOKI_PUSH_TIMEOUT_S = 5
-LOKI_PUSH_LEVEL = "WARN"  # Minimum level to push to Loki (WARN in production, INFO for testing)
+LOKI_PUSH_LEVEL = "INFO"  # Minimum level to push to Loki — keep per-tick logs out of Loki by using DEBUG/local-only for them
 
 # --- Outage Annotations (sticky region annotations in Grafana) ---
 # When a push-gap of >=OUTAGE_GAP_THRESHOLD_S is detected on recovery, POST a region
