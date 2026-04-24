@@ -334,13 +334,19 @@ towerwatch_build_info
 
 Expected: one series with labels `{host="towerwatch", version="<new-hash>", build_date="<iso-date>"}`, value 1. If the series is absent after 3 minutes, check `journalctl -u towerwatch -n 100 --no-pager` on the Pi for push errors.
 
-- [ ] **Step 4: Add the stat panel to the dashboard**
+- [ ] **Step 4: Replace the existing "Deployed Version" panel with the Prom-backed one**
 
-In the Towerwatch dashboard → Edit → Add panel → Stat:
-- Datasource: Prometheus (`grafanacloud-towerwatch-prom`)
-- Query: `last(towerwatch_build_info)`
-- Legend/Display: override display name to `{{version}}`
-- Optionally add a second field override showing `{{build_date}}` as secondary text.
+The current panel is Loki-backed (`{job="towerwatch"} | json | event=\`service_restarted\``) and uses `lastNotNull` on a `/^Line$/` field. Grafana sorts logs oldest-first, so the reducer picks the *oldest* restart in the range, not the newest — producing a stale version string. Switching to the Prom gauge eliminates both the retention concern and the sort-order bug.
+
+In the Towerwatch dashboard → click the "Deployed Version" panel → Edit:
+- Datasource: switch from Loki to Prometheus (`grafanacloud-towerwatch-prom`)
+- Query: replace with `last(towerwatch_build_info)` (no `expr` on logs, no `| json`)
+- Reduce options:
+    - Field filter: change `/^Line$/` to `/^version$/` so the reducer reads the `version` label
+    - Calc: keep `lastNotNull`
+- Keep panel title, size, position, and thresholds unchanged.
+- Update the panel description to: "Currently deployed version (short-hash). Gauge re-emitted every tick — always shows the running version regardless of lookback window."
+- Optionally add a second Prom query `last(towerwatch_build_info)` with field filter `/^build_date$/` as secondary text.
 
 Save the dashboard.
 
