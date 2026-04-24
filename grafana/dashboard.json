@@ -264,22 +264,22 @@
       },
       "id": 24,
       "title": "Deployed Version",
-      "description": "Version string from the most recent service restart. Shows 'No data' if no restart occurred in the selected time range — widen the range to see it.",
+      "description": "Currently deployed version (short-hash). Backed by the towerwatch_build_info Prom gauge, re-emitted every tick — always shows the running version regardless of lookback window.",
       "type": "stat",
       "datasource": {
-        "type": "loki",
-        "uid": "grafanacloud-towerwatch-logs"
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
       },
       "targets": [
         {
-          "expr": "{job=\"towerwatch\", level=\"warn\"} | json | event=`service_restarted` | line_format \"{{.version}}\"",
-          "legendFormat": "Version",
+          "expr": "last_over_time(towerwatch_build_info{host=\"towerwatch\"}[$__range])",
+          "legendFormat": "{{version}}",
           "refId": "A",
           "datasource": {
-            "type": "loki",
-            "uid": "grafanacloud-towerwatch-logs"
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
           },
-          "queryType": "range"
+          "instant": true
         }
       ],
       "fieldConfig": {
@@ -299,11 +299,11 @@
       "options": {
         "reduceOptions": {
           "calcs": ["lastNotNull"],
-          "fields": "/^Line$/",
+          "fields": "",
           "values": false
         },
         "orientation": "auto",
-        "textMode": "value_and_name",
+        "textMode": "name",
         "wideLayout": false,
         "colorMode": "none",
         "graphMode": "none",
