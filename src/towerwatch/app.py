@@ -19,6 +19,7 @@ from towerwatch.lifecycle import RuntimeState
 from towerwatch.tick import (
     TickContext,
     collect_probes,
+    format_build_info_line,
     format_influx_line,
     push_batch,
     update_connection_state,
@@ -75,11 +76,17 @@ def run_loop(ctx: TickContext, state: RuntimeState) -> None:
         )
 
         startup_mod.write_marker(Path(config.LAST_ALIVE_MARKER_FILE), time.time())
+        state.metric_batch.append(format_build_info_line(timestamp))
         push_batch(ctx, state, format_influx_line(fields, timestamp), any_connected)
 
         if scheduler and scheduler.should_heartbeat(time.time()):
             uptime_h = round((time.monotonic() - state.start_ts) / 3600, 1)
-            events_mod.service_heartbeat(loki, uptime_h=uptime_h)
+            events_mod.service_heartbeat(
+                loki,
+                uptime_h=uptime_h,
+                version=config.BUILD_VERSION,
+                build_date=config.BUILD_DATE,
+            )
 
         elapsed = time.perf_counter() - cycle_start
         time.sleep(max(0, config.METRIC_INTERVAL_S - elapsed))

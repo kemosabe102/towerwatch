@@ -69,13 +69,15 @@ def outage_recorded(loki, *, gap_seconds: int, reason: str, version: str) -> Non
     )
 
 
-def service_heartbeat(loki, *, uptime_h: float) -> None:
+def service_heartbeat(loki, *, uptime_h: float, version: str, build_date: str) -> None:
     loki.push(
         "WARN",
         "Service heartbeat",
         {
             "event": config.LOG_EVENT_HEARTBEAT,
             "uptime_h": uptime_h,
+            "version": version,
+            "build_date": build_date,
         },
     )
 

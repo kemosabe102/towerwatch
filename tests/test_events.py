@@ -68,11 +68,18 @@ def test_outage_recorded_gap_fields():
 
 def test_service_heartbeat_level_and_uptime():
     loki = _make_loki()
-    events.service_heartbeat(loki, uptime_h=2.5)
+    events.service_heartbeat(
+        loki,
+        uptime_h=2.5,
+        version="abc1234",
+        build_date="2026-04-23T16:30:25-07:00",
+    )
     level, msg, extra = _pushed(loki)
     assert level == "WARN"
     assert extra["event"] == config.LOG_EVENT_HEARTBEAT
     assert extra["uptime_h"] == 2.5
+    assert extra["version"] == "abc1234"
+    assert extra["build_date"] == "2026-04-23T16:30:25-07:00"
 
 
 def test_partition_missing_includes_path():
