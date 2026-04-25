@@ -213,12 +213,17 @@ else
 fi
 
 # --- fakehwclock: point to writable partition ---
+# Trixie's /etc/default/fake-hwclock ships without a FILE= line at all (only
+# FORCE=). Older Bookworm shipped it commented out as "#FILE=...". Handle both:
+# replace any existing (commented or not) FILE= line, or append one if missing.
 echo "[6/9] Configuring fakehwclock for writable partition..."
 FHWC_FILE="$DATA_MOUNT/fake-hwclock.data"
-if [ -f /etc/default/fake-hwclock ]; then
+if [ ! -f /etc/default/fake-hwclock ]; then
+    echo "FILE=$FHWC_FILE" > /etc/default/fake-hwclock
+elif grep -qE '^#?FILE=' /etc/default/fake-hwclock; then
     sed -i "s|^#\?FILE=.*|FILE=$FHWC_FILE|" /etc/default/fake-hwclock
 else
-    echo "FILE=$FHWC_FILE" > /etc/default/fake-hwclock
+    echo "FILE=$FHWC_FILE" >> /etc/default/fake-hwclock
 fi
 mkdir -p /etc/systemd/system/fake-hwclock.service.d
 cat > /etc/systemd/system/fake-hwclock.service.d/writable.conf << 'EOF'
