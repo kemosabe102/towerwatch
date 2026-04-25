@@ -95,6 +95,7 @@ towerwatch/
 ├── docs/                   # Architecture, runbook, probe guides
 ├── grafana/dashboard.json  # Importable Grafana Cloud dashboard
 ├── scripts/
+│   ├── partition-pi-data.sh # One-time: creates /dev/mmcblk0p3 ext4 `twdata`
 │   ├── install-pi.sh       # One-time Pi setup (venv, systemd, data partition)
 │   ├── deploy.sh           # Per-deploy: git pull, pip install, restart
 │   └── towerwatch.service  # systemd unit
@@ -128,13 +129,34 @@ The probes don't care what's on the other end of the cable — 5G hotspot, fixed
 ### 1. Flash the SD card
 
 - Flash **Raspberry Pi OS Lite (64-bit)** with Raspberry Pi Imager.
-- In Imager's advanced settings: enable SSH, set a hostname, set a user/password.
-- After flashing, create a **third partition** (~1 GB, ext4, label `twdata`) on the card for persistent buffer storage. `install.sh` expects this at `/dev/mmcblk0p3`.
+- In Imager's advanced settings:
+  - Set a hostname (e.g. `towerwatch-<site>`).
+  - Set the username (we use `admin` throughout this repo).
+  - Enable SSH → **"Allow public-key authentication only"** → paste your `~/.ssh/id_ed25519.pub`. Don't use password auth — see [SSH access](#ssh-access) below.
+- **Disable rootfs auto-expansion** before first boot. Pi OS Lite expands `rootfs` to fill the entire SD card on first boot, leaving no room for the `twdata` data partition. Edit `cmdline.txt` on the boot partition (FAT32, mounts on Mac/Windows/Linux automatically) and remove the bare `resize` token. The current Imager (1.8+) puts a `resize` flag in `cmdline.txt` that the initramfs firstboot hook reads to trigger expansion:
+
+  ```bash
+  # macOS — after Imager finishes, re-insert the SD card so bootfs remounts:
+  sed -i '' 's| resize||' /Volumes/bootfs/cmdline.txt
+  cat /Volumes/bootfs/cmdline.txt   # verify `resize` is gone, file is still ONE line
+
+  # Linux — typical mount path:
+  sudo sed -i 's| resize||' /media/$USER/bootfs/cmdline.txt
+
+  # Windows — open bootfs in Explorer, edit cmdline.txt in Notepad++ or VS Code
+  # (NOT regular Notepad — it adds a BOM that breaks boot). Remove the ` resize` token.
+  ```
+
+  Leave the `ds=nocloud;i=rpi-imager-...` token alone — that's cloud-init applying your hostname, user, and SSH key on first boot. `cmdline.txt` must remain a single line with no trailing newline. Eject properly before inserting into the Pi.
+
+  > **Note on token name:** older Pi OS versions used `init=/usr/lib/raspberrypi-sys-mods/firstboot` instead. If you don't see `resize` in your `cmdline.txt`, look for that legacy token and remove it instead. Either way, `cat` your `cmdline.txt` first to see what's actually there.
+
+- The `twdata` data partition is created on the Pi after first boot via `scripts/partition-pi-data.sh` (step 3 below).
 
 ### 2. First boot
 
 ```bash
-ssh <user>@<hostname>.local
+ssh admin@<hostname>.local        # no password — your key from Imager works
 sudo apt update && sudo apt upgrade -y
 ```
 
@@ -145,8 +167,11 @@ git clone <your-fork-url> towerwatch
 cd towerwatch
 cp src/towerwatch/credentials.py.example src/towerwatch/credentials.py
 # Edit credentials.py — see "Configuration" below
+sudo bash scripts/partition-pi-data.sh   # creates /dev/mmcblk0p3 (twdata)
 sudo bash scripts/install-pi.sh
 ```
+
+`partition-pi-data.sh` is idempotent — re-running it on a Pi that already has a labelled `twdata` partition is a no-op.
 
 `scripts/install-pi.sh` installs system deps, the Ookla Speedtest CLI, creates `/opt/towerwatch/.venv`, `pip install`s the package into it, mounts the data partition at `/opt/towerwatch/data`, installs the systemd unit (pointing at `.venv/bin/towerwatch`), and enables the service.
 
@@ -174,6 +199,40 @@ python -m towerwatch       # or: .venv/bin/towerwatch
 ```
 
 Optional: drop the Ookla CLI binary in `pi/speedtest_bin/` for manual speedtests. The cellular signal probe fails gracefully off-network.
+
+### SSH access
+
+Use built-in OpenSSH on every dev OS. No third-party clients needed.
+
+| Dev OS | Client | Notes |
+|---|---|---|
+| Windows 10/11 | `C:\Windows\System32\OpenSSH\ssh.exe` (built in; also what Git Bash uses) | Enable the "OpenSSH Authentication Agent" service for ssh-agent. |
+| macOS | `/usr/bin/ssh` (built in) | Add `UseKeychain yes` + `AddKeysToAgent yes` to `~/.ssh/config` to store passphrases. |
+| Linux | `/usr/bin/ssh` (built in) | Standard ssh-agent. |
+
+**Key-based auth only.** All accounts on the Pi (`admin`, plus the speedtest `towerwatch-user` once you've handed off a key — see [`docs/setup-pi.md`](docs/setup-pi.md)) are configured keys-only. Bootstrap by pasting your public key into Raspberry Pi Imager's advanced settings before flashing — the Pi boots with your key already in `authorized_keys` and you never need a password.
+
+If you don't have a keypair yet:
+
+```bash
+ssh-keygen -t ed25519 -C "you@dev-machine"
+cat ~/.ssh/id_ed25519.pub   # paste this into Imager
+```
+
+**Don't use `sshpass`.** It leaks credentials via `ps`, has been removed from Homebrew, and fails compliance checks. The cost of pasting a pubkey into Imager once is lower than installing `sshpass` everywhere forever.
+
+Convenient `~/.ssh/config` entry once a Pi is up:
+
+```
+Host towerwatch-<site>
+    HostName <site>.local           # or the Tailscale IP after install
+    User admin
+    IdentityFile ~/.ssh/id_ed25519
+    AddKeysToAgent yes
+    UseKeychain yes                  # macOS only
+```
+
+Then `ssh towerwatch-<site>` from anywhere.
 
 ---
 

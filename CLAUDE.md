@@ -26,6 +26,45 @@ Failure modes to expect:
 
 `BUILD_VERSION` / `BUILD_DATE` are loaded by `config.py` from `_version.txt`; they appear in the `service_restarted` log and in outage-annotation text. Don't re-derive them from `git` on the Pi — version authority lives on the dev machine.
 
+## First-time Pi onboarding (ordered)
+
+For onboarding a brand-new Pi (vs. deploying changes to an existing one). Each step assumes the previous succeeded; never reorder.
+
+**On the dev machine, before booting the Pi:**
+
+1. Flash SD with Imager. In advanced settings: hostname (`towerwatch-<site>`), username `admin`, **paste your `~/.ssh/id_ed25519.pub` into "Allow public-key authentication only"**, no password auth.
+2. Edit `/Volumes/bootfs/cmdline.txt` (or equivalent on Linux/Windows) to remove the bare `resize` token (legacy Pi OS may use `init=/usr/lib/raspberrypi-sys-mods/firstboot` instead — `cat` first to see). This stops rootfs from auto-expanding to fill the card. Eject properly.
+3. Create a per-site credentials file: `cp src/towerwatch/credentials.py.example src/towerwatch/credentials.<site>.py`, set `LOCATION="<site>"`, fill in Grafana creds. Per-site files are gitignored via `credentials.*.py` pattern.
+
+**On the Pi, after first boot:**
+
+4. SSH in: `ssh admin@<hostname>.local` (key from Imager, no password).
+5. `sudo apt update && sudo apt upgrade -y`.
+6. Install Tailscale: `curl -fsSL https://tailscale.com/install.sh | sudo bash`, then `sudo tailscale up --hostname=<hostname>`. Authorize in admin console, tag `tag:towerwatch`, optionally disable key expiry.
+7. `git clone https://github.com/<your-fork>/towerwatch.git`.
+8. Run `sudo bash scripts/partition-pi-data.sh` — grows rootfs to 6 GB, creates `twdata` partition. Idempotent.
+
+**Back on the dev machine:**
+
+9. Swap active credentials: `cp src/towerwatch/credentials.<site>.py src/towerwatch/credentials.py`.
+10. `./ci.sh` — stamps `_version.txt`. (Tests assume `LOCATION="towerwatch"`, so they'll fail with a mismatched per-site `LOCATION`. Either run CI with home creds active and swap to per-site creds *only* for deploy, or fix the tests to be LOCATION-agnostic — see "Test fragility" below.)
+11. `./scripts/deploy.sh admin@<tailscale-ip>` — SCPs the per-site `credentials.py` and the freshly-stamped `_version.txt`, runs `pip install --upgrade .` into the Pi's venv, restarts the service.
+
+**On the Pi, one-time post-deploy:**
+
+12. `sudo systemctl restart towerwatch && sudo journalctl -u towerwatch -f` — confirm `service_started` event with the real BUILD_VERSION (not `"dev"`).
+13. Verify a metric reaches Grafana: query `towerwatch_connected{host="<site>"}` against the Prometheus datasource through the Grafana stack proxy.
+
+**Why this order matters:**
+- `install-pi.sh` runs *before* `deploy.sh` because it creates the venv, systemd unit, and data partition mount that `deploy.sh` relies on. After install, BUILD_VERSION shows `"dev"` until the first deploy ships `_version.txt`.
+- `partition-pi-data.sh` runs *before* `install-pi.sh` because install-pi.sh expects `/dev/mmcblk0p3` (`twdata`) to exist when it sets up the fstab entry and `tailscale-state` bind-mount.
+- Tailscale `up` runs *before* `install-pi.sh` because install-pi.sh detects an existing `/var/lib/tailscale/` and migrates state into the data partition. Reversing this loses the auth.
+- Per-site credentials swap happens after `git clone` on the Pi but before `install-pi.sh`, so the in-repo `credentials.py` on the Pi already has the right `LOCATION` for the first run.
+
+## Test fragility — LOCATION-coupled assertions
+
+`tests/test_influx_line_format.py` hard-codes `host=towerwatch` in its assertions, so swapping `credentials.py` to a different `LOCATION` breaks CI. Workaround: keep `credentials.py` set to `LOCATION="towerwatch"` (the home node) when running CI, and swap to per-site creds only for the deploy step (`scripts/deploy.sh` reads the active `credentials.py` at deploy time, not CI time). Long-term fix: patch `LOCATION` in those tests to `"towerwatch"` regardless of credentials. Don't "fix" by changing the tests' expected string to match whatever's in credentials — that defeats the test.
+
 ## Editing entry points
 
 Work the code in this order:

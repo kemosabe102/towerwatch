@@ -2,6 +2,45 @@
 
 These are one-time setup steps after running `install.sh`. Both are optional but strongly recommended for a permanently-deployed Pi.
 
+## Pre-boot SD-card prep
+
+Two things to do on the dev machine after Imager finishes flashing but before the Pi's first boot. Both target files on the FAT32 `bootfs` partition, which Mac/Windows/Linux all mount automatically.
+
+### Disable rootfs auto-expansion
+
+Pi OS Lite's first-boot flow expands `rootfs` (`/dev/mmcblk0p2`) to fill the entire SD card. That leaves zero room for the `twdata` data partition. Remove the trigger token from `cmdline.txt` before first boot.
+
+**Always `cat` the file first** — the token name has changed across Pi OS versions:
+
+- **Imager 1.8+ / Pi OS Bookworm+ (2024+):** bare `resize` token (no `init=` path). The initramfs `local-premount/firstboot` hook reads it.
+- **Older Pi OS:** `init=/usr/lib/raspberrypi-sys-mods/firstboot` instead.
+
+Remove whichever applies (with one of the surrounding spaces so the line stays well-formed):
+
+```bash
+# macOS — modern (Imager 1.8+):
+sed -i '' 's| resize||' /Volumes/bootfs/cmdline.txt
+
+# macOS — legacy fallback:
+sed -i '' 's| init=/usr/lib/raspberrypi-sys-mods/firstboot||' /Volumes/bootfs/cmdline.txt
+
+# Linux — same patterns, mount path varies by distro:
+sudo sed -i 's| resize||' /media/$USER/bootfs/cmdline.txt
+
+# Windows — open bootfs in Explorer, edit cmdline.txt in Notepad++ or VS Code.
+# DO NOT use plain Notepad — it inserts a UTF-8 BOM that prevents boot.
+```
+
+Leave the `ds=nocloud;i=rpi-imager-...` token alone — that's cloud-init applying hostname/user/SSH-key on first boot.
+
+`cmdline.txt` is a single line with no trailing newline. Verify with `cat /Volumes/bootfs/cmdline.txt`.
+
+After boot, run `scripts/partition-pi-data.sh` to append the `twdata` partition into the unallocated space.
+
+### Pre-load your SSH public key
+
+In Raspberry Pi Imager → advanced options → enable SSH → "Allow public-key authentication only" → paste `~/.ssh/id_ed25519.pub`. The Pi boots with your key already in `~admin/.ssh/authorized_keys`. No password ever needed. Don't use `sshpass` workarounds — they leak credentials via `ps`.
+
 ## Remote access (Tailscale)
 
 Tailscale gives the Pi a stable private IP reachable from anywhere, without port forwarding. The free Personal plan is enough.

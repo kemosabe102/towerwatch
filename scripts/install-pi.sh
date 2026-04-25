@@ -95,6 +95,17 @@ if [ -f "$REPO_DIR/src/towerwatch/credentials.py" ]; then
 fi
 if [ -f "$REPO_DIR/src/towerwatch/_version.txt" ]; then
     cp "$REPO_DIR/src/towerwatch/_version.txt" "$SITE_PKG/_version.txt"
+else
+    # _version.txt is gitignored and the dev machine is the version authority
+    # (see CLAUDE.md). It arrives via scripts/deploy.sh, which scp's it from
+    # the dev machine after ci.sh stamps it. install-pi.sh runs FIRST during
+    # onboarding (it sets up venv/systemd/data partition); the immediately
+    # following deploy.sh call places _version.txt and restarts the service
+    # with a real version. Until then BUILD_VERSION shows "dev" — that's
+    # expected for the brief window between install and first deploy.
+    echo "  NOTE: _version.txt not present (expected for first-time onboarding)."
+    echo "        Run './ci.sh && ./scripts/deploy.sh admin@<host>' from the dev"
+    echo "        machine to stamp + ship a real BUILD_VERSION."
 fi
 chown -R towerwatch:towerwatch "$INSTALL_DIR"
 

@@ -3,6 +3,8 @@ secrets.h
 pi/secrets.py
 pi/credentials.py
 src/towerwatch/credentials.py
+src/towerwatch/credentials.*.py
+!src/towerwatch/credentials.py.example
 
 # Python bytecode (may contain compiled secrets)
 __pycache__/
