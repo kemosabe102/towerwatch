@@ -41,6 +41,23 @@ After boot, run `scripts/partition-pi-data.sh` to append the `twdata` partition 
 
 In Raspberry Pi Imager → advanced options → enable SSH → "Allow public-key authentication only" → paste `~/.ssh/id_ed25519.pub`. The Pi boots with your key already in `~admin/.ssh/authorized_keys`. No password ever needed. Don't use `sshpass` workarounds — they leak credentials via `ps`.
 
+### Verify passwordless sudo before running install-pi.sh
+
+When Imager provisions the user account it also writes `/etc/sudoers.d/010_pi-nopasswd` granting `admin` passwordless sudo. `scripts/deploy.sh` depends on this — without it, the deploy hangs on the first `sudo` call. Confirm before going further:
+
+```bash
+ssh admin@<hostname>.local 'sudo -n true && echo "passwordless sudo OK"'
+```
+
+If it prompts for a password instead of printing OK, Imager didn't apply the file (rare). Create it manually:
+
+```bash
+ssh admin@<hostname>.local
+echo "admin ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/010_pi-nopasswd
+sudo chmod 440 /etc/sudoers.d/010_pi-nopasswd
+sudo visudo -c -f /etc/sudoers.d/010_pi-nopasswd
+```
+
 ## Remote access (Tailscale)
 
 Tailscale gives the Pi a stable private IP reachable from anywhere, without port forwarding. The free Personal plan is enough.

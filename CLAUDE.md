@@ -39,21 +39,27 @@ For onboarding a brand-new Pi (vs. deploying changes to an existing one). Each s
 **On the Pi, after first boot:**
 
 4. SSH in: `ssh admin@<hostname>.local` (key from Imager, no password).
-5. `sudo apt update && sudo apt upgrade -y`.
-6. Install Tailscale: `curl -fsSL https://tailscale.com/install.sh | sudo bash`, then `sudo tailscale up --hostname=<hostname>`. Authorize in admin console, tag `tag:towerwatch`, optionally disable key expiry.
-7. `git clone https://github.com/<your-fork>/towerwatch.git`.
-8. Run `sudo bash scripts/partition-pi-data.sh` — grows rootfs to 6 GB, creates `twdata` partition. Idempotent.
+5. **Verify passwordless sudo:** `sudo -n true && echo OK`. Imager normally writes `/etc/sudoers.d/010_pi-nopasswd`. If this prompts for a password, create the file manually before continuing — `deploy.sh` will hang on `sudo` otherwise.
+6. `sudo apt update && sudo apt upgrade -y`.
+7. Install Tailscale: `curl -fsSL https://tailscale.com/install.sh | sudo bash`, then `sudo tailscale up --hostname=<hostname>`. Authorize in admin console, tag `tag:towerwatch`. **For unattended/remote nodes, also "Disable key expiry"** in the admin console.
+8. `git clone https://github.com/<your-fork>/towerwatch.git` (HTTPS — repo is public, no deploy key needed).
+9. Run `sudo bash scripts/partition-pi-data.sh` — grows rootfs to 6 GB, creates `twdata` partition. Idempotent.
 
 **Back on the dev machine:**
 
-9. Swap active credentials: `cp src/towerwatch/credentials.<site>.py src/towerwatch/credentials.py`.
-10. `./ci.sh` — stamps `_version.txt`. (Tests assume `LOCATION="towerwatch"`, so they'll fail with a mismatched per-site `LOCATION`. Either run CI with home creds active and swap to per-site creds *only* for deploy, or fix the tests to be LOCATION-agnostic — see "Test fragility" below.)
-11. `./scripts/deploy.sh admin@<tailscale-ip>` — SCPs the per-site `credentials.py` and the freshly-stamped `_version.txt`, runs `pip install --upgrade .` into the Pi's venv, restarts the service.
+10. Run `./ci.sh` first with `LOCATION="towerwatch"` (home creds) active so the test suite passes. The `tests/test_influx_line_format.py` autouse fixture pins `INFLUX_HOST_TAG` to "towerwatch" so per-site credentials no longer break CI; if you've removed that fixture, swap creds back temporarily.
+11. Swap active credentials to the per-site file: `cp src/towerwatch/credentials.<site>.py src/towerwatch/credentials.py`. Then `touch src/towerwatch/_version.txt` so `deploy.sh`'s staleness check doesn't reject the cred-swap mtime bump.
+12. `./scripts/deploy.sh admin@<tailscale-ip>` — SCPs the per-site `credentials.py` and the freshly-stamped `_version.txt`, runs `pip install --upgrade .` into the Pi's venv, restarts the service.
+13. Restore home creds on the dev machine for the next CI run: `cp src/towerwatch/credentials.home.py src/towerwatch/credentials.py`.
 
 **On the Pi, one-time post-deploy:**
 
-12. `sudo systemctl restart towerwatch && sudo journalctl -u towerwatch -f` — confirm `service_started` event with the real BUILD_VERSION (not `"dev"`).
-13. Verify a metric reaches Grafana: query `towerwatch_connected{host="<site>"}` against the Prometheus datasource through the Grafana stack proxy.
+14. `sudo journalctl -u towerwatch -f` — confirm `service_started` event with the real BUILD_VERSION (not `"dev"`).
+15. Verify a metric reaches Grafana: query `towerwatch_connected{host="<site>"}` against the Prometheus datasource through the Grafana stack proxy.
+
+**For unattended remote nodes only — after metrics confirmed flowing:**
+
+16. Enable read-only root via overlayroot. See `docs/setup-pi.md` §"Read-only root filesystem". Do this *only* after `var-lib-tailscale.mount` is `active` (not just `enabled`) and `fake-hwclock` is configured to write to `/opt/towerwatch/data/`. Otherwise the next reboot loses Tailscale auth and clock state. Reboot once more after writing `/etc/overlayroot.local.conf` to confirm the service comes back cleanly.
 
 **Why this order matters:**
 - `install-pi.sh` runs *before* `deploy.sh` because it creates the venv, systemd unit, and data partition mount that `deploy.sh` relies on. After install, BUILD_VERSION shows `"dev"` until the first deploy ships `_version.txt`.
@@ -70,6 +76,24 @@ For onboarding a brand-new Pi (vs. deploying changes to an existing one). Each s
 **Pi-side `git clone` uses HTTPS, not SSH.** The repo is public, so `git clone https://github.com/<fork>/towerwatch.git` works without provisioning a deploy key on each Pi. The dev-machine remote stays on `git@github.com:...` for push auth via your SSH key.
 
 **Tailscale auth is interactive on first `tailscale up`.** It prints an auth URL the operator must open in a browser. Scripts that try to chain `tailscale up` into the next step will block. Either (a) run `tailscale up` manually in a separate session and wait for the human to authorize, or (b) use `tailscale up --auth-key=tskey-...` with a pre-minted reusable key from the admin console for fully-automated provisioning. The watchdog timer installed by `install-pi.sh` keeps the connection healthy after auth.
+
+**Tailscale state on the data partition is owned `towerwatch:towerwatch`, not root, and that's correct.** `install-pi.sh` chowns `/opt/towerwatch/data/tailscale-state/` to `towerwatch:towerwatch` after copying state from `/var/lib/tailscale/`. `tailscaled` runs as root but tolerates non-root ownership of its state directory — verified on the home Pi which has been running this layout for months. **Don't "fix" this** by chowning to root; doing so during a live session can cause tailscaled to lose its state across the next bind-mount activation.
+
+**Passwordless sudo for `admin` comes from Pi OS Imager, not `install-pi.sh`.** When you set the username + password in Imager's advanced settings, cloud-init writes `/etc/sudoers.d/010_pi-nopasswd` with `admin ALL=(ALL) NOPASSWD: ALL`. Without that file, `scripts/deploy.sh` will fail mid-run on `sudo` calls (it doesn't pass passwords). Verify on a fresh Pi before running `install-pi.sh`:
+
+```bash
+ls /etc/sudoers.d/010_pi-nopasswd && sudo cat /etc/sudoers.d/010_pi-nopasswd
+```
+
+If absent (rare — would mean Imager skipped or you used a different image), create it manually:
+
+```bash
+echo "admin ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/010_pi-nopasswd
+sudo chmod 440 /etc/sudoers.d/010_pi-nopasswd
+sudo visudo -c -f /etc/sudoers.d/010_pi-nopasswd   # validate before trusting it
+```
+
+This is intentionally not in `install-pi.sh` — sudoers changes are security-sensitive and the operator should consciously review/approve them, not have them applied silently by a bootstrap script.
 
 ## Test fragility — LOCATION-coupled assertions (fixed)
 
