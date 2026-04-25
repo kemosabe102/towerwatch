@@ -86,13 +86,19 @@ SITE_PKG="$(ls -d "$INSTALL_DIR"/.venv/lib/python*/site-packages/towerwatch 2>/d
 if [ -n "$SITE_PKG" ]; then
     if [ -f "$REPO_DIR/src/towerwatch/credentials.py" ]; then
         sudo cp "$REPO_DIR/src/towerwatch/credentials.py" "$SITE_PKG/credentials.py"
-        sudo chmod 600 "$SITE_PKG/credentials.py"
+        # 640 (not 600) so towerwatch-user can read via group membership.
+        sudo chown towerwatch:towerwatch "$SITE_PKG/credentials.py"
+        sudo chmod 640 "$SITE_PKG/credentials.py"
     fi
     if [ -f "$REPO_DIR/src/towerwatch/_version.txt" ]; then
         sudo cp "$REPO_DIR/src/towerwatch/_version.txt" "$SITE_PKG/_version.txt"
     fi
 fi
 sudo chown -R towerwatch:towerwatch "$INSTALL_DIR"
+
+# Refresh the /usr/local/bin symlink so the towerwatch-speedtest CLI is on PATH
+# for SSH sessions and so sshd's ForceCommand resolves a valid target.
+sudo ln -sf "$INSTALL_DIR/.venv/bin/towerwatch-speedtest" /usr/local/bin/towerwatch-speedtest
 
 # 2. Restart
 echo "[2/3] Restarting towerwatch service..."

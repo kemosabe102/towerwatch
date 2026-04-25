@@ -11,7 +11,7 @@ You've been asked to help verify a network's speed at a site where a Towerwatch 
 - A Tailscale invitation email.
 - The Pi's Tailscale IP (looks like `100.x.y.z`).
 
-That's it. With Tailscale SSH enabled (the operator handles this once), you don't need a password or an SSH key — your Tailnet identity is the auth.
+That's it. The operator has set up Tailscale ACLs so that being on their Tailscale network is enough — no password, no SSH key, no extra setup on your side.
 
 ## Step 1 — Join the Tailnet
 
@@ -37,36 +37,38 @@ That's it. With Tailscale SSH enabled (the operator handles this once), you don'
 Open a terminal (PowerShell on Windows, Terminal on macOS/Linux) and run:
 
 ```bash
-ssh admin@<tailscale-ip> towerwatch-speedtest --triggered-by <your-name>
+ssh towerwatch-user@<tailscale-ip>
 ```
 
 Example:
 
 ```bash
-ssh admin@100.76.154.81 towerwatch-speedtest --triggered-by alice
+ssh towerwatch-user@100.76.154.81
 ```
 
-The first time you connect, Tailscale may briefly open a browser window asking you to authorize this device — that's the Tailscale-SSH check-in, not an SSH password prompt. One click and you're in. Subsequent connections skip the check-in.
+You don't need to type a command after the SSH target — the speedtest runs automatically when you connect, then exits. Your Tailscale identity is recorded automatically; you don't have to pass your name.
 
 ## What you'll see
 
 ```
-Running Ookla speedtest on 'remote-site' (triggered by 'alice').
-This takes ~60s and uses ~400 MB of data.
-Download: 123.4 Mbps
-Upload:   45.6 Mbps
-Location: remote-site
+Speedtest started on remote-site... (takes ~60s, uses ~400 MB)
+✓ Success — results will appear on the Grafana dashboard within a minute.
 ```
 
-The operator will also see your result on their Grafana dashboard within a minute, tagged with your name — so they know who ran it and when.
+If something went wrong:
+
+```
+Speedtest started on remote-site... (takes ~60s, uses ~400 MB)
+✗ Failed — contact the operator.
+```
+
+The actual numbers (download / upload Mbps) appear on the operator's Grafana dashboard, tagged with your Tailscale email — so they know who ran it and when. Ask the operator for a dashboard link if you want to see the result yourself.
 
 ## Troubleshooting
 
 - **"Connection timed out"** — the Pi may be offline, or Tailscale hasn't finished connecting on your machine. Open the Tailscale app and check that both you and the Pi show "Connected."
-- **Prompts for an SSH password** — the operator hasn't enabled Tailscale SSH on the Pi yet. Ask them to run `sudo tailscale up --ssh` on it.
-- **Browser check-in didn't open on first connect** — open the Tailscale app, sign out, sign back in, and try again. The check-in only appears when Tailscale can reach the OS browser; headless terminals may not trigger it.
-- **"Permission denied (publickey)"** — same cause as the password prompt above: Tailscale SSH isn't enabled on the Pi. Ask the operator.
-- **"command not found: towerwatch-speedtest"** — the Pi hasn't been redeployed since this feature was added. Ask the operator to run `./scripts/deploy.sh`.
+- **"Permission denied (publickey)"** or prompts for a password — the operator hasn't added you to the Tailscale ACL for this Pi yet. Send them your Tailscale account email so they can add you.
+- **No output at all, just disconnects immediately** — the operator's Pi may be missing the speedtest CLI or symlink. Ask them to redeploy with `./scripts/deploy.sh`.
 
 ## Why ~400 MB?
 

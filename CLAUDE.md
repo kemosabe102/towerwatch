@@ -45,6 +45,8 @@ See [`docs/architecture.md`](docs/architecture.md) for the design narrative.
 - **`LOKI_PUSH_LEVEL = "INFO"`; per-tick logs must NOT use `loki.push`/`loki.log_and_push`.** The Loki gate is informational, not the throttle. The actual throttle is: anything that fires every tick (~1/min) or every push (~30/hour) stays out of the Loki call surface entirely — use stdlib `log.debug`/`log.info` only. `loki.push` is reserved for events that fire per-restart, per-state-change, or at most a few times per day. New event types must justify their cadence against the ~230 MB/month data budget.
 - **Buffer capped at 256 KB** (`LOKI_BUFFER_MAX_BYTES`) — the data partition is 1 GB; don't raise this without thinking.
 - **Data budget is a hard constraint, not a guideline.** Any change that adds network traffic (new probes, larger samples, higher frequencies, smaller batches) must be justified against the ~230 MB/month baseline. Ookla stays manual-only.
+- **`credentials.py` is mode 640 owned by `towerwatch:towerwatch`** (not 600). The `towerwatch-user` SSH login account reads it via group membership to run the speedtest CLI. Do not "tighten" to 600 — that breaks `ssh towerwatch-user@pi`.
+- **`/usr/local/bin/towerwatch-speedtest` symlink → `/opt/towerwatch/.venv/bin/towerwatch-speedtest`.** sshd's `ForceCommand` for `towerwatch-user` resolves this stable path. Both `install-pi.sh` and `deploy.sh` refresh it idempotently; don't remove either call.
 
 ## Log events
 
@@ -65,6 +67,7 @@ Router signal polling and speedtest fail gracefully off-network — that's expec
 
 - **`scripts/deploy.sh` deploys credentials:** `src/towerwatch/credentials.py` is SCP'd to the checked-out repo on the Pi on every deploy, *before* `pip install` runs. Keep the dev-machine copy up to date — it's the source of truth for credentials. `/opt/towerwatch/` is owned by `towerwatch:towerwatch`; deploy stages the file via `/tmp` then moves it into the repo tree.
 - **Multi-site deploys need per-Pi credentials.py:** `LOCATION` must differ between Pis. Keep separate credentials files on the dev box (e.g. `credentials.home.py`, `credentials.remote.py`) and swap the active one before running `scripts/deploy.sh`, or deploy from per-host branches. Mixing `LOCATION` values across deploys creates dashboard discontinuities.
+- **`towerwatch-user` is created by `install-pi.sh`, not by `deploy.sh`.** A first-time deploy to a new Pi without re-running `install-pi.sh` will leave the speedtest CLI working for `admin` but broken for `towerwatch-user` (no account, no sshd drop-in, no symlink). Re-run `install-pi.sh` on the Pi after any change to user/sshd/symlink wiring.
 - **`deploy-local.sh` is a gitignored wrapper** that hardcodes the host. Use `scripts/deploy.sh <user>@<host>` in docs and suggestions.
 - **Outage-annotation token needs `datasources:read`:** The `GRAFANA_ANNOTATION_TOKEN` service account is used by both towerwatch (annotations write) and the bench harness (datasource resolution + Loki/Prom reads). It needs `annotations:read`, `annotations:write`, and `datasources:read` in the Grafana service account permissions.
 - **`GRAFANA_API_KEY` is push-only:** it authenticates Prometheus/Loki write endpoints, not the Grafana stack API. Do not use it for read queries.

@@ -48,10 +48,22 @@ else
     echo "  Speedtest CLI already installed"
 fi
 
-# --- Create towerwatch user ---
-echo "[3/9] Creating towerwatch user..."
+# --- Create towerwatch users ---
+# Two accounts:
+#   `towerwatch`       — system user, owns /opt/towerwatch, runs the daemon. No login.
+#   `towerwatch-user`  — login account for remote operators on the Tailnet who
+#                        need to trigger a manual speedtest. Member of the
+#                        `towerwatch` group so they can read credentials.py
+#                        (mode 640). sshd ForceCommand restricts them to running
+#                        only `/usr/local/bin/towerwatch-speedtest`.
+echo "[3/9] Creating towerwatch users..."
 if ! id -u towerwatch &>/dev/null; then
     useradd --system --no-create-home --shell /usr/sbin/nologin towerwatch
+fi
+if ! id -u towerwatch-user &>/dev/null; then
+    useradd --create-home --shell /bin/bash --gid towerwatch towerwatch-user
+    # No password — login is SSH-only via Tailscale.
+    passwd -l towerwatch-user >/dev/null
 fi
 
 # --- Create install dir and venv; pip install the repo ---
@@ -77,7 +89,9 @@ if [ -z "$SITE_PKG" ]; then
 fi
 if [ -f "$REPO_DIR/src/towerwatch/credentials.py" ]; then
     cp "$REPO_DIR/src/towerwatch/credentials.py" "$SITE_PKG/credentials.py"
-    chmod 600 "$SITE_PKG/credentials.py"
+    # 640 (not 600) so towerwatch-user can read via group membership.
+    chown towerwatch:towerwatch "$SITE_PKG/credentials.py"
+    chmod 640 "$SITE_PKG/credentials.py"
 fi
 if [ -f "$REPO_DIR/src/towerwatch/_version.txt" ]; then
     cp "$REPO_DIR/src/towerwatch/_version.txt" "$SITE_PKG/_version.txt"
@@ -89,6 +103,36 @@ if [ ! -f "$REPO_DIR/src/towerwatch/credentials.py" ]; then
     echo "  WARNING: $REPO_DIR/src/towerwatch/credentials.py not found."
     echo "           Copy credentials.py.example to credentials.py and re-run install,"
     echo "           or deploy.sh will SCP yours over on first deploy."
+fi
+
+# --- /usr/local/bin symlink + sshd lockdown for towerwatch-user ---
+# Symlink: stable PATH-accessible name for the speedtest CLI; insulates
+# ForceCommand from venv path drift.
+# sshd drop-in: when towerwatch-user logs in, run only the speedtest CLI.
+# Any client-supplied command is ignored. No TCP/X11/agent forwarding.
+echo "[4.5/9] Locking down towerwatch-user SSH + symlink..."
+ln -sf "$VENV_DIR/bin/towerwatch-speedtest" /usr/local/bin/towerwatch-speedtest
+
+SSHD_DROPIN="/etc/ssh/sshd_config.d/99-towerwatch-user.conf"
+mkdir -p /etc/ssh/sshd_config.d
+cat > "$SSHD_DROPIN" << 'EOF'
+# Lock the towerwatch-user account to running only the speedtest CLI.
+# Edited by scripts/install-pi.sh — do not hand-modify.
+Match User towerwatch-user
+    ForceCommand /usr/local/bin/towerwatch-speedtest
+    PermitTTY yes
+    X11Forwarding no
+    AllowAgentForwarding no
+    AllowTcpForwarding no
+    PermitTunnel no
+EOF
+# Validate config before reload (sshd -t exits non-zero on bad config).
+if sshd -t; then
+    systemctl reload ssh
+    echo "  sshd reloaded with towerwatch-user ForceCommand"
+else
+    echo "  ERROR: sshd config invalid; drop-in not activated. Inspect $SSHD_DROPIN"
+    exit 1
 fi
 
 # --- Mount data partition ---

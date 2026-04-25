@@ -1,12 +1,11 @@
 @echo off
 REM Towerwatch — Manual speedtest trigger (Windows)
-REM Requires: Tailscale installed + OpenSSH (built into Windows 10/11).
-REM Ask the operator for the Pi's Tailscale IP.
+REM Requires: Tailscale installed + signed in + you're on the operator's
+REM Tailscale ACL for this Pi. OpenSSH is built into Windows 10/11.
+REM
+REM Your Tailscale identity is recorded automatically — no name prompt.
 
 setlocal
-
-set /p YOURNAME="Your name (recorded with the result): "
-if "%YOURNAME%"=="" set YOURNAME=unknown
 
 set /p PI_IP="Pi Tailscale IP (ask the operator): "
 if "%PI_IP%"=="" (
@@ -17,7 +16,7 @@ if "%PI_IP%"=="" (
 
 echo.
 echo Connecting to %PI_IP% ...
-ssh admin@%PI_IP% towerwatch-speedtest --triggered-by %YOURNAME%
+ssh towerwatch-user@%PI_IP%
 
 echo.
 pause

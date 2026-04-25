@@ -18,19 +18,39 @@ sudo tailscale up   # opens an auth URL
 
 Install Tailscale on your dev machine too, log in with the same account, and `ssh <user>@<tailscale-ip>` from anywhere.
 
-## Passwordless SSH via Tailscale
+## Two-tier SSH access (operator vs speedtest user)
 
-If you want Tailnet members (e.g. someone running a manual speedtest) to reach the Pi without distributing SSH keys or sharing the `admin` password, enable Tailscale SSH:
+`scripts/install-pi.sh` creates two accounts:
 
-```bash
-sudo tailscale up --ssh   # re-run is safe; reuses existing login
+- **`admin`** (your operator account, set up by the Raspberry Pi Imager) — full sudo, used for deploys and shell access.
+- **`towerwatch-user`** — a locked-down account for remote operators who only need to trigger a manual speedtest. sshd's `ForceCommand` pins their session to running exactly `/usr/local/bin/towerwatch-speedtest` and nothing else; no shell, no sudo, no port forwarding. Credentials are accessible to it via group membership only (mode 640, owned by `towerwatch:towerwatch`).
+
+Anyone you add to your Tailscale network and authorize via ACL can `ssh towerwatch-user@<pi-tailscale-ip>` to run a speedtest. The CLI auto-detects their Tailscale identity (`tailscale whois`) so the dashboard tag is accurate without the user passing their name.
+
+### Tailscale ACL for the speedtest account
+
+In the [Tailscale admin console](https://login.tailscale.com/admin/acls), tag the Pi (e.g. `tag:towerwatch`) and add an ACL entry that grants `someone@example.com` SSH-as-`towerwatch-user` (and nothing else):
+
+```json
+{
+  "ssh": [
+    {
+      "action": "accept",
+      "src":    ["someone@example.com"],
+      "dst":    ["tag:towerwatch"],
+      "users":  ["towerwatch-user"]
+    }
+  ]
+}
 ```
 
-Tailscale now brokers SSH auth using each peer's Tailnet identity. First connection from a given user prompts a one-tap approval in the [Tailscale admin console](https://login.tailscale.com/admin/machines); subsequent connections are seamless. To revoke access, remove the user from your Tailnet.
+The user can now SSH into the Pi as `towerwatch-user` but cannot reach `admin`. Revoke by removing the ACL entry or the Tailscale account.
 
-The Pi row in the admin console will show an `SSH` badge once this is active. No sshd/authorized_keys changes are required.
+Hand off [`docs/manual-speedtest.md`](manual-speedtest.md) once they're authorized.
 
-Hand off [`docs/manual-speedtest.md`](manual-speedtest.md) to any remote user who needs to trigger a speedtest.
+### Note on Tailscale SSH (optional, advanced)
+
+`tailscale up --ssh` enables Tailscale's own SSH broker, which would bypass the standard sshd configuration this repo relies on for the `ForceCommand` lockdown. Don't enable it on the speedtest Pi unless you also rework the lockdown to use Tailscale ACL `ssh-action` rules instead. For your operator account (`admin`), continue using standard key-based SSH auth.
 
 ## Read-only root filesystem
 
