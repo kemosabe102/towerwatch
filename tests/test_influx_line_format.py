@@ -3,7 +3,22 @@
 Constraints enforced here:
   #1 — units are _ms (not seconds)
   #2 — target labels baked into field names (not Prometheus labels)
+
+LOCATION pinning: INFLUX_HOST_TAG is sourced from credentials.LOCATION, which
+varies by deployment (e.g. "towerwatch" at home, "standstill" remote). These
+tests assert on the exact line string, so the autouse fixture below pins it to
+"towerwatch" for this module — otherwise CI breaks whenever you swap to a
+different per-site credentials file before deploying.
 """
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _pin_host_tag(monkeypatch):
+    from towerwatch import config as _config
+
+    monkeypatch.setattr(_config, "INFLUX_HOST_TAG", "towerwatch")
 
 
 def _fmt(fields, ts=1700000000):

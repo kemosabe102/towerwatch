@@ -49,13 +49,18 @@ Tailscale gives the Pi a stable private IP reachable from anywhere, without port
 # On the Pi
 curl -fsSL https://tailscale.com/install.sh | sh
 
-# So Tailscale state survives an overlayfs root (see next section)
+# So Tailscale state survives an overlayfs root (see next section).
+# This unit is created by install-pi.sh — only enable it AFTER running install-pi.sh.
 sudo systemctl enable --now var-lib-tailscale.mount
 
-sudo tailscale up   # opens an auth URL
+sudo tailscale up --hostname=<hostname>   # opens an auth URL
 ```
 
 Install Tailscale on your dev machine too, log in with the same account, and `ssh <user>@<tailscale-ip>` from anywhere.
+
+**For unattended remote nodes, disable key expiry.** In the Tailscale admin console → Machines → `<this-node>` → "..." menu → "Disable key expiry". Without this, the node drops off the tailnet every 6 months and you have to re-auth in person — which defeats the point of putting it at a remote site.
+
+**Pi-side clone uses HTTPS, not SSH.** The towerwatch repo is public, so `git clone https://github.com/<your-fork>/towerwatch.git` works without provisioning a deploy key on each Pi. Save SSH for git pushes from your dev machine.
 
 ## Two-tier SSH access (operator vs speedtest user)
 

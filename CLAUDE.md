@@ -61,9 +61,19 @@ For onboarding a brand-new Pi (vs. deploying changes to an existing one). Each s
 - Tailscale `up` runs *before* `install-pi.sh` because install-pi.sh detects an existing `/var/lib/tailscale/` and migrates state into the data partition. Reversing this loses the auth.
 - Per-site credentials swap happens after `git clone` on the Pi but before `install-pi.sh`, so the in-repo `credentials.py` on the Pi already has the right `LOCATION` for the first run.
 
-## Test fragility — LOCATION-coupled assertions
+## Onboarding gotchas (learned the hard way)
 
-`tests/test_influx_line_format.py` hard-codes `host=towerwatch` in its assertions, so swapping `credentials.py` to a different `LOCATION` breaks CI. Workaround: keep `credentials.py` set to `LOCATION="towerwatch"` (the home node) when running CI, and swap to per-site creds only for the deploy step (`scripts/deploy.sh` reads the active `credentials.py` at deploy time, not CI time). Long-term fix: patch `LOCATION` in those tests to `"towerwatch"` regardless of credentials. Don't "fix" by changing the tests' expected string to match whatever's in credentials — that defeats the test.
+**`parted` prompts on a mounted partition even with `-s`.** Modifying a partition that's currently mounted (e.g. resizing rootfs while booted from it) makes `parted` print "Partition is being used. Are you sure?" and wait on stdin. The `-s`/`--script` flag does *not* suppress this. The reliable scripted form is `printf 'Yes\n' | parted ---pretend-input-tty <DEVICE> ...`. `partition-pi-data.sh` uses this for the rootfs grow.
+
+**`deploy.sh` rejects deploys when any `.py` mtime > `_version.txt` mtime.** This is the staleness check protecting against deploying code that CI hasn't seen. But swapping per-site credentials (`cp credentials.<site>.py credentials.py`) bumps the mtime past the stamp, even though no source actually changed. Fix: `touch src/towerwatch/_version.txt` after the cred swap, then re-run `./scripts/deploy.sh`. **Don't** edit `.py` files between `ci.sh` and `deploy.sh` — the staleness check is doing its job and you should re-run CI.
+
+**Pi-side `git clone` uses HTTPS, not SSH.** The repo is public, so `git clone https://github.com/<fork>/towerwatch.git` works without provisioning a deploy key on each Pi. The dev-machine remote stays on `git@github.com:...` for push auth via your SSH key.
+
+**Tailscale auth is interactive on first `tailscale up`.** It prints an auth URL the operator must open in a browser. Scripts that try to chain `tailscale up` into the next step will block. Either (a) run `tailscale up` manually in a separate session and wait for the human to authorize, or (b) use `tailscale up --auth-key=tskey-...` with a pre-minted reusable key from the admin console for fully-automated provisioning. The watchdog timer installed by `install-pi.sh` keeps the connection healthy after auth.
+
+## Test fragility — LOCATION-coupled assertions (fixed)
+
+`tests/test_influx_line_format.py` historically hard-coded `host=towerwatch` in its assertions, so swapping `credentials.py` to a different `LOCATION` would break CI. As of `tests/test_influx_line_format.py`'s autouse `_pin_host_tag` fixture, `INFLUX_HOST_TAG` is monkeypatched to `"towerwatch"` for the duration of those tests, regardless of the active credentials file. CI now passes on per-site credentials. Don't remove that fixture without first auditing every assertion in the file.
 
 ## Editing entry points
 
