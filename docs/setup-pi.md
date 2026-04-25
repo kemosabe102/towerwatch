@@ -48,6 +48,32 @@ The user can now SSH into the Pi as `towerwatch-user` but cannot reach `admin`. 
 
 Hand off [`docs/manual-speedtest.md`](manual-speedtest.md) once they're authorized.
 
+### Onboarding a new remote user
+
+Two paths — pick whichever fits the user. Most non-technical users start with the password and switch to a key later.
+
+**Option A: Temporary password (fastest).** `install-pi.sh` allows password auth for `towerwatch-user` only (every other account is keys-only, including `admin`). Set or rotate it with:
+
+```bash
+ssh admin@<pi-tailscale-ip>
+sudo passwd towerwatch-user   # interactive prompt; choose a fresh password
+```
+
+Share the password with the user over a private channel (signal, password manager, in person — not email or chat). The user logs in with `ssh towerwatch-user@<pi-tailscale-ip>` and pastes the password when prompted. Rotate any time by re-running `sudo passwd towerwatch-user`.
+
+**Option B: SSH public key (recommended for ongoing use).** Ask the user to send you their public key (see `docs/manual-speedtest.md` for how they generate one — `ssh-keygen -t ed25519`). Append it to the Pi:
+
+```bash
+ssh admin@<pi-tailscale-ip>
+echo "<paste-the-pubkey-line-here>" | sudo tee -a /home/towerwatch-user/.ssh/authorized_keys
+sudo chown towerwatch-user:towerwatch /home/towerwatch-user/.ssh/authorized_keys
+sudo chmod 600 /home/towerwatch-user/.ssh/authorized_keys
+```
+
+(The `.ssh` directory was created on first SSH login or by `install-pi.sh`. If it doesn't exist yet: `sudo mkdir -p /home/towerwatch-user/.ssh && sudo chown towerwatch-user:towerwatch /home/towerwatch-user/.ssh && sudo chmod 700 /home/towerwatch-user/.ssh` first.)
+
+Once the key works, lock the password again so it can't be reused: `sudo passwd -l towerwatch-user`.
+
 ### Note on Tailscale SSH (optional, advanced)
 
 `tailscale up --ssh` enables Tailscale's own SSH broker, which would bypass the standard sshd configuration this repo relies on for the `ForceCommand` lockdown. Don't enable it on the speedtest Pi unless you also rework the lockdown to use Tailscale ACL `ssh-action` rules instead. For your operator account (`admin`), continue using standard key-based SSH auth.

@@ -125,6 +125,18 @@ Match User towerwatch-user
     AllowAgentForwarding no
     AllowTcpForwarding no
     PermitTunnel no
+    # Password auth is allowed for towerwatch-user only — operators may
+    # share a temporary password with a new remote user until that user's
+    # SSH key is installed. ForceCommand still pins the session to the
+    # speedtest CLI, so the password unlocks nothing else.
+    PasswordAuthentication yes
+    PubkeyAuthentication yes
+
+# Everyone else (admin, root, etc.) is keys-only. This overrides the
+# Pi-OS default in /etc/ssh/sshd_config.d/50-cloud-init.conf which sets
+# PasswordAuthentication yes globally.
+Match User *,!towerwatch-user
+    PasswordAuthentication no
 EOF
 # Validate config before reload (sshd -t exits non-zero on bad config).
 if sshd -t; then

@@ -10,8 +10,9 @@ You've been asked to help verify a network's speed at a site where a Towerwatch 
 
 - A Tailscale invitation email.
 - The Pi's Tailscale IP (looks like `100.x.y.z`).
+- **Either** a temporary password for the `towerwatch-user` account (easiest to start), **or** the operator can install your SSH public key on the Pi (see [Switching to SSH keys](#switching-to-ssh-keys-recommended) below).
 
-That's it. The operator has set up Tailscale ACLs so that being on their Tailscale network is enough — no password, no SSH key, no extra setup on your side.
+The operator has set up the Pi so that being on their Tailscale network plus one of the two auth options above is all you need.
 
 ## Step 1 — Join the Tailnet
 
@@ -48,6 +49,8 @@ ssh towerwatch-user@100.76.154.81
 
 You don't need to type a command after the SSH target — the speedtest runs automatically when you connect, then exits. Your Tailscale identity is recorded automatically; you don't have to pass your name.
 
+If the operator gave you a temporary password, paste it when prompted. The first time you connect, your terminal may ask `Are you sure you want to continue connecting (yes/no)?` — type `yes` and press Enter. From then on, only the password prompt appears.
+
 ## What you'll see
 
 ```
@@ -67,8 +70,41 @@ The actual numbers (download / upload Mbps) appear on the operator's Grafana das
 ## Troubleshooting
 
 - **"Connection timed out"** — the Pi may be offline, or Tailscale hasn't finished connecting on your machine. Open the Tailscale app and check that both you and the Pi show "Connected."
-- **"Permission denied (publickey)"** or prompts for a password — the operator hasn't added you to the Tailscale ACL for this Pi yet. Send them your Tailscale account email so they can add you.
+- **"Permission denied (publickey,password)"** — either the password is wrong, or your SSH key isn't installed yet. Double-check the password (case matters), or ask the operator to confirm.
+- **"Permission denied (publickey)"** without a password prompt — the operator has set this account to keys-only and your key isn't installed. Send them your public key (see [Switching to SSH keys](#switching-to-ssh-keys-recommended) below) or ask for a temporary password.
 - **No output at all, just disconnects immediately** — the operator's Pi may be missing the speedtest CLI or symlink. Ask them to redeploy with `./scripts/deploy.sh`.
+
+## Switching to SSH keys (recommended)
+
+The temporary password gets you running on day one, but SSH keys are easier and more secure long-term. Once you switch, you'll never type a password again.
+
+### 1. Generate a key (one time, on your machine)
+
+If you've never used SSH keys before, run this in a terminal:
+
+**Windows (PowerShell), macOS, Linux:**
+
+```bash
+ssh-keygen -t ed25519 -C "your-email@example.com"
+```
+
+Press Enter at every prompt to accept defaults. (You can set a passphrase if you want extra protection — leave it blank for the simplest experience.) This creates two files in `~/.ssh/`:
+
+- `id_ed25519` — your **private** key. Never share this. Never email it. Never paste it anywhere.
+- `id_ed25519.pub` — your **public** key. This one is safe to share.
+
+### 2. Send your public key to the operator
+
+Print it and copy the output:
+
+**macOS / Linux:** `cat ~/.ssh/id_ed25519.pub`
+**Windows (PowerShell):** `Get-Content $HOME\.ssh\id_ed25519.pub`
+
+It looks like one long line starting with `ssh-ed25519 AAAA...` and ending with your email. Send the **entire line** to the operator. They'll install it on the Pi.
+
+### 3. Test it
+
+After the operator confirms it's installed, run the speedtest command again — no password prompt this time.
 
 ## Why ~400 MB?
 
