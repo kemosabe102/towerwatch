@@ -21,7 +21,11 @@ from towerwatch import startup as startup_mod
 from towerwatch.clock import Clock, SystemClock
 from towerwatch.probes.dns import measure_dns
 from towerwatch.probes.gateway import poll_gateway
-from towerwatch.probes.http import measure_http_latency, measure_http_throughput
+from towerwatch.probes.http import (
+    measure_http_latency,
+    measure_http_throughput,
+    measure_http_upload,
+)
 from towerwatch.probes.ping import run_ping
 from towerwatch.probes.tcp import measure_tcp_connect
 
@@ -140,7 +144,10 @@ def collect_probes(ctx: TickContext) -> tuple[dict, bool]:
     if ctx.scheduler and ctx.scheduler.should_run_http_latency(now):
         fields["http_latency_ms"] = measure_http_latency()
     if ctx.scheduler and ctx.scheduler.should_run_throughput(now):
+        # Download + upload run back-to-back on the same scheduler tick so both
+        # directions get matched cadence and a single time-series row.
         fields.update(measure_http_throughput())
+        fields.update(measure_http_upload())
 
     return fields, any_connected
 

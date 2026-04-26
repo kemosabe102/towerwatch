@@ -76,12 +76,16 @@ def test_http_throughput_happy_path():
         loki=loki,
     )
     result = probe.measure()
-    assert result == {"http_throughput_ms": 1000, "http_throughput_mbps": 8.0}
-    # On success we emit the OK event
-    assert any(
-        lp[2].get("event") and "throughput" in str(lp[2]["event"]).lower()
-        for lp in loki.log_and_pushes
-    )
+    assert result == {
+        "http_throughput_ms": 1000,
+        "http_throughput_mbps": 8.0,
+        "http_throughput_bytes": 1_000_000,
+    }
+    # On success we emit the OK event with bytes_used so the dashboard can
+    # show real per-test data cost (no more guessing at "~400 MB").
+    ok_pushes = [lp for lp in loki.log_and_pushes if "throughput" in str(lp[2].get("event", ""))]
+    assert len(ok_pushes) == 1
+    assert ok_pushes[0][2]["bytes_used"] == 1_000_000
 
 
 def test_http_throughput_zero_elapsed_returns_zeros():
@@ -94,7 +98,11 @@ def test_http_throughput_zero_elapsed_returns_zeros():
         clock=FakeClock(perf=[0.0, 0.0]),
         loki=loki,
     )
-    assert probe.measure() == {"http_throughput_ms": 0, "http_throughput_mbps": 0}
+    assert probe.measure() == {
+        "http_throughput_ms": 0,
+        "http_throughput_mbps": 0,
+        "http_throughput_bytes": 0,
+    }
     # Failed event emitted with an `error=` containing the diagnostic message
     assert any("invalid sample" in (lp[2].get("error") or "") for lp in loki.log_and_pushes)
 
@@ -108,7 +116,11 @@ def test_http_throughput_empty_body_returns_zeros():
         clock=FakeClock(perf=[0.0, 1.0]),
         loki=loki,
     )
-    assert probe.measure() == {"http_throughput_ms": 0, "http_throughput_mbps": 0}
+    assert probe.measure() == {
+        "http_throughput_ms": 0,
+        "http_throughput_mbps": 0,
+        "http_throughput_bytes": 0,
+    }
     assert any("invalid sample" in (lp[2].get("error") or "") for lp in loki.log_and_pushes)
 
 
@@ -124,7 +136,11 @@ def test_http_throughput_timeout_returns_zeros():
         clock=FakeClock(perf=[0.0]),
         loki=loki,
     )
-    assert probe.measure() == {"http_throughput_ms": 0, "http_throughput_mbps": 0}
+    assert probe.measure() == {
+        "http_throughput_ms": 0,
+        "http_throughput_mbps": 0,
+        "http_throughput_bytes": 0,
+    }
     assert any("timed out" in (lp[2].get("error") or "") for lp in loki.log_and_pushes)
 
 
@@ -136,7 +152,11 @@ def test_http_throughput_connection_error_returns_zeros():
         clock=FakeClock(perf=[0.0]),
         loki=FakeLoki(),
     )
-    assert probe.measure() == {"http_throughput_ms": 0, "http_throughput_mbps": 0}
+    assert probe.measure() == {
+        "http_throughput_ms": 0,
+        "http_throughput_mbps": 0,
+        "http_throughput_bytes": 0,
+    }
 
 
 def test_http_throughput_4xx_returns_zeros():
@@ -149,7 +169,11 @@ def test_http_throughput_4xx_returns_zeros():
         clock=FakeClock(perf=[0.0, 0.01]),
         loki=FakeLoki(),
     )
-    assert probe.measure() == {"http_throughput_ms": 0, "http_throughput_mbps": 0}
+    assert probe.measure() == {
+        "http_throughput_ms": 0,
+        "http_throughput_mbps": 0,
+        "http_throughput_bytes": 0,
+    }
 
 
 def test_http_throughput_short_body_uses_actual_bytes():
@@ -164,6 +188,119 @@ def test_http_throughput_short_body_uses_actual_bytes():
     result = probe.measure()
     assert result["http_throughput_ms"] == 1000
     assert result["http_throughput_mbps"] == round((100 * 8) / 1.0 / 1_000_000, 2)
+    assert result["http_throughput_bytes"] == 100
+
+
+# ---------------------------------------------------------------------------
+# Upload probe — symmetric tests with download (uses POST, fixed payload size)
+# ---------------------------------------------------------------------------
+def _fake_rand(payload):
+    """Return a callable matching os.urandom signature, returning fixed bytes."""
+
+    def _gen(n):
+        return payload[:n] if len(payload) >= n else payload + b"\x00" * (n - len(payload))
+
+    return _gen
+
+
+def test_http_upload_happy_path():
+    from towerwatch.probes.http import HTTPUploadProbe
+
+    loki = FakeLoki()
+    probe = HTTPUploadProbe(
+        session=FakeSession(post_responses=[_ok_resp(content=b"")]),
+        clock=FakeClock(perf=[0.0, 1.0]),
+        loki=loki,
+        bytes_to_upload=2_000_000,
+        rand_bytes=_fake_rand(b"x" * 2_000_000),
+    )
+    result = probe.measure()
+    assert result == {
+        "http_upload_ms": 1000,
+        "http_upload_mbps": 16.0,
+        "http_upload_bytes": 2_000_000,
+    }
+    ok = [lp for lp in loki.log_and_pushes if "upload" in str(lp[2].get("event", ""))]
+    assert len(ok) == 1
+    assert ok[0][2]["bytes_used"] == 2_000_000
+
+
+def test_http_upload_zero_elapsed_returns_zeros():
+    from towerwatch.probes.http import HTTPUploadProbe
+
+    loki = FakeLoki()
+    probe = HTTPUploadProbe(
+        session=FakeSession(post_responses=[_ok_resp(content=b"")]),
+        clock=FakeClock(perf=[0.0, 0.0]),
+        loki=loki,
+        bytes_to_upload=1_000_000,
+        rand_bytes=_fake_rand(b"x" * 1_000_000),
+    )
+    assert probe.measure() == {
+        "http_upload_ms": 0,
+        "http_upload_mbps": 0,
+        "http_upload_bytes": 0,
+    }
+    assert any("invalid sample" in (lp[2].get("error") or "") for lp in loki.log_and_pushes)
+
+
+def test_http_upload_timeout_returns_zeros():
+    from towerwatch.probes.http import HTTPUploadProbe
+
+    loki = FakeLoki()
+    probe = HTTPUploadProbe(
+        session=FakeSession(post_responses=[requests.Timeout("slow upload")]),
+        clock=FakeClock(perf=[0.0]),
+        loki=loki,
+        bytes_to_upload=1_000_000,
+        rand_bytes=_fake_rand(b"x" * 1_000_000),
+    )
+    assert probe.measure() == {
+        "http_upload_ms": 0,
+        "http_upload_mbps": 0,
+        "http_upload_bytes": 0,
+    }
+    assert any("slow upload" in (lp[2].get("error") or "") for lp in loki.log_and_pushes)
+
+
+def test_http_upload_5xx_returns_zeros():
+    from towerwatch.probes.http import HTTPUploadProbe
+
+    bad = FakeResponse(status_code=503, content=b"")
+    bad._raise = requests.HTTPError("503")
+    probe = HTTPUploadProbe(
+        session=FakeSession(post_responses=[bad]),
+        clock=FakeClock(perf=[0.0, 0.5]),
+        loki=FakeLoki(),
+        bytes_to_upload=1_000_000,
+        rand_bytes=_fake_rand(b"x" * 1_000_000),
+    )
+    assert probe.measure() == {
+        "http_upload_ms": 0,
+        "http_upload_mbps": 0,
+        "http_upload_bytes": 0,
+    }
+
+
+def test_http_upload_uses_post_with_octet_stream():
+    """Upload posts to the configured URL with octet-stream content type."""
+    from towerwatch.probes.http import HTTPUploadProbe
+
+    session = FakeSession(post_responses=[_ok_resp(content=b"")])
+    probe = HTTPUploadProbe(
+        session=session,
+        clock=FakeClock(perf=[0.0, 0.5]),
+        loki=FakeLoki(),
+        url="https://example.invalid/__up",
+        bytes_to_upload=500,
+        rand_bytes=_fake_rand(b"x" * 500),
+    )
+    probe.measure()
+    assert len(session.post_calls) == 1
+    url, kwargs = session.post_calls[0]
+    assert url == "https://example.invalid/__up"
+    assert kwargs["headers"]["Content-Type"] == "application/octet-stream"
+    assert kwargs["data"] == b"x" * 500
 
 
 # ---------------------------------------------------------------------------

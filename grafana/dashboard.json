@@ -1778,6 +1778,134 @@
         "x": 0,
         "y": 44
       }
+    },
+    {
+      "id": 31,
+      "type": "row",
+      "title": "Daily Throughput Trends (30-day, calendar-day buckets)",
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 61
+      },
+      "panels": [
+        {
+          "id": 32,
+          "title": "Daily Avg Download Throughput (30d)",
+          "description": "One bar per calendar day, 30-day fixed window. Each bar is the mean of all towerwatch_http_throughput_mbps samples for that day. Time range is panel-fixed — does not follow the dashboard time picker.",
+          "type": "barchart",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 62
+          },
+          "targets": [
+            {
+              "expr": "avg_over_time(towerwatch_http_throughput_mbps{host=\"$location\"}[1d])",
+              "legendFormat": "Download",
+              "refId": "A",
+              "interval": "1d",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "grafanacloud-towerwatch-prom"
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "Mbps",
+              "min": 0,
+              "decimals": 1,
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "#73BF69"
+              },
+              "noValue": "—"
+            },
+            "overrides": []
+          },
+          "options": {
+            "orientation": "vertical",
+            "xTickLabelRotation": -45,
+            "showValue": "auto",
+            "stacking": "none",
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            },
+            "legend": {
+              "displayMode": "hidden",
+              "placement": "bottom",
+              "calcs": []
+            }
+          },
+          "timeFrom": "30d"
+        },
+        {
+          "id": 33,
+          "title": "Daily Avg Upload Throughput (30d)",
+          "description": "One bar per calendar day, 30-day fixed window. Each bar is the mean of all towerwatch_http_upload_mbps samples for that day. Will appear empty until upload probe samples have accumulated.",
+          "type": "barchart",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 62
+          },
+          "targets": [
+            {
+              "expr": "avg_over_time(towerwatch_http_upload_mbps{host=\"$location\"}[1d])",
+              "legendFormat": "Upload",
+              "refId": "A",
+              "interval": "1d",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "grafanacloud-towerwatch-prom"
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "Mbps",
+              "min": 0,
+              "decimals": 1,
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "#F2CC0C"
+              },
+              "noValue": "—"
+            },
+            "overrides": []
+          },
+          "options": {
+            "orientation": "vertical",
+            "xTickLabelRotation": -45,
+            "showValue": "auto",
+            "stacking": "none",
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            },
+            "legend": {
+              "displayMode": "hidden",
+              "placement": "bottom",
+              "calcs": []
+            }
+          },
+          "timeFrom": "30d"
+        }
+      ]
     }
   ],
   "schemaVersion": 38,

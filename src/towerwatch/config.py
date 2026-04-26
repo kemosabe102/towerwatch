@@ -115,10 +115,18 @@ HTTP_LATENCY_URL = "https://speed.cloudflare.com/__down?bytes=10000"  # 10 KB
 HTTP_LATENCY_INTERVAL_S = 300  # 5 minutes
 HTTP_LATENCY_TIMEOUT_S = 30
 
-# --- HTTP Throughput Sample (random schedule, replaces Ookla for routine use) ---
-HTTP_THROUGHPUT_URL = "https://speed.cloudflare.com/__down?bytes=1000000"  # 1 MB
-HTTP_THROUGHPUT_TESTS_PER_DAY = 4  # Spread randomly across 24 hours
+# --- HTTP Throughput Samples (random schedule, replaces Ookla for routine use) ---
+# 6 samples/day at 5 MB down + 2 MB up = ~1.3 GB/month total probe traffic.
+# Sized to fit a 3 GB/month cellular cap with margin for occasional manual
+# Ookla runs (~400 MB each). Bump cautiously — see CLAUDE.md data-budget.
+HTTP_THROUGHPUT_BYTES = 5_000_000  # 5 MB down — long enough to clear TCP slow-start on fast 5G
+HTTP_THROUGHPUT_URL = f"https://speed.cloudflare.com/__down?bytes={HTTP_THROUGHPUT_BYTES}"
+HTTP_THROUGHPUT_TESTS_PER_DAY = 6  # ~4 hours apart, randomized within each slot
 HTTP_THROUGHPUT_TIMEOUT_S = 60
+
+HTTP_UPLOAD_BYTES = 2_000_000  # 2 MB up — uploads are typically capacity-capped on cellular
+HTTP_UPLOAD_URL = "https://speed.cloudflare.com/__up"
+HTTP_UPLOAD_TIMEOUT_S = 60
 
 # --- Speedtest (manual only — each test uses ~400 MB at 5G speeds) ---
 if sys.platform == "win32":
@@ -218,6 +226,8 @@ LOG_EVENT_LOG_BUFFER_FLUSHED = "log_buffer_flushed"
 LOG_EVENT_PARTITION_MISSING = "partition_not_detected"
 LOG_EVENT_HTTP_THROUGHPUT_OK = "http_throughput_complete"
 LOG_EVENT_HTTP_THROUGHPUT_FAILED = "http_throughput_failed"
+LOG_EVENT_HTTP_UPLOAD_OK = "http_upload_complete"
+LOG_EVENT_HTTP_UPLOAD_FAILED = "http_upload_failed"
 LOG_EVENT_HEARTBEAT = "service_heartbeat"
 LOG_EVENT_OUTAGE_RECORDED = "outage_recorded"
 LOG_EVENT_ANNOTATION_FAILED = "annotation_push_failed"
