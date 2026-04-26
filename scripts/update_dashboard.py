@@ -250,45 +250,39 @@ def main() -> int:
         }
     )
 
-    # 5. Wire gauge max + thresholds via templating variable for panels 9, 23
-    #    (download gauges) and 29, 30 (upload gauges). Grafana fieldConfig
-    #    accepts string templates in `max` for stat/gauge panels in v10+.
+    # 5. Set generous gauge maxes that fit the fastest expected link (1 Gbps
+    #    home / 50-100 Mbps upload). Grafana does NOT support templating in
+    #    fieldConfig.defaults.max, so per-Pi dynamic max isn't workable today.
+    #    Trade-off: slow links show the needle low on the gauge, but the
+    #    actual Mbps number is always readable. Thresholds use percentage
+    #    mode so they scale with the max.
+    DOWNLOAD_GAUGE_MAX = 1500  # comfortably above 1 Gbps home, plenty of headroom
+    UPLOAD_GAUGE_MAX = 100  # above typical 50 Mbps cable upstream
     download_gauges = {9, 23}
     upload_gauges = {29, 30}
 
-    def proportional_thresholds(max_var, color_seq):
-        """Build threshold steps at 25/50/75% of the variable. Grafana evaluates
-        the string at render time; the multiplier is encoded in the *value*.
-        Since templating doesn't support arithmetic in JSON values, we set
-        thresholds at fractions of 1 (after the gauge sees max=$var) — Grafana
-        treats them as absolute when mode=absolute, so we use mode=percentage
-        and absolute fractions of max."""
-        return [
-            {"color": color_seq[0], "value": None},
-            {"color": color_seq[1], "value": 25},
-            {"color": color_seq[2], "value": 50},
-            {"color": color_seq[3], "value": 75},
-        ]
+    proportional_thresholds = [
+        {"color": "red", "value": None},
+        {"color": "orange", "value": 25},
+        {"color": "yellow", "value": 50},
+        {"color": "green", "value": 75},
+    ]
 
     for p in panels:
         pid = p.get("id")
         if pid in download_gauges:
             defaults = p.setdefault("fieldConfig", {}).setdefault("defaults", {})
-            defaults["max"] = "${max_download_mbps}"
+            defaults["max"] = DOWNLOAD_GAUGE_MAX
             defaults["thresholds"] = {
-                "mode": "percentage",  # interpret values below as % of max
-                "steps": proportional_thresholds(
-                    "${max_download_mbps}", ["red", "orange", "yellow", "green"]
-                ),
+                "mode": "percentage",
+                "steps": proportional_thresholds,
             }
         elif pid in upload_gauges:
             defaults = p.setdefault("fieldConfig", {}).setdefault("defaults", {})
-            defaults["max"] = "${max_upload_mbps}"
+            defaults["max"] = UPLOAD_GAUGE_MAX
             defaults["thresholds"] = {
                 "mode": "percentage",
-                "steps": proportional_thresholds(
-                    "${max_upload_mbps}", ["red", "orange", "yellow", "green"]
-                ),
+                "steps": proportional_thresholds,
             }
 
     # Save

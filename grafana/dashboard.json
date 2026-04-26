@@ -725,7 +725,7 @@
         "defaults": {
           "unit": "Mbps",
           "min": 0,
-          "max": "${max_download_mbps}",
+          "max": 1500,
           "decimals": 1,
           "color": {
             "mode": "fixed",
@@ -798,7 +798,7 @@
         "defaults": {
           "unit": "Mbps",
           "min": 0,
-          "max": "${max_upload_mbps}",
+          "max": 100,
           "decimals": 1,
           "color": {
             "mode": "fixed",
@@ -1602,7 +1602,7 @@
         "defaults": {
           "unit": "Mbps",
           "min": 0,
-          "max": "${max_download_mbps}",
+          "max": 1500,
           "decimals": 1,
           "color": {
             "mode": "fixed",
@@ -1680,7 +1680,7 @@
             "mode": "fixed",
             "fixedColor": "#F2CC0C"
           },
-          "max": "${max_upload_mbps}",
+          "max": 100,
           "thresholds": {
             "mode": "percentage",
             "steps": [
