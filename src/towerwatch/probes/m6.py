@@ -61,7 +61,7 @@ class M6Probe:
     ):
         self._session_factory = session_factory
         self._loki = loki if loki is not None else _ModuleLokiSink()
-        self._url = url if url is not None else config.M6_WWAN_URL
+        self._url = url if url is not None else config.M6_ADMIN_URL
         self._timeout_s = timeout_s if timeout_s is not None else config.M6_TIMEOUT_S
         self._session: requests.Session | None = None
 
