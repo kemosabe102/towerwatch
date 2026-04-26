@@ -15,10 +15,16 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
-def _pin_host_tag(monkeypatch):
+def _pin_tags(monkeypatch):
+    """Pin host/carrier/connection_type tags so assertions on the exact line
+    string survive credential swaps. Without this the test breaks every time
+    you cp credentials.standstill.py credentials.py.
+    """
     from towerwatch import config as _config
 
     monkeypatch.setattr(_config, "INFLUX_HOST_TAG", "towerwatch")
+    monkeypatch.setattr(_config, "INFLUX_CARRIER_TAG", "comcast")
+    monkeypatch.setattr(_config, "INFLUX_CONNECTION_TYPE_TAG", "cable")
 
 
 def _fmt(fields, ts=1700000000):
@@ -29,7 +35,15 @@ def _fmt(fields, ts=1700000000):
 
 def test_influx_measurement_and_host_tag():
     line = _fmt({"rtt_avg_google": 12})
-    assert line.startswith("towerwatch,host=towerwatch ")
+    assert line.startswith("towerwatch,host=towerwatch,carrier=comcast,connection_type=cable ")
+
+
+def test_influx_carrier_and_connection_type_tags_present():
+    """New tags ride along on every metric line so dashboards can group by them."""
+    line = _fmt({"connected": 1})
+    tag_section = line.split(" ", 1)[0]
+    assert "carrier=comcast" in tag_section
+    assert "connection_type=cable" in tag_section
 
 
 def test_influx_field_ordering_stable():
@@ -102,18 +116,27 @@ def test_influx_string_field_value_pinned():
 
 
 def test_build_info_line_shape():
-    """Prom build_info gauge line: version and build_date are TAGS, build_info is the field."""
+    """Prom build_info gauge line: version, build_date, and link_max_* are TAGS.
+    build_info is the only field. Tag order is part of the contract — dashboard
+    templating uses `label_values()` which doesn't care about order, but human
+    readers + Loki LogQL filters often do."""
     from towerwatch.tick import format_build_info_line
 
     line = format_build_info_line(
-        ts=1700000000, version="abc1234", build_date="2026-04-23T16:30:25-07:00"
+        ts=1700000000,
+        version="abc1234",
+        build_date="2026-04-23T16:30:25-07:00",
+        link_max_download_mbps=1000,
+        link_max_upload_mbps=50,
     )
     # Starts with measurement + host tag
     assert line.startswith("towerwatch,host=towerwatch,")
-    # version and build_date are tags (before the first space)
+    # All four label-tag values appear in the tag section
     tag_section = line.split(" ", 1)[0]
     assert "version=abc1234" in tag_section
     assert "build_date=2026-04-23T16:30:25-07:00" in tag_section
+    assert "link_max_download_mbps=1000" in tag_section
+    assert "link_max_upload_mbps=50" in tag_section
     # build_info=1 is the only field (after the first space, before the timestamp)
     field_section = line.split(" ")[1]
     assert field_section == "build_info=1"
@@ -122,13 +145,29 @@ def test_build_info_line_shape():
 
 
 def test_build_info_line_uses_config_defaults():
-    """When version/build_date are omitted, falls back to config.BUILD_VERSION/BUILD_DATE."""
+    """When all kwargs are omitted, falls back to config module values."""
     from towerwatch import config
     from towerwatch.tick import format_build_info_line
 
     line = format_build_info_line(ts=1700000000)
     assert f"version={config.BUILD_VERSION}" in line
     assert f"build_date={config.BUILD_DATE}" in line
+    assert f"link_max_download_mbps={config.LINK_MAX_DOWNLOAD_MBPS}" in line
+    assert f"link_max_upload_mbps={config.LINK_MAX_UPLOAD_MBPS}" in line
+
+
+def test_load_int_credential_handles_missing_field():
+    """Defensive: credentials.py without the new override fields must not crash.
+    Older Pis on a previous deploy lack HTTP_THROUGHPUT_BYTES_OVERRIDE etc.;
+    _load_int_credential should silently fall back. Same for None placeholders
+    in credentials.py.example."""
+    from towerwatch.config import _load_int_credential
+
+    # Unknown field name → fallback
+    assert _load_int_credential("DOES_NOT_EXIST_ANYWHERE", 42) == 42
+    # Existing field that's None (placeholder pattern in credentials.py.example)
+    # — simulate by reading a field that won't exist, fallback path is the same
+    assert _load_int_credential("ALSO_MISSING", 999_999) == 999_999
 
 
 def test_speedtest_line_shape():

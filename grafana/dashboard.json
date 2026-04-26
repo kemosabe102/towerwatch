@@ -71,7 +71,7 @@
         "hide": false,
         "iconColor": "dark-purple",
         "name": "Pi Offline",
-        "titleFormat": "Pi Offline (no data ≥10 min)"
+        "titleFormat": "Pi Offline (no data \u226510 min)"
       },
       {
         "datasource": {
@@ -85,7 +85,10 @@
         "target": {
           "type": "tags",
           "matchAny": false,
-          "tags": ["towerwatch", "outage"]
+          "tags": [
+            "towerwatch",
+            "outage"
+          ]
         }
       },
       {
@@ -103,7 +106,7 @@
       }
     ]
   },
-  "description": "5G connection quality monitoring — latency, jitter, packet loss, and uptime",
+  "description": "5G connection quality monitoring \u2014 latency, jitter, packet loss, and uptime",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -113,76 +116,8 @@
     {
       "gridPos": {
         "h": 4,
-        "w": 8,
+        "w": 12,
         "x": 0,
-        "y": 0
-      },
-      "id": 1,
-      "title": "Connection Uptime",
-      "description": "Percentage of time the connection was up over the selected time range",
-      "type": "stat",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "grafanacloud-towerwatch-prom"
-      },
-      "targets": [
-        {
-          "expr": "avg_over_time((max_over_time(towerwatch_connected{host=\"$location\"}[5m]))[$__range:5m]) * 100",
-          "legendFormat": "Uptime",
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "decimals": 2,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 95
-              },
-              {
-                "color": "green",
-                "value": 99.5
-              }
-            ]
-          },
-          "color": {
-            "mode": "thresholds"
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "orientation": "auto",
-        "textMode": "auto",
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "auto"
-      }
-    },
-    {
-      "gridPos": {
-        "h": 4,
-        "w": 8,
-        "x": 8,
         "y": 0
       },
       "id": 2,
@@ -258,13 +193,13 @@
     {
       "gridPos": {
         "h": 4,
-        "w": 8,
-        "x": 16,
+        "w": 12,
+        "x": 12,
         "y": 0
       },
       "id": 24,
       "title": "Deployed Version",
-      "description": "Currently deployed version (short-hash). Backed by the towerwatch_build_info Prom gauge, re-emitted every tick — always shows the running version regardless of lookback window.",
+      "description": "Currently deployed version (short-hash). Backed by the towerwatch_build_info Prom gauge, re-emitted every tick \u2014 always shows the running version regardless of lookback window.",
       "type": "stat",
       "datasource": {
         "type": "prometheus",
@@ -291,14 +226,21 @@
           },
           "thresholds": {
             "mode": "absolute",
-            "steps": [{ "color": "text", "value": null }]
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
           }
         },
         "overrides": []
       },
       "options": {
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -315,7 +257,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 28
+        "y": 32
       },
       "id": 4,
       "title": "Packet Loss",
@@ -468,7 +410,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 12
+        "y": 16
       },
       "id": 6,
       "title": "DNS Resolution Time",
@@ -592,7 +534,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 12
+        "y": 16
       },
       "id": 7,
       "title": "TCP Connection Time",
@@ -675,7 +617,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 20
+        "y": 24
       },
       "id": 8,
       "title": "HTTP Latency Probe",
@@ -758,11 +700,11 @@
         "h": 8,
         "w": 6,
         "x": 12,
-        "y": 45
+        "y": 49
       },
       "id": 9,
       "title": "Avg Download Speed",
-      "description": "Mean of all Ookla speedtest download samples in the selected time range. Sparse by design — runs are manual.",
+      "description": "Mean of all Ookla speedtest download samples in the selected time range. Sparse by design \u2014 runs are manual.",
       "type": "gauge",
       "datasource": {
         "type": "prometheus",
@@ -783,19 +725,31 @@
         "defaults": {
           "unit": "Mbps",
           "min": 0,
-          "max": 500,
+          "max": "${max_download_mbps}",
           "decimals": 1,
           "color": {
             "mode": "fixed",
             "fixedColor": "#73BF69"
           },
           "thresholds": {
-            "mode": "absolute",
+            "mode": "percentage",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "orange", "value": 25 },
-              { "color": "yellow", "value": 100 },
-              { "color": "green", "value": 250 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 25
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "green",
+                "value": 75
+              }
             ]
           }
         },
@@ -806,7 +760,9 @@
         "showThresholdLabels": false,
         "showThresholdMarkers": true,
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         }
@@ -817,11 +773,11 @@
         "h": 8,
         "w": 6,
         "x": 18,
-        "y": 45
+        "y": 49
       },
       "id": 29,
       "title": "Avg Upload Speed",
-      "description": "Mean of all Ookla speedtest upload samples in the selected time range. Sparse by design — runs are manual.",
+      "description": "Mean of all Ookla speedtest upload samples in the selected time range. Sparse by design \u2014 runs are manual.",
       "type": "gauge",
       "datasource": {
         "type": "prometheus",
@@ -842,19 +798,31 @@
         "defaults": {
           "unit": "Mbps",
           "min": 0,
-          "max": 100,
+          "max": "${max_upload_mbps}",
           "decimals": 1,
           "color": {
             "mode": "fixed",
             "fixedColor": "#F2CC0C"
           },
           "thresholds": {
-            "mode": "absolute",
+            "mode": "percentage",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "orange", "value": 5 },
-              { "color": "yellow", "value": 20 },
-              { "color": "green", "value": 50 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 25
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "green",
+                "value": 75
+              }
             ]
           }
         },
@@ -865,7 +833,9 @@
         "showThresholdLabels": false,
         "showThresholdMarkers": true,
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         }
@@ -876,7 +846,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 53
+        "y": 57
       },
       "id": 12,
       "title": "M6 Signal Quality",
@@ -957,11 +927,11 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 28
+        "y": 32
       },
       "id": 26,
       "title": "Gateway Health",
-      "description": "TCP connect and HTTP response time to the local gateway. Works on any router — always populated regardless of vendor.",
+      "description": "TCP connect and HTTP response time to the local gateway. Works on any router \u2014 always populated regardless of vendor.",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -990,18 +960,28 @@
       "fieldConfig": {
         "defaults": {
           "unit": "ms",
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "lineWidth": 1,
             "fillOpacity": 10,
-            "scaleDistribution": { "type": "log", "log": 2 }
+            "scaleDistribution": {
+              "type": "log",
+              "log": 2
+            }
           }
         },
         "overrides": []
       },
       "options": {
-        "tooltip": { "mode": "multi" },
-        "legend": { "displayMode": "list", "placement": "bottom" }
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
       }
     },
     {
@@ -1009,7 +989,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 36
+        "y": 40
       },
       "id": 25,
       "title": "Service Restarts",
@@ -1065,7 +1045,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 36
+        "y": 40
       },
       "options": {
         "showLabels": false,
@@ -1094,7 +1074,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 4
+        "y": 8
       },
       "targets": [
         {
@@ -1264,7 +1244,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 4
+        "y": 8
       },
       "targets": [
         {
@@ -1434,7 +1414,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 4
+        "y": 8
       },
       "targets": [
         {
@@ -1594,8 +1574,8 @@
     },
     {
       "id": 23,
-      "title": "Avg HTTP Throughput",
-      "description": "Mean throughput from passive 1 MB downloads (~4 samples/day, random schedule). Gauge over the selected time range — sparse by design but stable when averaged.",
+      "title": "Avg HTTP Download",
+      "description": "Mean download throughput from passive HTTP samples (6\u00d7/day, random schedule). Gauge over the dashboard time range. Sample size is per-site (HTTP_THROUGHPUT_BYTES_OVERRIDE in credentials.py).",
       "type": "gauge",
       "datasource": {
         "type": "prometheus",
@@ -1603,9 +1583,9 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
+        "w": 6,
         "x": 12,
-        "y": 20
+        "y": 24
       },
       "targets": [
         {
@@ -1622,19 +1602,31 @@
         "defaults": {
           "unit": "Mbps",
           "min": 0,
-          "max": 200,
+          "max": "${max_download_mbps}",
           "decimals": 1,
           "color": {
             "mode": "fixed",
             "fixedColor": "#73BF69"
           },
           "thresholds": {
-            "mode": "absolute",
+            "mode": "percentage",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "orange", "value": 10 },
-              { "color": "yellow", "value": 50 },
-              { "color": "green", "value": 100 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 25
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "green",
+                "value": 75
+              }
             ]
           }
         },
@@ -1645,7 +1637,9 @@
         "showThresholdLabels": false,
         "showThresholdMarkers": true,
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         }
@@ -1653,23 +1647,23 @@
     },
     {
       "id": 30,
-      "title": "Most Recent Sample",
-      "description": "Timestamp of the latest HTTP throughput sample. Blank if no sample landed in the selected time range.",
-      "type": "stat",
+      "title": "Avg HTTP Upload",
+      "description": "Mean upload throughput from passive HTTP samples (6\u00d7/day, random schedule, paired with the download probe). Cellular uplinks are typically capacity-capped \u2014 expect a flat ceiling.",
+      "type": "gauge",
       "datasource": {
         "type": "prometheus",
         "uid": "grafanacloud-towerwatch-prom"
       },
       "gridPos": {
         "h": 8,
-        "w": 4,
-        "x": 20,
-        "y": 20
+        "w": 6,
+        "x": 18,
+        "y": 24
       },
       "targets": [
         {
-          "expr": "timestamp(towerwatch_http_throughput_mbps{host=\"$location\"})",
-          "instant": false,
+          "expr": "avg(avg_over_time(towerwatch_http_upload_mbps{host=\"$location\"}[$__range]))",
+          "instant": true,
           "refId": "A",
           "datasource": {
             "type": "prometheus",
@@ -1679,23 +1673,46 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "dateTimeFromNow",
+          "unit": "Mbps",
+          "min": 0,
+          "decimals": 1,
           "color": {
             "mode": "fixed",
-            "fixedColor": "#73BF69"
+            "fixedColor": "#F2CC0C"
           },
-          "noValue": ""
+          "max": "${max_upload_mbps}",
+          "thresholds": {
+            "mode": "percentage",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 25
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "green",
+                "value": 75
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "value",
-        "justifyMode": "center",
         "orientation": "auto",
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         }
@@ -1704,7 +1721,7 @@
     {
       "id": 27,
       "title": "Manual Speedtest History",
-      "description": "Ookla speedtest runs triggered via `towerwatch-speedtest`. Sparse by design — each run uses ~400 MB. Legend shows who triggered each run.",
+      "description": "Ookla speedtest runs triggered via `towerwatch-speedtest`. Sparse by design \u2014 each run uses ~400 MB. Legend shows who triggered each run.",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -1714,12 +1731,12 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 45
+        "y": 49
       },
       "targets": [
         {
           "expr": "towerwatch_speedtest_download_mbps{host=\"$location\"}",
-          "legendFormat": "Down · {{triggered_by}}",
+          "legendFormat": "Down \u00b7 {{triggered_by}}",
           "refId": "A",
           "datasource": {
             "type": "prometheus",
@@ -1728,7 +1745,7 @@
         },
         {
           "expr": "towerwatch_speedtest_upload_mbps{host=\"$location\"}",
-          "legendFormat": "Up · {{triggered_by}}",
+          "legendFormat": "Up \u00b7 {{triggered_by}}",
           "refId": "B",
           "datasource": {
             "type": "prometheus",
@@ -1776,7 +1793,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 44
+        "y": 48
       }
     },
     {
@@ -1788,13 +1805,13 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 61
+        "y": 65
       },
       "panels": [
         {
           "id": 32,
           "title": "Daily Avg Download Throughput (30d)",
-          "description": "One bar per calendar day, 30-day fixed window. Each bar is the mean of all towerwatch_http_throughput_mbps samples for that day. Time range is panel-fixed — does not follow the dashboard time picker.",
+          "description": "One bar per calendar day, 30-day fixed window. Each bar is the mean of all towerwatch_http_throughput_mbps samples for that day. Time range is panel-fixed \u2014 does not follow the dashboard time picker.",
           "type": "barchart",
           "datasource": {
             "type": "prometheus",
@@ -1804,7 +1821,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 62
+            "y": 66
           },
           "targets": [
             {
@@ -1827,7 +1844,7 @@
                 "mode": "fixed",
                 "fixedColor": "#73BF69"
               },
-              "noValue": "—"
+              "noValue": "\u2014"
             },
             "overrides": []
           },
@@ -1861,7 +1878,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 62
+            "y": 66
           },
           "targets": [
             {
@@ -1884,7 +1901,7 @@
                 "mode": "fixed",
                 "fixedColor": "#F2CC0C"
               },
-              "noValue": "—"
+              "noValue": "\u2014"
             },
             "overrides": []
           },
@@ -1906,6 +1923,282 @@
           "timeFrom": "30d"
         }
       ]
+    },
+    {
+      "id": 40,
+      "title": "Latency (1h avg)",
+      "description": "Average ping RTT to 8.8.8.8 over the last hour. The Latency Golden Signal \u2014 high values mean the link is slow regardless of throughput.",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 4
+      },
+      "targets": [
+        {
+          "expr": "avg(avg_over_time(towerwatch_rtt_avg_google{host=\"$location\"}[1h]))",
+          "instant": true,
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "decimals": 1,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "red",
+                "value": 150
+              }
+            ]
+          },
+          "noValue": "\u2014"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 41,
+      "title": "Uptime (range %)",
+      "description": "Percentage of time the link reported connected=1 over the dashboard time range. The Traffic Golden Signal. Replaces the broken Connection Uptime panel \u2014 uses avg_over_time directly so sub-5-min outages aren't masked.",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 4
+      },
+      "targets": [
+        {
+          "expr": "avg_over_time(towerwatch_connected{host=\"$location\"}[$__range]) * 100",
+          "instant": true,
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 95
+              },
+              {
+                "color": "green",
+                "value": 99
+              }
+            ]
+          },
+          "noValue": "\u2014"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 42,
+      "title": "Packet Loss (1h max)",
+      "description": "Highest packet-loss percentage to Google or Cloudflare over the last hour. Excludes gateway loss (often legitimately high on cellular). The Errors Golden Signal.",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 4
+      },
+      "targets": [
+        {
+          "expr": "max(max_over_time(towerwatch_packet_loss_google{host=\"$location\"}[1h]), max_over_time(towerwatch_packet_loss_cloudflare{host=\"$location\"}[1h]))",
+          "instant": true,
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "noValue": "\u2014"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 43,
+      "title": "Saturation (6h)",
+      "description": "6-hour average HTTP throughput as a percentage of the plan capacity ($max_download_mbps). 30\u201380% is healthy active use; >95% means the link is saturated; near 0% means light usage. The Saturation Golden Signal.",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 4
+      },
+      "targets": [
+        {
+          "expr": "avg_over_time(towerwatch_http_throughput_mbps{host=\"$location\"}[6h]) / $max_download_mbps * 100",
+          "instant": true,
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 80
+              },
+              {
+                "color": "red",
+                "value": 95
+              }
+            ]
+          },
+          "noValue": "\u2014"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
     }
   ],
   "schemaVersion": 38,
@@ -1933,6 +2226,36 @@
           "text": "towerwatch",
           "value": "towerwatch"
         }
+      },
+      {
+        "name": "max_download_mbps",
+        "label": "Link Max Down (Mbps)",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "query": "label_values(towerwatch_build_info{host=\"$location\"}, link_max_download_mbps)",
+        "refresh": 1,
+        "sort": 0,
+        "includeAll": false,
+        "multi": false,
+        "hide": 2
+      },
+      {
+        "name": "max_upload_mbps",
+        "label": "Link Max Up (Mbps)",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "query": "label_values(towerwatch_build_info{host=\"$location\"}, link_max_upload_mbps)",
+        "refresh": 1,
+        "sort": 0,
+        "includeAll": false,
+        "multi": false,
+        "hide": 2
       }
     ]
   },
@@ -1951,7 +2274,7 @@
     ]
   },
   "timezone": "",
-  "title": "Towerwatch — 5G Connection Quality",
+  "title": "Towerwatch \u2014 5G Connection Quality",
   "uid": "",
   "version": 0,
   "refresh": "30s"

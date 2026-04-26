@@ -49,13 +49,23 @@ class TickContext:
     clock: Clock = field(default_factory=_default_clock)
 
 
+def _common_tags() -> str:
+    """Influx tag set baked into every line — `host`, `carrier`, `connection_type`.
+
+    Tag values must not contain spaces or commas in line protocol; the slug
+    helper in config.py guarantees that for carrier/connection_type. host is
+    set by the operator and assumed clean.
+    """
+    return (
+        f"host={_config.INFLUX_HOST_TAG},"
+        f"carrier={_config.INFLUX_CARRIER_TAG},"
+        f"connection_type={_config.INFLUX_CONNECTION_TYPE_TAG}"
+    )
+
+
 def format_influx_line(fields: dict, timestamp: int) -> str:
     parts = [f"{k}={v}" for k, v in fields.items() if v is not None]
-    return (
-        f"{_config.INFLUX_MEASUREMENT},host={_config.INFLUX_HOST_TAG} "
-        + ",".join(parts)
-        + f" {timestamp}"
-    )
+    return f"{_config.INFLUX_MEASUREMENT},{_common_tags()} " + ",".join(parts) + f" {timestamp}"
 
 
 def format_build_info_line(
@@ -63,21 +73,35 @@ def format_build_info_line(
     *,
     version: str | None = None,
     build_date: str | None = None,
+    link_max_download_mbps: int | None = None,
+    link_max_upload_mbps: int | None = None,
 ) -> str:
     """Influx line for the `towerwatch_build_info` Prom gauge.
 
-    `version` and `build_date` are emitted as Influx **tags** (not fields) so
-    Grafana Cloud Prom ingest turns them into metric labels. Tag values are
-    unquoted strings by spec; field string values are not (see the pinned
-    characterization test in test_influx_line_format.py).
+    `version`, `build_date`, and `link_max_*` are emitted as Influx **tags**
+    (not fields) so Grafana Cloud Prom ingest turns them into metric labels.
+    Tag values are unquoted strings by spec; field string values are not (see
+    the pinned characterization test in test_influx_line_format.py).
+
+    `link_max_download_mbps` / `link_max_upload_mbps` carry per-site link
+    capacity so the dashboard can `label_values()` them into templating
+    variables for gauge max + Saturation Golden Signal.
     """
     v = version if version is not None else _config.BUILD_VERSION
     d = build_date if build_date is not None else _config.BUILD_DATE
+    ld = (
+        link_max_download_mbps
+        if link_max_download_mbps is not None
+        else _config.LINK_MAX_DOWNLOAD_MBPS
+    )
+    lu = link_max_upload_mbps if link_max_upload_mbps is not None else _config.LINK_MAX_UPLOAD_MBPS
     return (
         f"{_config.INFLUX_MEASUREMENT},"
-        f"host={_config.INFLUX_HOST_TAG},"
+        f"{_common_tags()},"
         f"version={v},"
-        f"build_date={d} "
+        f"build_date={d},"
+        f"link_max_download_mbps={ld},"
+        f"link_max_upload_mbps={lu} "
         f"build_info=1 {ts}"
     )
 
@@ -97,7 +121,7 @@ def format_speedtest_line(
     """
     return (
         f"{_config.INFLUX_MEASUREMENT},"
-        f"host={_config.INFLUX_HOST_TAG},"
+        f"{_common_tags()},"
         f"triggered_by={triggered_by} "
         f"speedtest_download_mbps={download_mbps},"
         f"speedtest_upload_mbps={upload_mbps} {ts}"

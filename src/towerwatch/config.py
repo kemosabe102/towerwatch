@@ -79,12 +79,53 @@ def _load_build_version(
 
 BUILD_VERSION, BUILD_DATE = _load_build_version()
 
-# --- Gateway IP (auto-discovered from default route, fallback to constant) ---
+# --- Gateway IP (override from credentials, else auto-discover, else fallback) ---
 # Resolved before PROBE_TARGETS so the gateway target tracks the live value.
 # The "gateway" label stays stable — only the IP varies per site.
 from towerwatch.net import discover_default_gateway  # noqa: E402
 
-GATEWAY_IP = discover_default_gateway(fallback="192.168.1.1")
+
+def _resolve_gateway_ip() -> str:
+    try:
+        from towerwatch import credentials
+
+        override = getattr(credentials, "GATEWAY_IP_OVERRIDE", None)
+        if override:
+            return override
+    except ImportError:
+        pass
+    return discover_default_gateway(fallback="192.168.1.1")
+
+
+GATEWAY_IP = _resolve_gateway_ip()
+
+
+def _load_credential(field: str, fallback: str) -> str:
+    """Read a string credential with a safe fallback when the file or attribute
+    is missing. Used for Prometheus label values that must be stable strings.
+    """
+    try:
+        from towerwatch import credentials
+
+        return getattr(credentials, field, fallback) or fallback
+    except ImportError:
+        return fallback
+
+
+def _load_int_credential(field: str, fallback: int) -> int:
+    """Read an integer credential with a safe fallback. Treats None and missing
+    attributes identically (returns fallback) so credentials.py.example's
+    `FIELD = None` placeholders don't crash the daemon. Sites override by
+    setting an explicit int.
+    """
+    try:
+        from towerwatch import credentials
+
+        value = getattr(credentials, field, None)
+        return int(value) if value is not None else fallback
+    except ImportError:
+        return fallback
+
 
 # --- Probe Targets (multi-target for evidence isolation) ---
 # Each tuple: (ip, label). Labels become Prometheus tag values — must be stable strings.
@@ -119,14 +160,25 @@ HTTP_LATENCY_TIMEOUT_S = 30
 # 6 samples/day at 5 MB down + 2 MB up = ~1.3 GB/month total probe traffic.
 # Sized to fit a 3 GB/month cellular cap with margin for occasional manual
 # Ookla runs (~400 MB each). Bump cautiously — see CLAUDE.md data-budget.
-HTTP_THROUGHPUT_BYTES = 5_000_000  # 5 MB down — long enough to clear TCP slow-start on fast 5G
+# Sample sizes are per-site overridable via credentials.py
+# (HTTP_THROUGHPUT_BYTES_OVERRIDE / HTTP_UPLOAD_BYTES_OVERRIDE). On fast links
+# (≥500 Mbps) bump them so each sample lasts long enough to clear TCP slow-start.
+HTTP_THROUGHPUT_BYTES = _load_int_credential("HTTP_THROUGHPUT_BYTES_OVERRIDE", 5_000_000)
 HTTP_THROUGHPUT_URL = f"https://speed.cloudflare.com/__down?bytes={HTTP_THROUGHPUT_BYTES}"
 HTTP_THROUGHPUT_TESTS_PER_DAY = 6  # ~4 hours apart, randomized within each slot
 HTTP_THROUGHPUT_TIMEOUT_S = 60
 
-HTTP_UPLOAD_BYTES = 2_000_000  # 2 MB up — uploads are typically capacity-capped on cellular
+HTTP_UPLOAD_BYTES = _load_int_credential("HTTP_UPLOAD_BYTES_OVERRIDE", 2_000_000)
 HTTP_UPLOAD_URL = "https://speed.cloudflare.com/__up"
 HTTP_UPLOAD_TIMEOUT_S = 60
+
+# --- Link calibration (per-site, baked into build_info tags for the dashboard) ---
+# These declare the rough expected capacity of the link so dashboards can scale
+# gauges and compute Saturation = current_throughput / LINK_MAX. Values come
+# from credentials.EXPECTED_DOWNLINK_MBPS / EXPECTED_UPLINK_MBPS. Defaults
+# correspond to the standstill profile (200 Mbps cellular / 30 Mbps upstream).
+LINK_MAX_DOWNLOAD_MBPS = _load_int_credential("EXPECTED_DOWNLINK_MBPS", 200)
+LINK_MAX_UPLOAD_MBPS = _load_int_credential("EXPECTED_UPLINK_MBPS", 50)
 
 # --- Speedtest (manual only — each test uses ~400 MB at 5G speeds) ---
 if sys.platform == "win32":
@@ -143,11 +195,40 @@ STARTUP_GRACE_S = 15  # seconds to wait after startup before first probe cycle
 # GATEWAY_IP is set above (auto-discovered) before PROBE_TARGETS.
 GATEWAY_TCP_PORT = 80
 GATEWAY_TIMEOUT_S = 5
-GATEWAY_VENDOR = "m6"  # "m6" | "orbi" | "" (baseline only)
+
+
+def _resolve_gateway_vendor() -> str:
+    """Pick the gateway-probe variant from CONNECTION_TYPE.
+
+    Cellular sites get the M6 probe (rich /api/model.json schema). Cable
+    sites get the Orbi DEV_INFO probe. Anything else falls back to the
+    baseline TCP/HTTP probe. Manual override via GATEWAY_VENDOR_OVERRIDE
+    in credentials still wins, for sites with non-standard kit.
+    """
+    try:
+        from towerwatch import credentials
+
+        manual = getattr(credentials, "GATEWAY_VENDOR_OVERRIDE", None)
+        if manual is not None:
+            return manual
+        ct = getattr(credentials, "CONNECTION_TYPE", "").lower()
+    except ImportError:
+        ct = ""
+    if ct in ("5g_cellular", "lte_cellular"):
+        return "m6"
+    if ct == "cable":
+        return "orbi"
+    return ""
+
+
+GATEWAY_VENDOR = _resolve_gateway_vendor()
 
 # --- M6 Signal Metrics ---
+# /api/model.json bundles wwan + wwanadv + wwan.ca + wwan.diagInfo in a
+# single response — richer than the legacy /api/wwanadv.json endpoint and
+# the same HTTP cost. Read access is anonymous on Nighthawk M6 firmware
+# 2.0+ (apiVersion field).
 M6_ADMIN_URL = f"http://{GATEWAY_IP}/api/model.json"
-M6_WWAN_URL = f"http://{GATEWAY_IP}/api/wwanadv.json"
 M6_TIMEOUT_S = 5
 
 # --- Grafana Cloud (metrics use _ms suffix throughout, not Prometheus-standard seconds) ---
@@ -159,22 +240,21 @@ GRAFANA_PUSH_TIMEOUT_S = 10
 INFLUX_MEASUREMENT = "towerwatch"
 
 
-def _load_location() -> str:
-    """Read the per-site LOCATION from credentials.py with a safe fallback.
-
-    LOCATION is the `host` Influx tag and Loki stream label — it identifies
-    which Pi the metric/log came from. Defaults to "towerwatch" so historical
-    single-site deployments keep their existing label.
-    """
-    try:
-        from towerwatch import credentials
-
-        return getattr(credentials, "LOCATION", "towerwatch") or "towerwatch"
-    except ImportError:
-        return "towerwatch"
+# LOCATION is the `host` Influx tag and Loki stream label.
+INFLUX_HOST_TAG = _load_credential("LOCATION", "towerwatch")
 
 
-INFLUX_HOST_TAG = _load_location()
+# CARRIER and CONNECTION_TYPE bake into every metric line and Loki stream as
+# Prometheus labels — lets dashboards group/filter by carrier without joins.
+# Default to "unknown" so historical credentials files predating these fields
+# keep working. Slugify spaces just in case (label values must not contain
+# whitespace in Influx line protocol).
+def _slug(s: str) -> str:
+    return s.strip().lower().replace(" ", "_") or "unknown"
+
+
+INFLUX_CARRIER_TAG = _slug(_load_credential("CARRIER", "unknown"))
+INFLUX_CONNECTION_TYPE_TAG = _slug(_load_credential("CONNECTION_TYPE", "unknown"))
 
 # --- Push Optimization (batching + compression) ---
 PUSH_BATCH_SIZE = 2  # Accumulate N lines before pushing (at 60s = push every 2 min)
