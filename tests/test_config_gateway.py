@@ -20,8 +20,17 @@ def test_m6_admin_url_tracks_gateway_ip():
     assert f"http://{config.GATEWAY_IP}/api/model.json" == config.M6_ADMIN_URL
 
 
-def test_m6_wwan_url_tracks_gateway_ip():
-    assert f"http://{config.GATEWAY_IP}/api/wwanadv.json" == config.M6_WWAN_URL
+def test_m6_admin_url_uses_modern_endpoint():
+    """Pin the migration from legacy /api/wwanadv.json to /api/model.json.
+
+    /api/model.json bundles wwan + wwanadv + ca + diagInfo in one response,
+    so the legacy URL is unused. If a future change reintroduces it, this
+    test catches it.
+    """
+    assert "/api/model.json" in config.M6_ADMIN_URL
+    assert not hasattr(config, "M6_WWAN_URL"), (
+        "M6_WWAN_URL is the legacy endpoint — model.json is the source of truth now"
+    )
 
 
 def test_gateway_label_is_stable():

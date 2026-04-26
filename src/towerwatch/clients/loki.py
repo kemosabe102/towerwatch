@@ -40,6 +40,8 @@ class LokiClient:
         post_fn=requests.post,
         push_timeout: int = 5,
         host_tag: str = "towerwatch",
+        carrier_tag: str = "unknown",
+        connection_type_tag: str = "unknown",
     ):
         self._url = url
         self._user = user
@@ -51,6 +53,8 @@ class LokiClient:
         self._post_fn = post_fn
         self._push_timeout = push_timeout
         self._host_tag = host_tag
+        self._carrier_tag = carrier_tag
+        self._connection_type_tag = connection_type_tag
 
     @classmethod
     def from_config(cls, cfg, creds) -> "LokiClient":
@@ -63,6 +67,8 @@ class LokiClient:
             push_level=cfg.LOKI_PUSH_LEVEL,
             push_timeout=cfg.LOKI_PUSH_TIMEOUT_S,
             host_tag=cfg.INFLUX_HOST_TAG,
+            carrier_tag=cfg.INFLUX_CARRIER_TAG,
+            connection_type_tag=cfg.INFLUX_CONNECTION_TYPE_TAG,
         )
 
     def _build_payload(self, level: str, message: str, extra: dict | None = None) -> dict:
@@ -72,6 +78,8 @@ class LokiClient:
                     "stream": {
                         "job": "towerwatch",
                         "host": self._host_tag,
+                        "carrier": self._carrier_tag,
+                        "connection_type": self._connection_type_tag,
                         "level": level.lower(),
                     },
                     "values": [

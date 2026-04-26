@@ -117,13 +117,17 @@ def test_http_throughput_probe_returns_probe_result():
 def test_m6_probe_returns_probe_result():
     from towerwatch.probes.m6 import M6Probe
 
-    wwan = {"RSRP": -85, "RSRQ": -10, "SINR": 15, "curBand": "66"}
-    session = FakeSession(get_responses=[FakeResponse(_json=wwan)])
+    model = {
+        "wwan": {"signalStrength": {"rsrp": -85, "rsrq": -10, "sinr": 15}},
+        "wwanadv": {"curBand": "LTE B66"},
+    }
+    session = FakeSession(get_responses=[FakeResponse(_json=model)])
     probe = M6Probe(
         session_factory=lambda: session,
         loki=FakeLoki(),
         url="http://fake/m6",
         timeout_s=5,
+        is_cellular=lambda: True,
     )
     result = probe.run()
     assert isinstance(result, ProbeResult)
@@ -171,7 +175,13 @@ def test_all_probes_have_name():
         ),
         HTTPLatencyProbe(session=FakeSession(), clock=FakeClock(), loki=FakeLoki()),
         HTTPThroughputProbe(session=FakeSession(), clock=FakeClock(), loki=FakeLoki()),
-        M6Probe(session_factory=FakeSession, loki=FakeLoki(), url="http://fake", timeout_s=5),
+        M6Probe(
+            session_factory=FakeSession,
+            loki=FakeLoki(),
+            url="http://fake",
+            timeout_s=5,
+            is_cellular=lambda: True,
+        ),
         OoklaProbe(
             binary="speedtest",
             server_id=0,
