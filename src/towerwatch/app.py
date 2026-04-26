@@ -45,7 +45,12 @@ def run_loop(ctx: TickContext, state: RuntimeState) -> None:
         build_date=config.BUILD_DATE,
         platform=sys.platform,
     )
-    events_mod.service_started(loki, log_level=config.LOKI_PUSH_LEVEL, platform=sys.platform)
+    events_mod.service_started(
+        loki,
+        log_level=config.LOKI_PUSH_LEVEL,
+        platform=sys.platform,
+        gateway_ip=config.GATEWAY_IP,
+    )
 
     state.metric_batch.append(format_influx_line({"service_restart": 1}, int(time.time())))
 

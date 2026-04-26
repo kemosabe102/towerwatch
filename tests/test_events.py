@@ -32,11 +32,12 @@ def test_service_restarted_level_and_event():
 
 def test_service_started_level_and_event():
     loki = _make_loki()
-    events.service_started(loki, log_level="WARN", platform="linux")
+    events.service_started(loki, log_level="WARN", platform="linux", gateway_ip="10.0.1.1")
     level, msg, extra = _pushed(loki)
     assert level == "INFO"
     assert extra["event"] == config.LOG_EVENT_SERVICE_STARTED
     assert extra["log_level"] == "WARN"
+    assert extra["gateway_ip"] == "10.0.1.1"
 
 
 def test_connection_down_level_and_event():

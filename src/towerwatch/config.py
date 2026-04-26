@@ -79,13 +79,19 @@ def _load_build_version(
 
 BUILD_VERSION, BUILD_DATE = _load_build_version()
 
+# --- Gateway IP (auto-discovered from default route, fallback to constant) ---
+# Resolved before PROBE_TARGETS so the gateway target tracks the live value.
+# The "gateway" label stays stable — only the IP varies per site.
+from towerwatch.net import discover_default_gateway  # noqa: E402
+
+GATEWAY_IP = discover_default_gateway(fallback="192.168.1.1")
+
 # --- Probe Targets (multi-target for evidence isolation) ---
 # Each tuple: (ip, label). Labels become Prometheus tag values — must be stable strings.
-# If the carrier gateway IP changes, update the IP here but keep the label "gateway".
 PROBE_TARGETS = [
     ("8.8.8.8", "google"),
     ("1.1.1.1", "cloudflare"),
-    ("192.168.1.1", "gateway"),  # M6 router / carrier gateway
+    (GATEWAY_IP, "gateway"),  # carrier gateway (auto-discovered)
 ]
 
 PING_COUNT = 10  # Probes per burst
@@ -126,14 +132,14 @@ SPEEDTEST_SERVER_ID = None
 STARTUP_GRACE_S = 15  # seconds to wait after startup before first probe cycle
 
 # --- Gateway Probe (vendor-agnostic baseline) ---
-GATEWAY_IP = "192.168.1.1"
+# GATEWAY_IP is set above (auto-discovered) before PROBE_TARGETS.
 GATEWAY_TCP_PORT = 80
 GATEWAY_TIMEOUT_S = 5
 GATEWAY_VENDOR = "m6"  # "m6" | "orbi" | "" (baseline only)
 
 # --- M6 Signal Metrics ---
-M6_ADMIN_URL = "http://192.168.1.1/api/model.json"
-M6_WWAN_URL = "http://192.168.1.1/api/wwanadv.json"
+M6_ADMIN_URL = f"http://{GATEWAY_IP}/api/model.json"
+M6_WWAN_URL = f"http://{GATEWAY_IP}/api/wwanadv.json"
 M6_TIMEOUT_S = 5
 
 # --- Grafana Cloud (metrics use _ms suffix throughout, not Prometheus-standard seconds) ---

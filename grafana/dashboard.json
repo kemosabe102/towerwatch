@@ -1408,7 +1408,7 @@
     },
     {
       "id": 22,
-      "title": "Gateway (192.168.1.1)",
+      "title": "Gateway",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",

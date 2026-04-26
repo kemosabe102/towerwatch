@@ -24,7 +24,7 @@ def service_restarted(loki, *, version: str, build_date: str, platform: str) -> 
     )
 
 
-def service_started(loki, *, log_level: str, platform: str) -> None:
+def service_started(loki, *, log_level: str, platform: str, gateway_ip: str) -> None:
     loki.push(
         "INFO",
         "Service started",
@@ -32,6 +32,7 @@ def service_started(loki, *, log_level: str, platform: str) -> None:
             "event": config.LOG_EVENT_SERVICE_STARTED,
             "log_level": log_level,
             "platform": platform,
+            "gateway_ip": gateway_ip,
         },
     )
 
