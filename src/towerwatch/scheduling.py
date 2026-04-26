@@ -38,7 +38,7 @@ class Scheduler:
         cfg = cfg or config
         return cls(
             http_latency_interval_s=cfg.HTTP_LATENCY_INTERVAL_S,
-            http_throughput_tests_per_day=cfg.HTTP_THROUGHPUT_TESTS_PER_DAY,
+            http_throughput_tests_per_day=cfg.CLOUDFLARE_THROUGHPUT_TESTS_PER_DAY,
             heartbeat_interval_s=cfg.HEARTBEAT_INTERVAL_S,
         )
 

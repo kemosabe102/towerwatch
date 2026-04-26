@@ -1,6 +1,7 @@
 """
-`towerwatch-speedtest` — console entry point for manually triggering an Ookla
-speedtest and pushing results to Grafana Cloud (metric + Loki event).
+`towerwatch-speedtest` — console entry point for manually triggering a
+Cloudflare adaptive multi-stream speedtest and pushing results to Grafana
+Cloud (metric + Loki event).
 
 Designed to be invoked by `sshd`'s ForceCommand when a remote operator on the
 Tailnet logs in as `towerwatch-user`. Output is intentionally minimal — the
@@ -25,7 +26,7 @@ import time
 from towerwatch import config
 from towerwatch.clients import grafana as grafana_mod
 from towerwatch.clients import loki as loki_mod
-from towerwatch.probes.ookla import run_speedtest
+from towerwatch.probes.cloudflare import run_speedtest
 from towerwatch.tick import format_speedtest_line
 
 log = logging.getLogger("towerwatch")
@@ -115,7 +116,7 @@ def main(argv: list[str] | None = None) -> int:
 
     location = config.INFLUX_HOST_TAG
     print(
-        f"Speedtest started on {location}... (takes ~60s, uses ~400 MB)",
+        f"Speedtest started on {location}... (takes ~10-30s, uses up to ~550 MB)",
         flush=True,
     )
 

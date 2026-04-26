@@ -156,21 +156,36 @@ HTTP_LATENCY_URL = "https://speed.cloudflare.com/__down?bytes=10000"  # 10 KB
 HTTP_LATENCY_INTERVAL_S = 300  # 5 minutes
 HTTP_LATENCY_TIMEOUT_S = 30
 
-# --- HTTP Throughput Samples (random schedule, replaces Ookla for routine use) ---
-# 6 samples/day at 5 MB down + 2 MB up = ~1.3 GB/month total probe traffic.
-# Sized to fit a 3 GB/month cellular cap with margin for occasional manual
-# Ookla runs (~400 MB each). Bump cautiously — see CLAUDE.md data-budget.
-# Sample sizes are per-site overridable via credentials.py
-# (HTTP_THROUGHPUT_BYTES_OVERRIDE / HTTP_UPLOAD_BYTES_OVERRIDE). On fast links
-# (≥500 Mbps) bump them so each sample lasts long enough to clear TCP slow-start.
-HTTP_THROUGHPUT_BYTES = _load_int_credential("HTTP_THROUGHPUT_BYTES_OVERRIDE", 5_000_000)
-HTTP_THROUGHPUT_URL = f"https://speed.cloudflare.com/__down?bytes={HTTP_THROUGHPUT_BYTES}"
-HTTP_THROUGHPUT_TESTS_PER_DAY = 6  # ~4 hours apart, randomized within each slot
-HTTP_THROUGHPUT_TIMEOUT_S = 60
+# --- Cloudflare Adaptive Throughput Probe (replaces single-stream HTTP + Ookla) ---
+# Multi-stream adaptive probe against speed.cloudflare.com, faithful to the
+# protocol speed.cloudflare.com uses in-browser. 4 parallel TCP streams, ramp
+# 25 MB → 100 MB until target_s is reached, discard the first warmup_discard_s
+# of bytes from the rate calc to skip TCP slow-start.
+#
+# Data budget: each test costs up to MAX_TOTAL_BYTES per direction (download
+# + upload). At 2 tests/day with 400 MB down + 150 MB up caps that's ~33 GB/mo
+# worst case. Per-site override via credentials.CLOUDFLARE_THROUGHPUT_MAX_TOTAL_BYTES_OVERRIDE
+# lets metered sites trade accuracy for data savings.
+CLOUDFLARE_THROUGHPUT_DL_URL = "https://speed.cloudflare.com/__down"
+CLOUDFLARE_THROUGHPUT_UL_URL = "https://speed.cloudflare.com/__up"
+CLOUDFLARE_THROUGHPUT_STREAMS = 4
+CLOUDFLARE_THROUGHPUT_RAMP_BYTES = (25_000_000, 100_000_000)
+CLOUDFLARE_THROUGHPUT_MAX_TOTAL_BYTES = _load_int_credential(
+    "CLOUDFLARE_THROUGHPUT_MAX_TOTAL_BYTES_OVERRIDE", 400_000_000
+)
+CLOUDFLARE_THROUGHPUT_TARGET_S = 5.0
+CLOUDFLARE_THROUGHPUT_WARMUP_DISCARD_S = 1.5
+CLOUDFLARE_THROUGHPUT_TIMEOUT_S = 90
+CLOUDFLARE_THROUGHPUT_TESTS_PER_DAY = 2  # was 6 (single-stream); accuracy > frequency
 
-HTTP_UPLOAD_BYTES = _load_int_credential("HTTP_UPLOAD_BYTES_OVERRIDE", 2_000_000)
-HTTP_UPLOAD_URL = "https://speed.cloudflare.com/__up"
-HTTP_UPLOAD_TIMEOUT_S = 60
+# Upload caps tend to be lower than download on cellular/cable, so we use a
+# smaller default total-bytes cap and (optionally) fewer streams to avoid
+# wasting upstream while still saturating the link.
+CLOUDFLARE_UPLOAD_STREAMS = 4
+CLOUDFLARE_UPLOAD_RAMP_BYTES = (10_000_000, 50_000_000)
+CLOUDFLARE_UPLOAD_MAX_TOTAL_BYTES = _load_int_credential(
+    "CLOUDFLARE_UPLOAD_MAX_TOTAL_BYTES_OVERRIDE", 150_000_000
+)
 
 # --- Link calibration (per-site, baked into build_info tags for the dashboard) ---
 # These declare the rough expected capacity of the link so dashboards can scale

@@ -55,7 +55,7 @@
           "uid": "grafanacloud-towerwatch-prom"
         },
         "enable": true,
-        "expr": "towerwatch_connected{host=\"$location\"} == 0",
+        "expr": "max by (host) (towerwatch_connected{host=\"$location\"}) == 0",
         "hide": false,
         "iconColor": "red",
         "name": "Outages",
@@ -130,7 +130,7 @@
       },
       "targets": [
         {
-          "expr": "last_over_time(towerwatch_connected{host=\"$location\"}[5m])",
+          "expr": "max by (host) (last_over_time(towerwatch_connected{host=\"$location\"}[5m]))",
           "legendFormat": "Status",
           "refId": "A",
           "datasource": {
@@ -193,8 +193,8 @@
     {
       "gridPos": {
         "h": 4,
-        "w": 12,
-        "x": 12,
+        "w": 6,
+        "x": 18,
         "y": 0
       },
       "id": 24,
@@ -2010,7 +2010,7 @@
       },
       "targets": [
         {
-          "expr": "avg_over_time(towerwatch_connected{host=\"$location\"}[$__range]) * 100",
+          "expr": "max by (host) (avg_over_time(towerwatch_connected{host=\"$location\"}[$__range])) * 100",
           "instant": true,
           "refId": "A",
           "datasource": {
@@ -2079,7 +2079,7 @@
       },
       "targets": [
         {
-          "expr": "max(max_over_time(towerwatch_packet_loss_google{host=\"$location\"}[1h]), max_over_time(towerwatch_packet_loss_cloudflare{host=\"$location\"}[1h]))",
+          "expr": "max by (host) (max_over_time({__name__=~\"towerwatch_pkt_loss_(google|cloudflare)\", host=\"$location\"}[1h]))",
           "instant": true,
           "refId": "A",
           "datasource": {

@@ -3,8 +3,6 @@
 No patch, no monkeypatch — all collaborators injected directly.
 """
 
-import json
-
 from tests.fakes import (
     FakeClock,
     FakeCompletedProcess,
@@ -86,29 +84,11 @@ def test_http_latency_probe_returns_probe_result():
     probe = HTTPLatencyProbe(
         session=FakeSession(get_responses=[FakeResponse(content=b"x" * 10_000)]),
         clock=FakeClock(perf=[0.0, 0.080]),
-        loki=FakeLoki(),
     )
     result = probe.run()
     assert isinstance(result, ProbeResult)
     assert "http_latency_ms" in result.fields
     assert result.ok is True
-
-
-# ---------------------------------------------------------------------------
-# HTTPThroughputProbe
-# ---------------------------------------------------------------------------
-def test_http_throughput_probe_returns_probe_result():
-    from towerwatch.probes.http import HTTPThroughputProbe
-
-    probe = HTTPThroughputProbe(
-        session=FakeSession(get_responses=[FakeResponse(content=b"x" * 1_000_000)]),
-        clock=FakeClock(perf=[0.0, 1.0]),
-        loki=FakeLoki(),
-    )
-    result = probe.run()
-    assert isinstance(result, ProbeResult)
-    assert "http_throughput_ms" in result.fields
-    assert "http_throughput_mbps" in result.fields
 
 
 # ---------------------------------------------------------------------------
@@ -136,34 +116,13 @@ def test_m6_probe_returns_probe_result():
 
 
 # ---------------------------------------------------------------------------
-# OoklaProbe
-# ---------------------------------------------------------------------------
-def test_ookla_probe_returns_probe_result():
-    from towerwatch.probes.ookla import OoklaProbe
-
-    data = {"download": {"bandwidth": 50_000_000}, "upload": {"bandwidth": 10_000_000}}
-    probe = OoklaProbe(
-        binary="speedtest",
-        server_id=0,
-        timeout_s=120,
-        subprocess_run=FakeSubprocess(FakeCompletedProcess(stdout=json.dumps(data), returncode=0)),
-        loki=FakeLoki(),
-    )
-    result = probe.run()
-    assert isinstance(result, ProbeResult)
-    assert "download_mbps" in result.fields
-    assert "success" in result.fields
-    assert result.ok is True
-
-
-# ---------------------------------------------------------------------------
 # All probes have a name attribute
 # ---------------------------------------------------------------------------
 def test_all_probes_have_name():
+    from towerwatch.probes.cloudflare import CloudflareThroughputProbe
     from towerwatch.probes.dns import DNSProbe
-    from towerwatch.probes.http import HTTPLatencyProbe, HTTPThroughputProbe
+    from towerwatch.probes.http import HTTPLatencyProbe
     from towerwatch.probes.m6 import M6Probe
-    from towerwatch.probes.ookla import OoklaProbe
     from towerwatch.probes.ping import PingProbe
     from towerwatch.probes.tcp import TCPProbe
 
@@ -173,21 +132,14 @@ def test_all_probes_have_name():
         DNSProbe(
             "8.8.8.8", resolver_factory=lambda: FakeResolver(), clock=FakeClock(), loki=FakeLoki()
         ),
-        HTTPLatencyProbe(session=FakeSession(), clock=FakeClock(), loki=FakeLoki()),
-        HTTPThroughputProbe(session=FakeSession(), clock=FakeClock(), loki=FakeLoki()),
+        HTTPLatencyProbe(session=FakeSession(), clock=FakeClock()),
+        CloudflareThroughputProbe(session=FakeSession(), clock=FakeClock(), loki=FakeLoki()),
         M6Probe(
             session_factory=FakeSession,
             loki=FakeLoki(),
             url="http://fake",
             timeout_s=5,
             is_cellular=lambda: True,
-        ),
-        OoklaProbe(
-            binary="speedtest",
-            server_id=0,
-            timeout_s=120,
-            subprocess_run=FakeSubprocess(),
-            loki=FakeLoki(),
         ),
     ]
     for p in probes:

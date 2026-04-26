@@ -54,14 +54,14 @@ If the operator gave you a temporary password, paste it when prompted. The first
 ## What you'll see
 
 ```
-Speedtest started on remote-site... (takes ~60s, uses ~400 MB)
+Speedtest started on remote-site... (takes ~10-30s, uses up to ~550 MB)
 ✓ Success — results will appear on the Grafana dashboard within a minute.
 ```
 
 If something went wrong:
 
 ```
-Speedtest started on remote-site... (takes ~60s, uses ~400 MB)
+Speedtest started on remote-site... (takes ~10-30s, uses up to ~550 MB)
 ✗ Failed — contact the operator.
 ```
 
@@ -107,6 +107,8 @@ It looks like one long line starting with `ssh-ed25519 AAAA...` and ending with 
 
 After the operator confirms it's installed, run the speedtest command again — no password prompt this time.
 
-## Why ~400 MB?
+## Why ~550 MB?
 
-A proper Ookla speedtest downloads and uploads large chunks to measure the network's real capacity. On a 5G connection that means about 400 MB of data per run. The operator's data budget assumes this is rare — don't run it more than a few times a day.
+The speedtest uses Cloudflare's adaptive multi-stream protocol — 4 parallel TCP streams ramping from 25 MB to 100 MB each until either the link is saturated or a per-direction cap is hit (400 MB down + 150 MB up by default). On fast links (300+ Mbps) the test reaches steady-state in a few seconds; on slower links it does less. The operator's data budget assumes this is rare — don't run it more than a few times a day.
+
+If you used to use Ookla CLI for ISP screenshots, the `speedtest` binary is still installed on the Pi and reachable over SSH (`ssh admin@<pi> speedtest`). It just isn't wired into the dashboard anymore — the Cloudflare probe handles both auto and manual flows now.

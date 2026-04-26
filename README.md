@@ -7,7 +7,7 @@ A continuous network-quality probe for a Raspberry Pi. Ships latency, jitter, pa
 > - **Outputs:** Prometheus metrics (Influx line protocol) + structured JSON logs (Loki), both to Grafana Cloud over HTTPS.
 > - **Cadence:** 60 s main loop. Pushes batched every ~2 min.
 > - **Offline behaviour:** atomic JSONL **log** buffer on the data partition, capped at 256 KB, flushed on reconnect; metrics are not buffered.
-> - **Data cost:** ~230 MB/month at defaults — tune `config.py` if you're on a metered connection.
+> - **Data cost:** ~230 MB/month for the always-on probes, plus up to ~10 GB/month for the scheduled Cloudflare adaptive throughput probe (2 tests/day, capped per direction). Tune `config.py` / per-site `credentials.py` if you're on a metered connection.
 
 ---
 
@@ -53,7 +53,7 @@ A continuous network-quality probe for a Raspberry Pi. Ships latency, jitter, pa
 4. **Router signal** — optional; polls a router admin API for radio metrics (RSRP/RSRQ/SINR/band).
 5. **HTTP latency** — timed small (10 KB) fetch from a fast CDN. Every 5 min.
 6. **HTTP throughput** — timed 1 MB fetch, ~4x/day on a random schedule.
-7. **Ookla speedtest** — manual only (~400 MB/run at 5G speeds).
+7. **Cloudflare adaptive speedtest** — multi-stream against `speed.cloudflare.com`. Scheduled (2× day, random offset) and manual (`towerwatch-speedtest`) share the same probe. Up to ~550 MB per run; replaced the old Ookla flow.
 8. **Push metrics** — Influx line protocol to Grafana Cloud Prometheus, gzipped, batched.
 9. **Push logs** — structured JSON to Grafana Cloud Loki (fire-and-forget).
 10. **On push failure** — failed metric batches are dropped (not buffered) so uptime stays truthful; failed log payloads append to the JSONL buffer on the data partition and flush on reconnect. Gaps ≥ 10 min also POST a sticky region annotation to Grafana.
@@ -74,7 +74,7 @@ Metric names are flattened: `towerwatch_{field}_{target_label}` (e.g. `towerwatc
 | TCP connection time | Socket connect to `8.8.8.8:443` | 60 s |
 | HTTP latency | Timed 10 KB fetch | 5 min |
 | HTTP throughput sample | Timed 1 MB fetch | ~4x/day (random) |
-| Download/upload speed | Ookla CLI | manual |
+| Download/upload speed | Cloudflare adaptive multi-stream | 2× day + manual |
 | Router signal (optional) | RSRP, RSRQ, SINR, band via router admin API | 60 s |
 
 ---
@@ -292,7 +292,16 @@ Results (download/upload Mbps, tagged with the operator name) appear on the dash
 
 ## Data budget
 
-If your connection is metered, treat this as a hard constraint. At defaults the probes use roughly **230 MB/month** (batched + gzipped pushes dominate). Anything that increases traffic — new probes, larger download samples, higher frequencies, smaller batches — should be evaluated against your cap. Ookla is manual-only for this reason (~400 MB per 5G run). To run manually, call `run_speedtest()` directly from a REPL or one-off script — it is not scheduled in the main loop.
+If your connection is metered, treat this as a hard constraint. The always-on probes (ping, DNS, TCP, gateway, M6, HTTP latency, metric pushes) use roughly **230 MB/month** at defaults. The scheduled Cloudflare adaptive throughput probe runs 2× day with a hard cap of ~400 MB download + ~150 MB upload per run, so worst case ~10 GB/month. Manual `towerwatch-speedtest` runs from the same probe and use the same per-test cap.
+
+To dial down the throughput cost on a metered link, override the per-direction caps in `credentials.py`:
+
+```python
+CLOUDFLARE_THROUGHPUT_MAX_TOTAL_BYTES_OVERRIDE = 50_000_000   # 50 MB/run download
+CLOUDFLARE_UPLOAD_MAX_TOTAL_BYTES_OVERRIDE = 25_000_000       # 25 MB/run upload
+```
+
+Smaller caps trade accuracy for data — at 50 MB/run on a 300 Mbps link, slow-start eats most of the transfer and the reading will under-report by 30–50%.
 
 ---
 

@@ -19,13 +19,10 @@ from towerwatch import config as _config
 from towerwatch import events as events_mod
 from towerwatch import startup as startup_mod
 from towerwatch.clock import Clock, SystemClock
+from towerwatch.probes.cloudflare import measure_http_throughput, measure_http_upload
 from towerwatch.probes.dns import measure_dns
 from towerwatch.probes.gateway import poll_gateway
-from towerwatch.probes.http import (
-    measure_http_latency,
-    measure_http_throughput,
-    measure_http_upload,
-)
+from towerwatch.probes.http import measure_http_latency
 from towerwatch.probes.ping import run_ping
 from towerwatch.probes.tcp import measure_tcp_connect
 
