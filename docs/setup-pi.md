@@ -122,7 +122,11 @@ sudo passwd towerwatch-user   # interactive prompt; choose a fresh password
 
 Share the password with the user over a private channel (signal, password manager, in person — not email or chat). The user logs in with `ssh towerwatch-user@<pi-tailscale-ip>` and pastes the password when prompted. Rotate any time by re-running `sudo passwd towerwatch-user`.
 
-**Option B: SSH public key (recommended for ongoing use).** Ask the user to send you their public key (see `docs/manual-speedtest.md` for how they generate one — `ssh-keygen -t ed25519`). Append it to the Pi:
+**Option B: SSH public key (recommended for ongoing use).**
+
+The operator who flashed the SD card already has their key in `admin`'s `authorized_keys` (Pi OS Imager put it there). `install-pi.sh` automatically copies that file into `/home/towerwatch-user/.ssh/authorized_keys` on first run with the right ownership (`towerwatch-user:towerwatch`) and modes (700/600), so the operator can `ssh towerwatch-user@<pi>` immediately without any further setup. Re-running `install-pi.sh` later is a no-op for this file (it only seeds if the destination is empty or missing).
+
+To grant a **different** user access — someone who didn't flash the SD card — append their pubkey to the Pi:
 
 ```bash
 ssh admin@<pi-tailscale-ip>
@@ -131,7 +135,7 @@ sudo chown towerwatch-user:towerwatch /home/towerwatch-user/.ssh/authorized_keys
 sudo chmod 600 /home/towerwatch-user/.ssh/authorized_keys
 ```
 
-(The `.ssh` directory was created on first SSH login or by `install-pi.sh`. If it doesn't exist yet: `sudo mkdir -p /home/towerwatch-user/.ssh && sudo chown towerwatch-user:towerwatch /home/towerwatch-user/.ssh && sudo chmod 700 /home/towerwatch-user/.ssh` first.)
+If `/home/towerwatch-user/.ssh/` doesn't exist (the operator-key seed was skipped, e.g. because `admin` had no `authorized_keys`), create it first: `sudo install -d -o towerwatch-user -g towerwatch -m 700 /home/towerwatch-user/.ssh`.
 
 Once the key works, lock the password again so it can't be reused: `sudo passwd -l towerwatch-user`.
 

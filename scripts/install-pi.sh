@@ -158,6 +158,29 @@ else
     exit 1
 fi
 
+# Seed towerwatch-user's authorized_keys from the operator's admin account.
+# Without this, `ssh towerwatch-user@<pi>` rejects the operator's own key
+# (only `admin` got it from Pi OS Imager), and they have to either set a
+# password or re-run the manual `mkdir + tee + chown + chmod` dance from
+# docs/setup-pi.md. Idempotent: only seeds if the file is missing or empty.
+TWU_HOME="/home/towerwatch-user"
+TWU_SSH="$TWU_HOME/.ssh"
+TWU_AK="$TWU_SSH/authorized_keys"
+# Find the sudoer's home — SUDO_USER is set when install-pi.sh is run via sudo.
+OPERATOR="${SUDO_USER:-admin}"
+OPERATOR_AK=$(getent passwd "$OPERATOR" | cut -d: -f6)/.ssh/authorized_keys
+if [ ! -s "$TWU_AK" ] && [ -s "$OPERATOR_AK" ]; then
+    install -d -o towerwatch-user -g towerwatch -m 700 "$TWU_SSH"
+    install -o towerwatch-user -g towerwatch -m 600 "$OPERATOR_AK" "$TWU_AK"
+    echo "  Seeded $TWU_AK from $OPERATOR_AK"
+elif [ -s "$TWU_AK" ]; then
+    echo "  $TWU_AK already populated — leaving alone"
+else
+    echo "  WARN: $OPERATOR_AK is empty or missing; skipping authorized_keys seed."
+    echo "        Remote operators will need to install their key manually before"
+    echo "        \`ssh towerwatch-user@<pi>\` works (see docs/setup-pi.md)."
+fi
+
 # --- Mount data partition ---
 echo "[5/9] Setting up data partition..."
 mkdir -p "$DATA_MOUNT"

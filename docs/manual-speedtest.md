@@ -73,6 +73,7 @@ The actual numbers (download / upload Mbps) appear on the operator's Grafana das
 - **"Permission denied (publickey,password)"** — either the password is wrong, or your SSH key isn't installed yet. Double-check the password (case matters), or ask the operator to confirm.
 - **"Permission denied (publickey)"** without a password prompt — the operator has set this account to keys-only and your key isn't installed. Send them your public key (see [Switching to SSH keys](#switching-to-ssh-keys-recommended) below) or ask for a temporary password.
 - **No output at all, just disconnects immediately** — the operator's Pi may be missing the speedtest CLI or symlink. Ask them to redeploy with `./scripts/deploy.sh`.
+- **`ssh: unknown option -- -`** — you tried to pass a flag to the speedtest, e.g. `ssh towerwatch-user@<ip> --triggered-by alice`, and `ssh` interpreted the flag as its own. Put `--` before the speedtest args so `ssh` stops parsing options: `ssh towerwatch-user@<ip> -- --triggered-by alice`. Quoting (`"--triggered-by alice"`) does **not** help — your shell strips the quotes before `ssh` sees them.
 
 ## Switching to SSH keys (recommended)
 
