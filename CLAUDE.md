@@ -12,15 +12,17 @@ Agent-facing guide. The user-facing README is imported below and is the source o
 
 ## Post-change workflow (required after any code change)
 
-Every code change goes through **CI then CD**, in that order, run from the dev machine:
+Every code change goes through **CI → push → CD**, in that order, run from the dev machine:
 
 1. `./ci.sh` — fast mode: ruff lint + format-check, pyright, pytest, clean-tree check, stamps `src/towerwatch/_version.txt` with `<short-hash> <iso-date>`.
 2. `./ci.sh full` — fast + a 30s smoke run. Run before deploying.
-3. `./scripts/deploy.sh <user@host>` — SSHes to the Pi, `git pull --ff-only` on the current branch, `pip install --upgrade .` into `/opt/towerwatch/.venv`, then restarts the service. **Refuses to deploy** unless `src/towerwatch/_version.txt` exists and is at least as new as every `.py` under `src/`.
+3. **`git push origin <branch>`** — `scripts/deploy.sh` runs `git pull --ff-only` on the Pi against the *remote*, so any unpushed local commits silently won't ship. The Pi will report "Already up to date" and restart on the previous version. Always push before deploy.
+4. `./scripts/deploy.sh <user@host>` — SSHes to the Pi, `git pull --ff-only` on the current branch, `pip install --upgrade .` into `/opt/towerwatch/.venv`, then restarts the service. **Refuses to deploy** unless `src/towerwatch/_version.txt` exists and is at least as new as every `.py` under `src/`.
 
 Failure modes to expect:
 - **Dirty working tree** blocks stamping. Commit or stash first (or `./ci.sh fast --allow-dirty` for local experiments — do not deploy the result).
 - **`scripts/deploy.sh` says _version.txt is stale**: a `.py` changed after the last stamp. Re-run `./ci.sh`.
+- **Pi reports "Already up to date" but you just committed**: you forgot to `git push`. The version stamp shipped via SCP says new code, but `pip install` rebuilt the *old* code already on the Pi. Push, then re-run `scripts/deploy.sh`.
 
 `cd.sh` is a thin shim that execs `scripts/deploy.sh` — old muscle memory keeps working.
 
