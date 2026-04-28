@@ -127,6 +127,24 @@ def _load_int_credential(field: str, fallback: int) -> int:
         return fallback
 
 
+def _load_windows_credential(
+    field: str, fallback: list[tuple[int, int]] | None
+) -> list[tuple[int, int]] | None:
+    """Read a list-of-(start_hour, end_hour) tuples credential. Returns None
+    when the credential is missing or explicitly None, so the scheduler falls
+    back to its equal-slot default. Hours are 24-hour local time, end exclusive.
+    """
+    try:
+        from towerwatch import credentials
+
+        value = getattr(credentials, field, None)
+        if value is None:
+            return fallback
+        return [(int(s), int(e)) for s, e in value]
+    except ImportError:
+        return fallback
+
+
 # --- Probe Targets (multi-target for evidence isolation) ---
 # Each tuple: (ip, label). Labels become Prometheus tag values — must be stable strings.
 PROBE_TARGETS = [
@@ -176,7 +194,19 @@ CLOUDFLARE_THROUGHPUT_MAX_TOTAL_BYTES = _load_int_credential(
 CLOUDFLARE_THROUGHPUT_TARGET_S = 5.0
 CLOUDFLARE_THROUGHPUT_WARMUP_DISCARD_S = 1.5
 CLOUDFLARE_THROUGHPUT_TIMEOUT_S = 90
-CLOUDFLARE_THROUGHPUT_TESTS_PER_DAY = 2  # was 6 (single-stream); accuracy > frequency
+# Tests per day. Per-site override via CLOUDFLARE_THROUGHPUT_TESTS_PER_DAY_OVERRIDE.
+# Common settings: home (gigabit, low-interest variation) = 1; standstill (cellular,
+# diurnal patterns) = 3 paired with WINDOWS for morning/midday/evening sampling.
+CLOUDFLARE_THROUGHPUT_TESTS_PER_DAY = _load_int_credential(
+    "CLOUDFLARE_THROUGHPUT_TESTS_PER_DAY_OVERRIDE", 2
+)
+# Optional named time windows (24-hour local, end exclusive). When set, the
+# scheduler picks one random time within each window per day, instead of the
+# default equal-slot subdivision. Length must equal TESTS_PER_DAY when both are
+# set. Example for diurnal cellular sampling: [(6, 10), (11, 14), (17, 21)].
+CLOUDFLARE_THROUGHPUT_WINDOWS: list[tuple[int, int]] | None = _load_windows_credential(
+    "CLOUDFLARE_THROUGHPUT_WINDOWS_OVERRIDE", None
+)
 
 # Upload caps tend to be lower than download on cellular/cable, so we use a
 # smaller default total-bytes cap and (optionally) fewer streams to avoid

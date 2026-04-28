@@ -698,152 +698,6 @@
     {
       "gridPos": {
         "h": 8,
-        "w": 6,
-        "x": 12,
-        "y": 49
-      },
-      "id": 9,
-      "title": "Avg Download Speed",
-      "description": "Mean of all Ookla speedtest download samples in the selected time range. Sparse by design \u2014 runs are manual.",
-      "type": "gauge",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "grafanacloud-towerwatch-prom"
-      },
-      "targets": [
-        {
-          "expr": "avg(avg_over_time(towerwatch_speedtest_download_mbps{host=\"$location\"}[$__range]))",
-          "instant": true,
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "Mbps",
-          "min": 0,
-          "max": 1500,
-          "decimals": 1,
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "#73BF69"
-          },
-          "thresholds": {
-            "mode": "percentage",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 25
-              },
-              {
-                "color": "yellow",
-                "value": 50
-              },
-              {
-                "color": "green",
-                "value": 75
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "orientation": "auto",
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true,
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      }
-    },
-    {
-      "gridPos": {
-        "h": 8,
-        "w": 6,
-        "x": 18,
-        "y": 49
-      },
-      "id": 29,
-      "title": "Avg Upload Speed",
-      "description": "Mean of all Ookla speedtest upload samples in the selected time range. Sparse by design \u2014 runs are manual.",
-      "type": "gauge",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "grafanacloud-towerwatch-prom"
-      },
-      "targets": [
-        {
-          "expr": "avg(avg_over_time(towerwatch_speedtest_upload_mbps{host=\"$location\"}[$__range]))",
-          "instant": true,
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "Mbps",
-          "min": 0,
-          "max": 100,
-          "decimals": 1,
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "#F2CC0C"
-          },
-          "thresholds": {
-            "mode": "percentage",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 25
-              },
-              {
-                "color": "yellow",
-                "value": 50
-              },
-              {
-                "color": "green",
-                "value": 75
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "orientation": "auto",
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true,
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      }
-    },
-    {
-      "gridPos": {
-        "h": 8,
         "w": 24,
         "x": 0,
         "y": 57
@@ -1573,155 +1427,9 @@
       }
     },
     {
-      "id": 23,
-      "title": "Avg HTTP Download",
-      "description": "Mean download throughput from passive HTTP samples (6\u00d7/day, random schedule). Gauge over the dashboard time range. Sample size is per-site (HTTP_THROUGHPUT_BYTES_OVERRIDE in credentials.py).",
-      "type": "gauge",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "grafanacloud-towerwatch-prom"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 6,
-        "x": 12,
-        "y": 24
-      },
-      "targets": [
-        {
-          "expr": "avg(avg_over_time(towerwatch_http_throughput_mbps{host=\"$location\"}[$__range]))",
-          "instant": true,
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "Mbps",
-          "min": 0,
-          "max": 1500,
-          "decimals": 1,
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "#73BF69"
-          },
-          "thresholds": {
-            "mode": "percentage",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 25
-              },
-              {
-                "color": "yellow",
-                "value": 50
-              },
-              {
-                "color": "green",
-                "value": 75
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "orientation": "auto",
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true,
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      }
-    },
-    {
-      "id": 30,
-      "title": "Avg HTTP Upload",
-      "description": "Mean upload throughput from passive HTTP samples (6\u00d7/day, random schedule, paired with the download probe). Cellular uplinks are typically capacity-capped \u2014 expect a flat ceiling.",
-      "type": "gauge",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "grafanacloud-towerwatch-prom"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 6,
-        "x": 18,
-        "y": 24
-      },
-      "targets": [
-        {
-          "expr": "avg(avg_over_time(towerwatch_http_upload_mbps{host=\"$location\"}[$__range]))",
-          "instant": true,
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "Mbps",
-          "min": 0,
-          "decimals": 1,
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "#F2CC0C"
-          },
-          "max": 100,
-          "thresholds": {
-            "mode": "percentage",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 25
-              },
-              {
-                "color": "yellow",
-                "value": 50
-              },
-              {
-                "color": "green",
-                "value": 75
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "orientation": "auto",
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true,
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      }
-    },
-    {
       "id": 27,
-      "title": "Manual Speedtest History",
-      "description": "Ookla speedtest runs triggered via `towerwatch-speedtest`. Sparse by design \u2014 each run uses ~400 MB. Legend shows who triggered each run.",
+      "title": "Speedtest History (Cloudflare)",
+      "description": "Cloudflare adaptive throughput probe \u2014 both scheduled and SSH-triggered manual runs. Manual runs are labeled with the operator that triggered them.",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -1735,22 +1443,40 @@
       },
       "targets": [
         {
-          "expr": "towerwatch_speedtest_download_mbps{host=\"$location\"}",
-          "legendFormat": "Down \u00b7 {{triggered_by}}",
-          "refId": "A",
           "datasource": {
             "type": "prometheus",
             "uid": "grafanacloud-towerwatch-prom"
-          }
+          },
+          "expr": "towerwatch_http_throughput_mbps{host=\"$location\"}",
+          "legendFormat": "Down (scheduled)",
+          "refId": "A"
         },
         {
-          "expr": "towerwatch_speedtest_upload_mbps{host=\"$location\"}",
-          "legendFormat": "Up \u00b7 {{triggered_by}}",
-          "refId": "B",
           "datasource": {
             "type": "prometheus",
             "uid": "grafanacloud-towerwatch-prom"
-          }
+          },
+          "expr": "towerwatch_speedtest_download_mbps{host=\"$location\"}",
+          "legendFormat": "Down (manual: {{triggered_by}})",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          },
+          "expr": "towerwatch_http_upload_mbps{host=\"$location\"}",
+          "legendFormat": "Up (scheduled)",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          },
+          "expr": "towerwatch_speedtest_upload_mbps{host=\"$location\"}",
+          "legendFormat": "Up (manual: {{triggered_by}})",
+          "refId": "D"
         }
       ],
       "fieldConfig": {
@@ -1799,7 +1525,7 @@
     {
       "id": 31,
       "type": "row",
-      "title": "Daily Throughput Trends (30-day, calendar-day buckets)",
+      "title": "Daily Throughput Trends (14-day, calendar-day buckets)",
       "collapsed": true,
       "gridPos": {
         "h": 1,
@@ -1810,8 +1536,8 @@
       "panels": [
         {
           "id": 32,
-          "title": "Daily Avg Download Throughput (30d)",
-          "description": "One bar per calendar day, 30-day fixed window. Each bar is the mean of all towerwatch_http_throughput_mbps samples for that day. Time range is panel-fixed \u2014 does not follow the dashboard time picker.",
+          "title": "Daily Avg Download Throughput (14d)",
+          "description": "One bar per calendar day, 14-day fixed window. Each bar is the mean of all towerwatch_http_throughput_mbps samples for that day. Time range is panel-fixed \u2014 does not follow the dashboard time picker.",
           "type": "barchart",
           "datasource": {
             "type": "prometheus",
@@ -1863,12 +1589,12 @@
               "calcs": []
             }
           },
-          "timeFrom": "30d"
+          "timeFrom": "14d"
         },
         {
           "id": 33,
-          "title": "Daily Avg Upload Throughput (30d)",
-          "description": "One bar per calendar day, 30-day fixed window. Each bar is the mean of all towerwatch_http_upload_mbps samples for that day. Will appear empty until upload probe samples have accumulated.",
+          "title": "Daily Avg Upload Throughput (14d)",
+          "description": "One bar per calendar day, 14-day fixed window. Each bar is the mean of all towerwatch_http_upload_mbps samples for that day. Will appear empty until upload probe samples have accumulated.",
           "type": "barchart",
           "datasource": {
             "type": "prometheus",
@@ -1920,7 +1646,7 @@
               "calcs": []
             }
           },
-          "timeFrom": "30d"
+          "timeFrom": "14d"
         }
       ]
     },
@@ -2133,7 +1859,7 @@
     },
     {
       "id": 43,
-      "title": "Saturation (6h)",
+      "title": "Saturation Down (6h)",
       "description": "6-hour average HTTP throughput as a percentage of the plan capacity ($max_download_mbps). 30\u201380% is healthy active use; >95% means the link is saturated; near 0% means light usage. The Saturation Golden Signal.",
       "type": "stat",
       "datasource": {
@@ -2142,7 +1868,7 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
+        "w": 3,
         "x": 18,
         "y": 4
       },
@@ -2199,6 +1925,284 @@
           "values": false
         }
       }
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "percentage",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 75
+              },
+              {
+                "color": "red",
+                "value": 90
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 21,
+        "y": 4
+      },
+      "id": 47,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          },
+          "expr": "avg_over_time(towerwatch_http_upload_mbps{host=\"$location\"}[6h]) / $max_upload_mbps * 100",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Saturation Up (6h)",
+      "type": "stat",
+      "description": "Upload utilization as % of configured max."
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "green",
+            "mode": "fixed"
+          },
+          "decimals": 1,
+          "max": 1500,
+          "min": 0,
+          "thresholds": {
+            "mode": "percentage",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 25
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "green",
+                "value": 75
+              }
+            ]
+          },
+          "unit": "Mbps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 24
+      },
+      "id": 44,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          },
+          "expr": "avg(avg_over_time({__name__=~\"towerwatch_(http_throughput|speedtest_download)_mbps\", host=\"$location\"}[$__range]))",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Avg Download Speed",
+      "type": "gauge",
+      "description": "Average across both scheduled Cloudflare runs and manual speedtests, over dashboard time range."
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "yellow",
+            "mode": "fixed"
+          },
+          "decimals": 1,
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "percentage",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 25
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "green",
+                "value": 75
+              }
+            ]
+          },
+          "unit": "Mbps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 24
+      },
+      "id": 45,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          },
+          "expr": "avg(avg_over_time({__name__=~\"towerwatch_(http_upload|speedtest_upload)_mbps\", host=\"$location\"}[$__range]))",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Avg Upload Speed",
+      "type": "gauge",
+      "description": "Average across both scheduled Cloudflare runs and manual speedtests, over dashboard time range."
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 6000000000
+              },
+              {
+                "color": "red",
+                "value": 7000000000
+              }
+            ]
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 4
+      },
+      "id": 46,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          },
+          "expr": "sum(increase(towerwatch_http_throughput_bytes{host=\"$location\"}[7d])) + sum(increase(towerwatch_http_upload_bytes{host=\"$location\"}[7d])) + sum(increase(towerwatch_speedtest_download_bytes{host=\"$location\"}[7d])) + sum(increase(towerwatch_speedtest_upload_bytes{host=\"$location\"}[7d]))",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Speedtest Data (7d)",
+      "type": "stat",
+      "description": "Total bytes consumed by speedtests (scheduled + manual) over the past 7 days. Budget reference: 30 GB/month \u2248 7 GB/week."
     }
   ],
   "schemaVersion": 38,

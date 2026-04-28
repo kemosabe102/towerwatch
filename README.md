@@ -7,7 +7,7 @@ A continuous network-quality probe for a Raspberry Pi. Ships latency, jitter, pa
 > - **Outputs:** Prometheus metrics (Influx line protocol) + structured JSON logs (Loki), both to Grafana Cloud over HTTPS.
 > - **Cadence:** 60 s main loop. Pushes batched every ~2 min.
 > - **Offline behaviour:** atomic JSONL **log** buffer on the data partition, capped at 256 KB, flushed on reconnect; metrics are not buffered.
-> - **Data cost:** ~230 MB/month for the always-on probes, plus up to ~10 GB/month for the scheduled Cloudflare adaptive throughput probe (2 tests/day, capped per direction). Tune `config.py` / per-site `credentials.py` if you're on a metered connection.
+> - **Data cost:** ~230 MB/month for the always-on probes, plus the Cloudflare adaptive throughput probe at a per-site cadence (default 2/day, override via `credentials.py`). Typical sites: 1×/day on a home gigabit link, 3×/day on cellular with morning/midday/evening time-windowed sampling. Per-site allotment is 30 GB/month; the dashboard's "Speedtest Data (7d)" stat tracks actual usage.
 
 ---
 
@@ -53,7 +53,7 @@ A continuous network-quality probe for a Raspberry Pi. Ships latency, jitter, pa
 4. **Router signal** — optional; polls a router admin API for radio metrics (RSRP/RSRQ/SINR/band).
 5. **HTTP latency** — timed small (10 KB) fetch from a fast CDN. Every 5 min.
 6. **HTTP throughput** — timed 1 MB fetch, ~4x/day on a random schedule.
-7. **Cloudflare adaptive speedtest** — multi-stream against `speed.cloudflare.com`. Scheduled (2× day, random offset) and manual (`towerwatch-speedtest`) share the same probe. Up to ~550 MB per run; replaced the old Ookla flow.
+7. **Cloudflare adaptive speedtest** — multi-stream against `speed.cloudflare.com`. Scheduled cadence is per-site (default 2/day, override via `CLOUDFLARE_THROUGHPUT_TESTS_PER_DAY_OVERRIDE`; supports named time windows like morning/midday/evening via `CLOUDFLARE_THROUGHPUT_WINDOWS_OVERRIDE`). Manual SSH-triggered runs (`towerwatch-speedtest`) share the same probe. Up to ~550 MB per run; the adaptive ramp sizes transfers to measured speed so slow links naturally use less.
 8. **Push metrics** — Influx line protocol to Grafana Cloud Prometheus, gzipped, batched.
 9. **Push logs** — structured JSON to Grafana Cloud Loki (fire-and-forget).
 10. **On push failure** — failed metric batches are dropped (not buffered) so uptime stays truthful; failed log payloads append to the JSONL buffer on the data partition and flush on reconnect. Gaps ≥ 10 min also POST a sticky region annotation to Grafana.
@@ -292,16 +292,29 @@ Results (download/upload Mbps, tagged with the operator name) appear on the dash
 
 ## Data budget
 
-If your connection is metered, treat this as a hard constraint. The always-on probes (ping, DNS, TCP, gateway, M6, HTTP latency, metric pushes) use roughly **230 MB/month** at defaults. The scheduled Cloudflare adaptive throughput probe runs 2× day with a hard cap of ~400 MB download + ~150 MB upload per run, so worst case ~10 GB/month. Manual `towerwatch-speedtest` runs from the same probe and use the same per-test cap.
+If your connection is metered, treat this as a hard constraint. **Per-site allotment is 30 GB/month.** The always-on probes (ping, DNS, TCP, gateway, M6, HTTP latency, metric pushes) use roughly **230 MB/month** at defaults. The Cloudflare adaptive throughput probe is the dominant variable cost; the dashboard's "Speedtest Data (7d)" stat surfaces actual usage so you don't have to guess.
 
-To dial down the throughput cost on a metered link, override the per-direction caps in `credentials.py`:
+The primary lever is the **per-site cadence** in `credentials.<site>.py`:
+
+```python
+# Home — gigabit link, daily sanity check is enough
+CLOUDFLARE_THROUGHPUT_TESTS_PER_DAY_OVERRIDE = 1
+
+# Cellular site — diurnal patterns matter, sample 3× day in named windows
+CLOUDFLARE_THROUGHPUT_TESTS_PER_DAY_OVERRIDE = 3
+CLOUDFLARE_THROUGHPUT_WINDOWS_OVERRIDE = [(6, 10), (11, 14), (17, 21)]
+```
+
+Each window is a `(start_hour, end_hour)` pair in 24-hour local time. The scheduler picks one random time within each window per day. Length must equal `TESTS_PER_DAY`.
+
+Cloudflare's adaptive ramp sizes individual transfers to the measured speed, so byte-cap tuning is rarely needed. The escape hatches remain:
 
 ```python
 CLOUDFLARE_THROUGHPUT_MAX_TOTAL_BYTES_OVERRIDE = 50_000_000   # 50 MB/run download
 CLOUDFLARE_UPLOAD_MAX_TOTAL_BYTES_OVERRIDE = 25_000_000       # 25 MB/run upload
 ```
 
-Smaller caps trade accuracy for data — at 50 MB/run on a 300 Mbps link, slow-start eats most of the transfer and the reading will under-report by 30–50%.
+Smaller caps trade accuracy for data — at 50 MB/run on a 300 Mbps link, slow-start eats most of the transfer and the reading will under-report by 30–50%. Use these only if the cadence override alone isn't enough.
 
 ---
 

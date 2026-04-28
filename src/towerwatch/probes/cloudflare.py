@@ -408,5 +408,7 @@ def run_speedtest(
     return {
         "download_mbps": dl["http_throughput_mbps"],
         "upload_mbps": ul["http_upload_mbps"],
+        "download_bytes": dl.get("http_throughput_bytes", 0),
+        "upload_bytes": ul.get("http_upload_bytes", 0),
         "success": success,
     }

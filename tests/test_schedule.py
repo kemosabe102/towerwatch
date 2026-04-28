@@ -157,3 +157,120 @@ def test_rng_injection_controls_schedule():
     )
     s._rebuild_schedule(now)
     assert s._throughput_schedule == expected
+
+
+# ---------------------------------------------------------------------------
+# Named-window mode
+# ---------------------------------------------------------------------------
+def _midnight_today() -> float:
+    local = time_mod.localtime()
+    return time_mod.mktime(
+        time_mod.struct_time(
+            (
+                local.tm_year,
+                local.tm_mon,
+                local.tm_mday,
+                0,
+                0,
+                0,
+                0,
+                0,
+                local.tm_isdst,
+            )
+        )
+    )
+
+
+def _make_windowed_scheduler(windows, now):
+    s = Scheduler(
+        http_latency_interval_s=300,
+        http_throughput_tests_per_day=len(windows),
+        heartbeat_interval_s=3600,
+        throughput_windows=windows,
+    )
+    s._rebuild_schedule(now)
+    s._last_schedule_day = time_mod.localtime(now).tm_yday
+    return s
+
+
+def test_window_mode_produces_one_slot_per_window():
+    """3 windows → 3 scheduled slots, when called at the start of the day."""
+    midnight = _midnight_today()
+    s = _make_windowed_scheduler(windows=[(6, 10), (11, 14), (17, 21)], now=midnight + 1)
+    assert len(s._throughput_schedule) == 3
+
+
+def test_window_mode_each_slot_inside_its_window():
+    """Each scheduled slot falls inside its named window."""
+    midnight = _midnight_today()
+    windows = [(6, 10), (11, 14), (17, 21)]
+    s = _make_windowed_scheduler(windows=windows, now=midnight + 1)
+    for (start_h, end_h), ts in zip(windows, s._throughput_schedule, strict=True):
+        slot_start = midnight + start_h * 3600
+        slot_end = midnight + end_h * 3600
+        assert slot_start <= ts < slot_end
+
+
+def test_window_mode_skips_already_elapsed_windows():
+    """Service started at 18:00 — morning and midday windows are past, only evening fires."""
+    midnight = _midnight_today()
+    six_pm = midnight + 18 * 3600
+    s = _make_windowed_scheduler(windows=[(6, 10), (11, 14), (17, 21)], now=six_pm)
+    # Evening window is 17-21; we're at 18 - so 1 slot, in (18, 21).
+    assert len(s._throughput_schedule) == 1
+    ts = s._throughput_schedule[0]
+    assert six_pm <= ts < midnight + 21 * 3600
+
+
+def test_window_mode_partially_elapsed_window_starts_from_now():
+    """Service started in the middle of a window — slot is between now and window end."""
+    midnight = _midnight_today()
+    twelve_thirty = midnight + 12 * 3600 + 1800
+    s = _make_windowed_scheduler(windows=[(11, 14)], now=twelve_thirty)
+    assert len(s._throughput_schedule) == 1
+    ts = s._throughput_schedule[0]
+    assert twelve_thirty <= ts < midnight + 14 * 3600
+
+
+def test_window_mode_no_remaining_windows_yields_empty_schedule():
+    """All windows past → empty schedule for today."""
+    midnight = _midnight_today()
+    eleven_pm = midnight + 23 * 3600
+    s = _make_windowed_scheduler(windows=[(6, 10), (11, 14), (17, 21)], now=eleven_pm)
+    assert s._throughput_schedule == []
+
+
+def test_default_mode_preserved_when_windows_unset():
+    """When throughput_windows is None, equal-slot logic still works."""
+    now = time_mod.time()
+    s = Scheduler(
+        http_latency_interval_s=300,
+        http_throughput_tests_per_day=4,
+        heartbeat_interval_s=3600,
+        throughput_windows=None,
+    )
+    s._rebuild_schedule(now)
+    # 4 equal slots of 6h, only future ones kept; expect ≤4.
+    assert len(s._throughput_schedule) <= 4
+    assert all(t > now for t in s._throughput_schedule)
+
+
+def test_window_mode_uses_rng_for_each_window():
+    """RNG is called once per non-elapsed window."""
+    rng_calls = []
+
+    class TrackingRng:
+        def uniform(self, a, b):
+            rng_calls.append((a, b))
+            return (a + b) / 2
+
+    midnight = _midnight_today()
+    s = Scheduler(
+        http_latency_interval_s=300,
+        http_throughput_tests_per_day=3,
+        heartbeat_interval_s=3600,
+        throughput_windows=[(6, 10), (11, 14), (17, 21)],
+        rng=TrackingRng(),
+    )
+    s._rebuild_schedule(midnight + 1)
+    assert len(rng_calls) == 3

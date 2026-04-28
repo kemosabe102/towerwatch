@@ -135,6 +135,8 @@ def main(argv: list[str] | None = None) -> int:
         ts,
         download_mbps=result["download_mbps"],
         upload_mbps=result["upload_mbps"],
+        download_bytes=result.get("download_bytes", 0),
+        upload_bytes=result.get("upload_bytes", 0),
         triggered_by=triggered_by,
     )
     pushed = grafana.push_metrics([line])

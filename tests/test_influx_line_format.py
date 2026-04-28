@@ -171,13 +171,16 @@ def test_load_int_credential_handles_missing_field():
 
 
 def test_speedtest_line_shape():
-    """Manual speedtest line: host + triggered_by are tags; dl/ul Mbps are fields."""
+    """Manual speedtest line: host + triggered_by are tags; dl/ul Mbps and
+    bytes-used are fields. Bytes feed the dashboard's weekly-data stat."""
     from towerwatch.tick import format_speedtest_line
 
     line = format_speedtest_line(
         ts=1700000000,
         download_mbps=123.45,
         upload_mbps=45.67,
+        download_bytes=50_000_000,
+        upload_bytes=10_000_000,
         triggered_by="alice",
     )
     assert line.startswith("towerwatch,host=towerwatch,")
@@ -186,4 +189,22 @@ def test_speedtest_line_shape():
     field_section = line.split(" ")[1]
     assert "speedtest_download_mbps=123.45" in field_section
     assert "speedtest_upload_mbps=45.67" in field_section
+    assert "speedtest_download_bytes=50000000i" in field_section
+    assert "speedtest_upload_bytes=10000000i" in field_section
     assert line.endswith(" 1700000000")
+
+
+def test_speedtest_line_defaults_bytes_to_zero():
+    """Backward-compat: callers that don't pass bytes still produce a valid line
+    (bytes default to 0). Used by older code paths during the rollout."""
+    from towerwatch.tick import format_speedtest_line
+
+    line = format_speedtest_line(
+        ts=1700000000,
+        download_mbps=10.0,
+        upload_mbps=5.0,
+        triggered_by="bob",
+    )
+    field_section = line.split(" ")[1]
+    assert "speedtest_download_bytes=0i" in field_section
+    assert "speedtest_upload_bytes=0i" in field_section

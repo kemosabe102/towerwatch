@@ -109,19 +109,27 @@ def format_speedtest_line(
     download_mbps: float,
     upload_mbps: float,
     triggered_by: str,
+    download_bytes: int = 0,
+    upload_bytes: int = 0,
 ) -> str:
-    """Influx line for a manual Ookla speedtest run.
+    """Influx line for a manual Cloudflare speedtest run.
 
     `triggered_by` is emitted as a tag (not a field), matching the build_info
     pattern — Grafana Cloud Prom ingest turns tags into metric labels so
     dashboards can group/filter by operator.
+
+    `*_bytes` fields feed the dashboard's "Speedtest Data (7d)" stat — they
+    let the same query that sums scheduled-probe bytes also account for
+    operator-triggered runs.
     """
     return (
         f"{_config.INFLUX_MEASUREMENT},"
         f"{_common_tags()},"
         f"triggered_by={triggered_by} "
         f"speedtest_download_mbps={download_mbps},"
-        f"speedtest_upload_mbps={upload_mbps} {ts}"
+        f"speedtest_upload_mbps={upload_mbps},"
+        f"speedtest_download_bytes={download_bytes}i,"
+        f"speedtest_upload_bytes={upload_bytes}i {ts}"
     )
 
 

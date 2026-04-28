@@ -221,8 +221,9 @@ def test_upload_happy_path_emits_ok_event_with_bytes():
 # ---------------------------------------------------------------------------
 # run_speedtest (manual CLI entrypoint)
 # ---------------------------------------------------------------------------
-def test_run_speedtest_returns_legacy_dict_shape(monkeypatch):
-    """The CLI consumes the legacy {download_mbps, upload_mbps, success} dict."""
+def test_run_speedtest_returns_dict_with_mbps_bytes_and_success(monkeypatch):
+    """The CLI consumes mbps + bytes + success. Bytes feed the dashboard's
+    weekly-data stat by being emitted as Influx fields downstream."""
     from towerwatch.probes import cloudflare
 
     class _StubProbe:
@@ -242,7 +243,13 @@ def test_run_speedtest_returns_legacy_dict_shape(monkeypatch):
 
     monkeypatch.setattr(cloudflare, "_shared", lambda: _StubProbe())
     out = cloudflare.run_speedtest(triggered_by="alice")
-    assert out == {"download_mbps": 320.5, "upload_mbps": 35.0, "success": 1}
+    assert out == {
+        "download_mbps": 320.5,
+        "upload_mbps": 35.0,
+        "download_bytes": 200_000_000,
+        "upload_bytes": 50_000_000,
+        "success": 1,
+    }
 
 
 def test_run_speedtest_marks_failure_when_either_direction_zero(monkeypatch):
