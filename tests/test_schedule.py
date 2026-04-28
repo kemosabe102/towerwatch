@@ -274,3 +274,36 @@ def test_window_mode_uses_rng_for_each_window():
     )
     s._rebuild_schedule(midnight + 1)
     assert len(rng_calls) == 3
+
+
+def test_window_mode_log_label_pairs_with_correct_window():
+    """Regression: when windows are pruned (some already elapsed), the log line
+    must still label each scheduled slot with the window it actually belongs to,
+    not the first window in the configured list."""
+    midnight = _midnight_today()
+    six_pm = midnight + 18 * 3600
+
+    class FixedRng:
+        def uniform(self, a, b):
+            # Always return mid-window so the assertion about which window the
+            # slot belongs to is unambiguous.
+            return (a + b) / 2
+
+    s = Scheduler(
+        http_latency_interval_s=300,
+        http_throughput_tests_per_day=3,
+        heartbeat_interval_s=3600,
+        throughput_windows=[(6, 10), (11, 14), (17, 21)],
+        rng=FixedRng(),
+    )
+    paired = s._build_window_schedule(midnight, six_pm)
+    # Only the evening window survives; pair must reflect (17, 21), not (6, 10).
+    assert len(paired) == 1
+    (start_h, end_h), ts = paired[0]
+    assert (start_h, end_h) == (17, 21)
+    assert midnight + 17 * 3600 <= ts <= midnight + 21 * 3600
+    # Format string must use the evening label, not morning.
+    formatted = s._format_windowed(paired)
+    assert formatted.startswith("evening=")
+    assert "morning" not in formatted
+    assert "midday" not in formatted
