@@ -552,7 +552,7 @@
               }
             ]
           },
-          "max": 2000
+          "max": 10000
         },
         "overrides": [
           {
@@ -723,7 +723,7 @@
               }
             ]
           },
-          "max": 2000
+          "max": 10000
         },
         "overrides": [
           {
@@ -894,7 +894,7 @@
               }
             ]
           },
-          "max": 2000
+          "max": 10000
         },
         "overrides": [
           {
@@ -1035,10 +1035,10 @@
           "min": 0,
           "max": 100,
           "custom": {
-            "drawStyle": "line",
+            "drawStyle": "bars",
             "lineInterpolation": "stepAfter",
             "lineWidth": 2,
-            "fillOpacity": 0,
+            "fillOpacity": 15,
             "pointSize": 5,
             "showPoints": "auto",
             "spanNulls": 120000,
@@ -1048,7 +1048,8 @@
             },
             "thresholdsStyle": {
               "mode": "off"
-            }
+            },
+            "barAlignment": 0
           },
           "thresholds": {
             "mode": "absolute",
@@ -1460,7 +1461,7 @@
           "color": {
             "mode": "thresholds"
           },
-          "max": 2000
+          "max": 5000
         },
         "overrides": []
       },
@@ -1544,7 +1545,7 @@
           "color": {
             "mode": "thresholds"
           },
-          "max": 5000
+          "max": 30000
         },
         "overrides": []
       },
@@ -1612,7 +1613,7 @@
               "log": 2
             }
           },
-          "max": 2000
+          "max": 5000
         },
         "overrides": []
       },

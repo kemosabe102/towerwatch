@@ -51,6 +51,56 @@ def test_linux_100pct_loss_not_connected():
     assert r["connected"] is False
 
 
+# Clamping impossible RTT (artifact guard) — a ping reply cannot exceed its
+# timeout, so a parsed value above the ceiling is a measurement artifact.
+_PING_BOGUS_MAX = """\
+PING 1.1.1.1 (1.1.1.1) 56(84) bytes of data.
+64 bytes from 1.1.1.1: icmp_seq=1 ttl=58 time=12.0 ms
+64 bytes from 1.1.1.1: icmp_seq=2 ttl=58 time=510000 ms
+
+--- 1.1.1.1 ping statistics ---
+2 packets transmitted, 2 received, 0% packet loss, time 1ms
+rtt min/avg/max/mdev = 12.000/15.000/510000.000/0.100 ms
+"""
+
+
+def test_rtt_clamped_to_ceiling():
+    r = _parse(_PING_BOGUS_MAX, is_windows=False)  # no ceiling: unchanged
+    assert r["rtt_max"] == 510000
+    import towerwatch.probes.ping as ping_mod
+
+    clamped = ping_mod._parse_ping_output(_PING_BOGUS_MAX, is_windows=False, max_rtt_ms=10000)
+    assert clamped["rtt_max"] == 10000  # clamped to ping timeout ceiling
+    assert clamped["rtt_avg"] == 15  # legitimate values untouched
+    assert clamped["pkt_loss"] == 0  # loss/connected unaffected
+    assert clamped["connected"] is True
+
+
+def test_clamp_filters_bogus_sample_from_jitter():
+    """The 510000ms per-packet sample must not poison the jitter calc."""
+    import towerwatch.probes.ping as ping_mod
+
+    clamped = ping_mod._parse_ping_output(_PING_BOGUS_MAX, is_windows=False, max_rtt_ms=10000)
+    # Only the 12ms sample remains for jitter; <2 samples -> mdev fallback (0).
+    assert clamped["jitter"] == 0
+
+
+def test_pingprobe_run_clamps_to_timeout():
+    """PingProbe wires its own timeout (s) as the ceiling (ms)."""
+    from towerwatch.probes.ping import PingProbe
+
+    probe = PingProbe(
+        "1.1.1.1",
+        "cloudflare",
+        subprocess_run=FakeSubprocess(FakeCompletedProcess(stdout=_PING_BOGUS_MAX)),
+        loki=FakeLoki(),
+        count=2,
+        timeout_s=10,
+        is_windows=False,
+    )
+    assert probe.run_ping()["rtt_max"] == 10000
+
+
 # Windows
 def test_windows_subms_rtt_nonzero():
     r = _parse(_read("ping_windows_subms.txt"), is_windows=True)

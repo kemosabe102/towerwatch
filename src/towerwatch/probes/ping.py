@@ -65,8 +65,18 @@ def _calc_jitter(rtts: list[float], mdev: float) -> int:
     return round(mdev)
 
 
-def _parse_ping_output(stdout: str, is_windows: bool | None = None) -> dict:
-    """Parse ping output into {rtt_avg, rtt_min, rtt_max, jitter, pkt_loss, connected}."""
+def _parse_ping_output(
+    stdout: str, is_windows: bool | None = None, max_rtt_ms: int | None = None
+) -> dict:
+    """Parse ping output into {rtt_avg, rtt_min, rtt_max, jitter, pkt_loss, connected}.
+
+    `max_rtt_ms` is an artifact guard: a ping reply that exceeds its timeout is
+    reported by `ping` as *lost*, not as a high RTT, so any parsed RTT above the
+    ceiling is a measurement glitch (a suspended process / clock jump can emit
+    absurd values like 510000 ms). When set, RTT stats above the ceiling are
+    clamped and out-of-range per-packet samples are dropped from the jitter calc.
+    Loss / connected come from the separate `% loss` regex and are unaffected.
+    """
     if is_windows is None:
         is_windows = IS_WINDOWS
     loss_match = re.search(r"(\d+)%\s*(?:packet )?loss", stdout)
@@ -81,6 +91,12 @@ def _parse_ping_output(stdout: str, is_windows: bool | None = None) -> dict:
             rtt_min = rtt_avg = rtt_max = 1
     else:
         rtts = [float(m) for m in re.findall(r"time=([\d.]+)", stdout)]
+
+    if max_rtt_ms is not None:
+        rtt_min = min(rtt_min, max_rtt_ms)
+        rtt_avg = min(rtt_avg, max_rtt_ms)
+        rtt_max = min(rtt_max, max_rtt_ms)
+        rtts = [r for r in rtts if r <= max_rtt_ms]
 
     return {
         "rtt_avg": rtt_avg,
@@ -143,7 +159,11 @@ class PingProbe:
                 error=str(e),
             )
             return _zero_result()
-        return _parse_ping_output(result.stdout, is_windows=self._is_windows)
+        return _parse_ping_output(
+            result.stdout,
+            is_windows=self._is_windows,
+            max_rtt_ms=self._timeout_s * 1000,
+        )
 
     def run(self) -> ProbeResult:
         fields_raw = self.run_ping()

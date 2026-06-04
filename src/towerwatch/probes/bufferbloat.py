@@ -94,7 +94,11 @@ class LatencyUnderLoadSampler:
             )
         except (subprocess.TimeoutExpired, OSError):
             return {"rtt_avg": 0, "connected": False}
-        return _parse_ping_output(result.stdout, is_windows=self._is_windows)
+        return _parse_ping_output(
+            result.stdout,
+            is_windows=self._is_windows,
+            max_rtt_ms=self._timeout_s * 1000,
+        )
 
     def _single_ping_ms(self) -> int | None:
         """One ping. Returns RTT in ms, or None if it failed/timed out."""
