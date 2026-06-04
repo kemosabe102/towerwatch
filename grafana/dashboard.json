@@ -116,7 +116,7 @@
     {
       "gridPos": {
         "h": 4,
-        "w": 12,
+        "w": 9,
         "x": 0,
         "y": 0
       },
@@ -191,6 +191,213 @@
       }
     },
     {
+      "id": 40,
+      "title": "Latency (1h avg)",
+      "description": "Average ping RTT to 8.8.8.8 over the last hour. The Latency Golden Signal \u2014 high values mean the link is slow regardless of throughput.",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 9,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "avg(avg_over_time(towerwatch_rtt_avg_google{host=\"$location\"}[1h]))",
+          "instant": true,
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "decimals": 1,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "red",
+                "value": 150
+              }
+            ]
+          },
+          "noValue": "\u2014"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 41,
+      "title": "Uptime (range %)",
+      "description": "Percentage of time the link reported connected=1 over the dashboard time range. The Traffic Golden Signal. Replaces the broken Connection Uptime panel \u2014 uses avg_over_time directly so sub-5-min outages aren't masked.",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "max by (host) (avg_over_time(towerwatch_connected{host=\"$location\"}[$__range])) * 100",
+          "instant": true,
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 95
+              },
+              {
+                "color": "green",
+                "value": 99
+              }
+            ]
+          },
+          "noValue": "\u2014"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 42,
+      "title": "Packet Loss (1h max)",
+      "description": "Highest packet-loss percentage to Google or Cloudflare over the last hour. Excludes gateway loss (often legitimately high on cellular). The Errors Golden Signal.",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 15,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "max by (host) (max_over_time({__name__=~\"towerwatch_pkt_loss_(google|cloudflare)\", host=\"$location\"}[1h]))",
+          "instant": true,
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "noValue": "\u2014"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
       "gridPos": {
         "h": 4,
         "w": 6,
@@ -253,679 +460,17 @@
       }
     },
     {
+      "collapsed": false,
       "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 32
-      },
-      "id": 4,
-      "title": "Packet Loss",
-      "description": "Percentage of TCP probes that failed per 30-second cycle",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "grafanacloud-towerwatch-prom"
-      },
-      "targets": [
-        {
-          "expr": "towerwatch_pkt_loss_google{host=\"$location\"}",
-          "legendFormat": "Google",
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        },
-        {
-          "expr": "towerwatch_pkt_loss_cloudflare{host=\"$location\"}",
-          "legendFormat": "Cloudflare",
-          "refId": "B",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        },
-        {
-          "expr": "towerwatch_pkt_loss_gateway{host=\"$location\"}",
-          "legendFormat": "Gateway",
-          "refId": "C",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "min": 0,
-          "max": 100,
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "stepAfter",
-            "lineWidth": 2,
-            "fillOpacity": 0,
-            "pointSize": 5,
-            "showPoints": "auto",
-            "spanNulls": 120000,
-            "axisBorderShow": false,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 10
-              },
-              {
-                "color": "orange",
-                "value": 25
-              },
-              {
-                "color": "red",
-                "value": 50
-              }
-            ]
-          },
-          "color": {
-            "mode": "fixed"
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Google"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#73BF69"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Cloudflare"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#F2CC0C"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Gateway"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#FF9830"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        }
-      }
-    },
-    {
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 16
-      },
-      "id": 6,
-      "title": "DNS Resolution Time",
-      "description": "DNS query time per nameserver (bypasses local cache)",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "grafanacloud-towerwatch-prom"
-      },
-      "targets": [
-        {
-          "expr": "towerwatch_dns_resolve_ms_8_8_8_8{host=\"$location\"}",
-          "legendFormat": "Google (8.8.8.8)",
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        },
-        {
-          "expr": "towerwatch_dns_resolve_ms_1_1_1_1{host=\"$location\"}",
-          "legendFormat": "Cloudflare (1.1.1.1)",
-          "refId": "B",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          },
-          "editorMode": "code",
-          "expr": "towerwatch_dns_resolve_ms_198_224_166_135{host=\"$location\"}",
-          "legendFormat": "Verizon (198.224.166.135)",
-          "range": true,
-          "refId": "C"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ms",
-          "min": 0,
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "fillOpacity": 6,
-            "pointSize": 5,
-            "showPoints": "auto",
-            "spanNulls": false,
-            "scaleDistribution": {
-              "type": "log",
-              "log": 2
-            },
-            "thresholdsStyle": {
-              "mode": "area"
-            }
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 100
-              },
-              {
-                "color": "red",
-                "value": 500
-              }
-            ]
-          },
-          "color": {
-            "mode": "palette-classic"
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Google (8.8.8.8)"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#73BF69"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Cloudflare (1.1.1.1)"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#F2CC0C"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        }
-      }
-    },
-    {
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 16
-      },
-      "id": 7,
-      "title": "TCP Connection Time",
-      "description": "TCP handshake time to 8.8.8.8:443",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "grafanacloud-towerwatch-prom"
-      },
-      "targets": [
-        {
-          "expr": "towerwatch_tcp_connect_ms{host=\"$location\"}",
-          "legendFormat": "TCP Connect",
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ms",
-          "min": 0,
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "fillOpacity": 6,
-            "pointSize": 5,
-            "showPoints": "auto",
-            "spanNulls": false,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "thresholdsStyle": {
-              "mode": "area"
-            }
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 100
-              },
-              {
-                "color": "red",
-                "value": 500
-              }
-            ]
-          },
-          "color": {
-            "mode": "thresholds"
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        }
-      }
-    },
-    {
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 24
-      },
-      "id": 8,
-      "title": "HTTP Latency Probe",
-      "description": "Timed 10KB download from Cloudflare CDN (every 5 min)",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "grafanacloud-towerwatch-prom"
-      },
-      "targets": [
-        {
-          "expr": "towerwatch_http_latency_ms{host=\"$location\"}",
-          "legendFormat": "Latency",
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ms",
-          "min": 0,
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "fillOpacity": 6,
-            "pointSize": 5,
-            "showPoints": "auto",
-            "spanNulls": false,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "thresholdsStyle": {
-              "mode": "area"
-            }
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 500
-              },
-              {
-                "color": "red",
-                "value": 2000
-              }
-            ]
-          },
-          "color": {
-            "mode": "thresholds"
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        }
-      }
-    },
-    {
-      "gridPos": {
-        "h": 8,
+        "h": 1,
         "w": 24,
         "x": 0,
-        "y": 57
+        "y": 4
       },
-      "id": 12,
-      "title": "M6 Signal Quality",
-      "description": "Nighthawk M6 signal metrics: RSRP, RSRQ, SINR",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "grafanacloud-towerwatch-prom"
-      },
-      "targets": [
-        {
-          "expr": "towerwatch_m6_rsrp{host=\"$location\"}",
-          "legendFormat": "RSRP (dBm)",
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        },
-        {
-          "expr": "towerwatch_m6_rsrq{host=\"$location\"}",
-          "legendFormat": "RSRQ (dB)",
-          "refId": "B",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        },
-        {
-          "expr": "towerwatch_m6_sinr{host=\"$location\"}",
-          "legendFormat": "SINR (dB)",
-          "refId": "C",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "dB",
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "fillOpacity": 0,
-            "pointSize": 5,
-            "showPoints": "auto",
-            "spanNulls": false,
-            "scaleDistribution": {
-              "type": "linear"
-            }
-          },
-          "color": {
-            "mode": "palette-classic"
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "calcs": [
-            "mean",
-            "min",
-            "max"
-          ]
-        }
-      }
-    },
-    {
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 32
-      },
-      "id": 26,
-      "title": "Gateway Health",
-      "description": "TCP connect and HTTP response time to the local gateway. Works on any router \u2014 always populated regardless of vendor.",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "grafanacloud-towerwatch-prom"
-      },
-      "targets": [
-        {
-          "expr": "towerwatch_gateway_tcp_ms{host=\"$location\"}",
-          "legendFormat": "TCP to Gateway",
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        },
-        {
-          "expr": "towerwatch_gateway_http_ms{host=\"$location\"}",
-          "legendFormat": "HTTP to Gateway",
-          "refId": "B",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ms",
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 10,
-            "scaleDistribution": {
-              "type": "log",
-              "log": 2
-            }
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        }
-      }
-    },
-    {
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 40
-      },
-      "id": 25,
-      "title": "Service Restarts",
-      "description": "All service restarts (planned deploys and unplanned crashes) in the selected time range.",
-      "type": "logs",
-      "datasource": {
-        "type": "loki",
-        "uid": "grafanacloud-towerwatch-logs"
-      },
-      "targets": [
-        {
-          "expr": "{job=\"towerwatch\", host=\"$location\", level=\"info\"} | json | event=`service_restarted` | line_format \"{{.version}}  {{.build_date}}  {{.platform}}\"",
-          "refId": "A",
-          "datasource": {
-            "type": "loki",
-            "uid": "grafanacloud-towerwatch-logs"
-          },
-          "queryType": "range"
-        }
-      ],
-      "options": {
-        "showTime": true,
-        "showLabels": false,
-        "showCommonLabels": false,
-        "wrapLogMessage": false,
-        "prettifyLogMessage": false,
-        "enableLogDetails": false,
-        "sortOrder": "Descending",
-        "dedupStrategy": "none"
-      }
-    },
-    {
-      "id": 13,
-      "title": "Towerwatch Event Log",
-      "type": "logs",
-      "datasource": {
-        "type": "loki",
-        "uid": "grafanacloud-towerwatch-logs"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "grafanacloud-towerwatch-logs"
-          },
-          "editorMode": "code",
-          "expr": "{job=\"towerwatch\", host=\"$location\"} | json",
-          "queryType": "range",
-          "refId": "A"
-        }
-      ],
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 40
-      },
-      "options": {
-        "showLabels": false,
-        "showTime": true,
-        "wrapLogMessage": true,
-        "enableLogDetails": true,
-        "dedupStrategy": "none",
-        "sortOrder": "Descending",
-        "prettifyLogMessage": false,
-        "showCommonLabels": false
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      }
+      "id": 60,
+      "panels": [],
+      "title": "Latency, Loss & Reachability",
+      "type": "row"
     },
     {
       "id": 20,
@@ -939,7 +484,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 8
+        "y": 5
       },
       "targets": [
         {
@@ -1109,7 +654,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 8
+        "y": 5
       },
       "targets": [
         {
@@ -1279,7 +824,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 8
+        "y": 5
       },
       "targets": [
         {
@@ -1438,793 +983,15 @@
       }
     },
     {
-      "id": 27,
-      "title": "Speedtest History (Cloudflare)",
-      "description": "Cloudflare adaptive throughput probe \u2014 both scheduled and SSH-triggered manual runs. Manual runs are labeled with the operator that triggered them.",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "grafanacloud-towerwatch-prom"
-      },
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 49
+        "y": 13
       },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          },
-          "expr": "towerwatch_http_throughput_mbps{host=\"$location\"}",
-          "legendFormat": "Down (scheduled)",
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          },
-          "expr": "towerwatch_speedtest_download_mbps{host=\"$location\"}",
-          "legendFormat": "Down (manual: {{triggered_by}})",
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          },
-          "expr": "towerwatch_http_upload_mbps{host=\"$location\"}",
-          "legendFormat": "Up (scheduled)",
-          "refId": "C"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          },
-          "expr": "towerwatch_speedtest_upload_mbps{host=\"$location\"}",
-          "legendFormat": "Up (manual: {{triggered_by}})",
-          "refId": "D"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "Mbps",
-          "min": 0,
-          "custom": {
-            "drawStyle": "points",
-            "pointSize": 10,
-            "showPoints": "always",
-            "spanNulls": false,
-            "lineWidth": 0,
-            "fillOpacity": 0
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull",
-            "mean",
-            "max"
-          ]
-        }
-      }
-    },
-    {
-      "id": 28,
-      "type": "row",
-      "title": "Sparse & Manual (may show No data)",
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 48
-      }
-    },
-    {
-      "id": 31,
-      "type": "row",
-      "title": "Daily Throughput Trends (14-day, calendar-day buckets)",
-      "collapsed": true,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 65
-      },
-      "panels": [
-        {
-          "id": 32,
-          "title": "Daily Avg Download Throughput (14d)",
-          "description": "One bar per calendar day, 14-day fixed window. Each bar is the mean of all towerwatch_http_throughput_mbps samples for that day. Time range is panel-fixed \u2014 does not follow the dashboard time picker.",
-          "type": "barchart",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          },
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 0,
-            "y": 66
-          },
-          "targets": [
-            {
-              "expr": "avg_over_time(towerwatch_http_throughput_mbps{host=\"$location\"}[1d])",
-              "legendFormat": "Download",
-              "refId": "A",
-              "interval": "1d",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "grafanacloud-towerwatch-prom"
-              }
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "Mbps",
-              "min": 0,
-              "decimals": 1,
-              "color": {
-                "mode": "fixed",
-                "fixedColor": "#73BF69"
-              },
-              "noValue": "\u2014"
-            },
-            "overrides": []
-          },
-          "options": {
-            "orientation": "vertical",
-            "xTickLabelRotation": -45,
-            "showValue": "auto",
-            "stacking": "none",
-            "tooltip": {
-              "mode": "single",
-              "sort": "none"
-            },
-            "legend": {
-              "displayMode": "hidden",
-              "placement": "bottom",
-              "calcs": []
-            }
-          },
-          "timeFrom": "14d"
-        },
-        {
-          "id": 33,
-          "title": "Daily Avg Upload Throughput (14d)",
-          "description": "One bar per calendar day, 14-day fixed window. Each bar is the mean of all towerwatch_http_upload_mbps samples for that day. Will appear empty until upload probe samples have accumulated.",
-          "type": "barchart",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          },
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 12,
-            "y": 66
-          },
-          "targets": [
-            {
-              "expr": "avg_over_time(towerwatch_http_upload_mbps{host=\"$location\"}[1d])",
-              "legendFormat": "Upload",
-              "refId": "A",
-              "interval": "1d",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "grafanacloud-towerwatch-prom"
-              }
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "Mbps",
-              "min": 0,
-              "decimals": 1,
-              "color": {
-                "mode": "fixed",
-                "fixedColor": "#F2CC0C"
-              },
-              "noValue": "\u2014"
-            },
-            "overrides": []
-          },
-          "options": {
-            "orientation": "vertical",
-            "xTickLabelRotation": -45,
-            "showValue": "auto",
-            "stacking": "none",
-            "tooltip": {
-              "mode": "single",
-              "sort": "none"
-            },
-            "legend": {
-              "displayMode": "hidden",
-              "placement": "bottom",
-              "calcs": []
-            }
-          },
-          "timeFrom": "14d"
-        }
-      ]
-    },
-    {
-      "id": 40,
-      "title": "Latency (1h avg)",
-      "description": "Average ping RTT to 8.8.8.8 over the last hour. The Latency Golden Signal \u2014 high values mean the link is slow regardless of throughput.",
-      "type": "stat",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "grafanacloud-towerwatch-prom"
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 0,
-        "y": 4
-      },
-      "targets": [
-        {
-          "expr": "avg(avg_over_time(towerwatch_rtt_avg_google{host=\"$location\"}[1h]))",
-          "instant": true,
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ms",
-          "decimals": 1,
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 50
-              },
-              {
-                "color": "red",
-                "value": 150
-              }
-            ]
-          },
-          "noValue": "\u2014"
-        },
-        "overrides": []
-      },
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "textMode": "auto",
-        "justifyMode": "center",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      }
-    },
-    {
-      "id": 41,
-      "title": "Uptime (range %)",
-      "description": "Percentage of time the link reported connected=1 over the dashboard time range. The Traffic Golden Signal. Replaces the broken Connection Uptime panel \u2014 uses avg_over_time directly so sub-5-min outages aren't masked.",
-      "type": "stat",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "grafanacloud-towerwatch-prom"
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 6,
-        "y": 4
-      },
-      "targets": [
-        {
-          "expr": "max by (host) (avg_over_time(towerwatch_connected{host=\"$location\"}[$__range])) * 100",
-          "instant": true,
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "decimals": 1,
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 95
-              },
-              {
-                "color": "green",
-                "value": 99
-              }
-            ]
-          },
-          "noValue": "\u2014"
-        },
-        "overrides": []
-      },
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "textMode": "auto",
-        "justifyMode": "center",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      }
-    },
-    {
-      "id": 42,
-      "title": "Packet Loss (1h max)",
-      "description": "Highest packet-loss percentage to Google or Cloudflare over the last hour. Excludes gateway loss (often legitimately high on cellular). The Errors Golden Signal.",
-      "type": "stat",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "grafanacloud-towerwatch-prom"
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 12,
-        "y": 4
-      },
-      "targets": [
-        {
-          "expr": "max by (host) (max_over_time({__name__=~\"towerwatch_pkt_loss_(google|cloudflare)\", host=\"$location\"}[1h]))",
-          "instant": true,
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "decimals": 1,
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 1
-              },
-              {
-                "color": "red",
-                "value": 5
-              }
-            ]
-          },
-          "noValue": "\u2014"
-        },
-        "overrides": []
-      },
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "textMode": "auto",
-        "justifyMode": "center",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      }
-    },
-    {
-      "id": 43,
-      "title": "Saturation Down (6h)",
-      "description": "6-hour average HTTP throughput as a percentage of the plan capacity ($max_download_mbps). 30\u201380% is healthy active use; >95% means the link is saturated; near 0% means light usage. The Saturation Golden Signal.",
-      "type": "stat",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "grafanacloud-towerwatch-prom"
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 3,
-        "x": 18,
-        "y": 4
-      },
-      "targets": [
-        {
-          "expr": "avg_over_time(towerwatch_http_throughput_mbps{host=\"$location\"}[6h]) / $max_download_mbps * 100",
-          "instant": true,
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "decimals": 1,
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 80
-              },
-              {
-                "color": "red",
-                "value": 95
-              }
-            ]
-          },
-          "noValue": "\u2014"
-        },
-        "overrides": []
-      },
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "textMode": "auto",
-        "justifyMode": "center",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      }
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "grafanacloud-towerwatch-prom"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "decimals": 0,
-          "mappings": [],
-          "thresholds": {
-            "mode": "percentage",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 75
-              },
-              {
-                "color": "red",
-                "value": 90
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 3,
-        "x": 21,
-        "y": 4
-      },
-      "id": 47,
-      "options": {
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          },
-          "expr": "avg_over_time(towerwatch_http_upload_mbps{host=\"$location\"}[6h]) / $max_upload_mbps * 100",
-          "instant": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Saturation Up (6h)",
-      "type": "stat",
-      "description": "Upload utilization as % of configured max."
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "grafanacloud-towerwatch-prom"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "fixedColor": "green",
-            "mode": "fixed"
-          },
-          "decimals": 1,
-          "max": 1500,
-          "min": 0,
-          "thresholds": {
-            "mode": "percentage",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 25
-              },
-              {
-                "color": "yellow",
-                "value": 50
-              },
-              {
-                "color": "green",
-                "value": 75
-              }
-            ]
-          },
-          "unit": "Mbps"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 6,
-        "x": 12,
-        "y": 24
-      },
-      "id": 44,
-      "options": {
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          },
-          "expr": "avg(avg_over_time({__name__=~\"towerwatch_(http_throughput|speedtest_download)_mbps\", host=\"$location\"}[$__range]))",
-          "instant": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Avg Download Speed",
-      "type": "gauge",
-      "description": "Average across both scheduled Cloudflare runs and manual speedtests, over dashboard time range."
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "grafanacloud-towerwatch-prom"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "fixedColor": "yellow",
-            "mode": "fixed"
-          },
-          "decimals": 1,
-          "max": 100,
-          "min": 0,
-          "thresholds": {
-            "mode": "percentage",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 25
-              },
-              {
-                "color": "yellow",
-                "value": 50
-              },
-              {
-                "color": "green",
-                "value": 75
-              }
-            ]
-          },
-          "unit": "Mbps"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 6,
-        "x": 18,
-        "y": 24
-      },
-      "id": 45,
-      "options": {
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          },
-          "expr": "avg(avg_over_time({__name__=~\"towerwatch_(http_upload|speedtest_upload)_mbps\", host=\"$location\"}[$__range]))",
-          "instant": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Avg Upload Speed",
-      "type": "gauge",
-      "description": "Average across both scheduled Cloudflare runs and manual speedtests, over dashboard time range."
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "grafanacloud-towerwatch-prom"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "decimals": 2,
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 6000000000
-              },
-              {
-                "color": "red",
-                "value": 7000000000
-              }
-            ]
-          },
-          "unit": "bytes"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 18,
-        "y": 4
-      },
-      "id": 46,
-      "options": {
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          },
-          "expr": "sum(increase(towerwatch_http_throughput_bytes{host=\"$location\"}[7d])) + sum(increase(towerwatch_http_upload_bytes{host=\"$location\"}[7d])) + sum(increase(towerwatch_speedtest_download_bytes{host=\"$location\"}[7d])) + sum(increase(towerwatch_speedtest_upload_bytes{host=\"$location\"}[7d]))",
-          "instant": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Speedtest Data (7d)",
-      "type": "stat",
-      "description": "Total bytes consumed by speedtests (scheduled + manual) over the past 7 days. Budget reference: 30 GB/month \u2248 7 GB/week."
-    },
-    {
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 74
-      },
-      "id": 50,
-      "title": "M6 Carrier Aggregation",
-      "description": "Total aggregated downlink spectrum and number of component carriers. A drop here (e.g. 3 carriers -> 1) is a throughput cliff that would otherwise be misattributed.",
+      "id": 4,
+      "title": "Packet Loss",
+      "description": "Percentage of TCP probes that failed per 30-second cycle",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -2232,8 +999,8 @@
       },
       "targets": [
         {
-          "expr": "towerwatch_m6_agg_dl_bandwidth_mhz{host=\"$location\"}",
-          "legendFormat": "Aggregated DL bandwidth (MHz)",
+          "expr": "towerwatch_pkt_loss_google{host=\"$location\"}",
+          "legendFormat": "Google",
           "refId": "A",
           "datasource": {
             "type": "prometheus",
@@ -2241,101 +1008,8 @@
           }
         },
         {
-          "expr": "towerwatch_m6_carrier_count{host=\"$location\"}",
-          "legendFormat": "Carrier count",
-          "refId": "B",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "min": 0,
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "fillOpacity": 6,
-            "pointSize": 5,
-            "showPoints": "auto",
-            "spanNulls": false,
-            "scaleDistribution": {
-              "type": "log",
-              "log": 2
-            },
-            "thresholdsStyle": {
-              "mode": "area"
-            }
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 100
-              },
-              {
-                "color": "red",
-                "value": 500
-              }
-            ]
-          },
-          "color": {
-            "mode": "palette-classic"
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        }
-      }
-    },
-    {
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 74
-      },
-      "id": 51,
-      "title": "M6 Serving Cell (PCC)",
-      "description": "Primary-carrier PCI / band and serving eNB. A change in PCC PCI or eNB ID is a handover / cell reselection - correlate with latency or throughput dips.",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "grafanacloud-towerwatch-prom"
-      },
-      "targets": [
-        {
-          "expr": "towerwatch_m6_pcc_pci{host=\"$location\"}",
-          "legendFormat": "PCC PCI",
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        },
-        {
-          "expr": "towerwatch_m6_pcc_band{host=\"$location\"}",
-          "legendFormat": "PCC band",
+          "expr": "towerwatch_pkt_loss_cloudflare{host=\"$location\"}",
+          "legendFormat": "Cloudflare",
           "refId": "B",
           "datasource": {
             "type": "prometheus",
@@ -2343,8 +1017,8 @@
           }
         },
         {
-          "expr": "towerwatch_m6_enb_id{host=\"$location\"}",
-          "legendFormat": "eNB ID",
+          "expr": "towerwatch_pkt_loss_gateway{host=\"$location\"}",
+          "legendFormat": "Gateway",
           "refId": "C",
           "datasource": {
             "type": "prometheus",
@@ -2354,22 +1028,23 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "percent",
           "min": 0,
+          "max": 100,
           "custom": {
             "drawStyle": "line",
-            "lineInterpolation": "smooth",
+            "lineInterpolation": "stepAfter",
             "lineWidth": 2,
-            "fillOpacity": 6,
+            "fillOpacity": 0,
             "pointSize": 5,
             "showPoints": "auto",
-            "spanNulls": false,
+            "spanNulls": 120000,
+            "axisBorderShow": false,
             "scaleDistribution": {
-              "type": "log",
-              "log": 2
+              "type": "linear"
             },
             "thresholdsStyle": {
-              "mode": "area"
+              "mode": "off"
             }
           },
           "thresholds": {
@@ -2381,103 +1056,69 @@
               },
               {
                 "color": "yellow",
-                "value": 100
+                "value": 10
+              },
+              {
+                "color": "orange",
+                "value": 25
               },
               {
                 "color": "red",
-                "value": 500
+                "value": 50
               }
             ]
           },
           "color": {
-            "mode": "palette-classic"
+            "mode": "fixed"
           }
         },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        }
-      }
-    },
-    {
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 82
-      },
-      "id": 52,
-      "title": "M6 Thermal State",
-      "description": "Device thermal state. Hotspots in sunny windows thermally throttle - a common hidden cause of afternoon slowdowns.",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "grafanacloud-towerwatch-prom"
-      },
-      "targets": [
-        {
-          "expr": "towerwatch_m6_thermal_state{host=\"$location\"}",
-          "legendFormat": "Thermal state (0=Normal,1=Warm,2=Hot,3=Critical)",
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "min": 0,
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "fillOpacity": 6,
-            "pointSize": 5,
-            "showPoints": "auto",
-            "spanNulls": false,
-            "scaleDistribution": {
-              "type": "log",
-              "log": 2
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Google"
             },
-            "thresholdsStyle": {
-              "mode": "area"
-            }
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
+            "properties": [
               {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 100
-              },
-              {
-                "color": "red",
-                "value": 500
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#73BF69"
+                }
               }
             ]
           },
-          "color": {
-            "mode": "palette-classic"
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Cloudflare"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#F2CC0C"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Gateway"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
           }
-        },
-        "overrides": []
+        ]
       },
       "options": {
         "tooltip": {
@@ -2499,7 +1140,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 82
+        "y": 13
       },
       "id": 53,
       "title": "Bufferbloat (latency under load)",
@@ -2612,6 +1253,1391 @@
             "max"
           ]
         }
+      }
+    },
+    {
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 21
+      },
+      "id": 6,
+      "title": "DNS Resolution Time",
+      "description": "DNS query time per nameserver (bypasses local cache)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "targets": [
+        {
+          "expr": "towerwatch_dns_resolve_ms_8_8_8_8{host=\"$location\"}",
+          "legendFormat": "Google (8.8.8.8)",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "towerwatch_dns_resolve_ms_1_1_1_1{host=\"$location\"}",
+          "legendFormat": "Cloudflare (1.1.1.1)",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          },
+          "editorMode": "code",
+          "expr": "towerwatch_dns_resolve_ms_198_224_166_135{host=\"$location\"}",
+          "legendFormat": "Verizon (198.224.166.135)",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 6,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "scaleDistribution": {
+              "type": "log",
+              "log": 2
+            },
+            "thresholdsStyle": {
+              "mode": "area"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 100
+              },
+              {
+                "color": "red",
+                "value": 500
+              }
+            ]
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Google (8.8.8.8)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#73BF69"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Cloudflare (1.1.1.1)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#F2CC0C"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 21
+      },
+      "id": 7,
+      "title": "TCP Connection Time",
+      "description": "TCP handshake time to 8.8.8.8:443",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "targets": [
+        {
+          "expr": "towerwatch_tcp_connect_ms{host=\"$location\"}",
+          "legendFormat": "TCP Connect",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 6,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "thresholdsStyle": {
+              "mode": "area"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 100
+              },
+              {
+                "color": "red",
+                "value": 500
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 29
+      },
+      "id": 8,
+      "title": "HTTP Latency Probe",
+      "description": "Timed 10KB download from Cloudflare CDN (every 5 min)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "targets": [
+        {
+          "expr": "towerwatch_http_latency_ms{host=\"$location\"}",
+          "legendFormat": "Latency",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 6,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "thresholdsStyle": {
+              "mode": "area"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 500
+              },
+              {
+                "color": "red",
+                "value": 2000
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 29
+      },
+      "id": 26,
+      "title": "Gateway Health",
+      "description": "TCP connect and HTTP response time to the local gateway. Works on any router \u2014 always populated regardless of vendor.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "targets": [
+        {
+          "expr": "towerwatch_gateway_tcp_ms{host=\"$location\"}",
+          "legendFormat": "TCP to Gateway",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "towerwatch_gateway_http_ms{host=\"$location\"}",
+          "legendFormat": "HTTP to Gateway",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "scaleDistribution": {
+              "type": "log",
+              "log": 2
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 37
+      },
+      "id": 61,
+      "panels": [],
+      "title": "Throughput & Speedtests",
+      "type": "row"
+    },
+    {
+      "id": 43,
+      "title": "Saturation Down (6h)",
+      "description": "6-hour average HTTP throughput as a percentage of the plan capacity ($max_download_mbps). 30\u201380% is healthy active use; >95% means the link is saturated; near 0% means light usage. The Saturation Golden Signal.",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 0,
+        "y": 38
+      },
+      "targets": [
+        {
+          "expr": "avg_over_time(towerwatch_http_throughput_mbps{host=\"$location\"}[6h]) / $max_download_mbps * 100",
+          "instant": true,
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 80
+              },
+              {
+                "color": "red",
+                "value": 95
+              }
+            ]
+          },
+          "noValue": "\u2014"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "percentage",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 75
+              },
+              {
+                "color": "red",
+                "value": 90
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 8,
+        "y": 38
+      },
+      "id": 47,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          },
+          "expr": "avg_over_time(towerwatch_http_upload_mbps{host=\"$location\"}[6h]) / $max_upload_mbps * 100",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Saturation Up (6h)",
+      "type": "stat",
+      "description": "Upload utilization as % of configured max."
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 6000000000
+              },
+              {
+                "color": "red",
+                "value": 7000000000
+              }
+            ]
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 16,
+        "y": 38
+      },
+      "id": 46,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          },
+          "expr": "sum(increase(towerwatch_http_throughput_bytes{host=\"$location\"}[7d])) + sum(increase(towerwatch_http_upload_bytes{host=\"$location\"}[7d])) + sum(increase(towerwatch_speedtest_download_bytes{host=\"$location\"}[7d])) + sum(increase(towerwatch_speedtest_upload_bytes{host=\"$location\"}[7d]))",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Speedtest Data (7d)",
+      "type": "stat",
+      "description": "Total bytes consumed by speedtests (scheduled + manual) over the past 7 days. Budget reference: 30 GB/month \u2248 7 GB/week."
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "green",
+            "mode": "fixed"
+          },
+          "decimals": 1,
+          "max": 1500,
+          "min": 0,
+          "thresholds": {
+            "mode": "percentage",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 25
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "green",
+                "value": 75
+              }
+            ]
+          },
+          "unit": "Mbps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 42
+      },
+      "id": 44,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          },
+          "expr": "avg(avg_over_time({__name__=~\"towerwatch_(http_throughput|speedtest_download)_mbps\", host=\"$location\"}[$__range]))",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Avg Download Speed",
+      "type": "gauge",
+      "description": "Average across both scheduled Cloudflare runs and manual speedtests, over dashboard time range."
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "yellow",
+            "mode": "fixed"
+          },
+          "decimals": 1,
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "percentage",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 25
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "green",
+                "value": 75
+              }
+            ]
+          },
+          "unit": "Mbps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 42
+      },
+      "id": 45,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          },
+          "expr": "avg(avg_over_time({__name__=~\"towerwatch_(http_upload|speedtest_upload)_mbps\", host=\"$location\"}[$__range]))",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Avg Upload Speed",
+      "type": "gauge",
+      "description": "Average across both scheduled Cloudflare runs and manual speedtests, over dashboard time range."
+    },
+    {
+      "id": 27,
+      "title": "Speedtest History (Cloudflare)",
+      "description": "Cloudflare adaptive throughput probe \u2014 both scheduled and SSH-triggered manual runs. Manual runs are labeled with the operator that triggered them.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 50
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          },
+          "expr": "towerwatch_http_throughput_mbps{host=\"$location\"}",
+          "legendFormat": "Down (scheduled)",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          },
+          "expr": "towerwatch_speedtest_download_mbps{host=\"$location\"}",
+          "legendFormat": "Down (manual: {{triggered_by}})",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          },
+          "expr": "towerwatch_http_upload_mbps{host=\"$location\"}",
+          "legendFormat": "Up (scheduled)",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          },
+          "expr": "towerwatch_speedtest_upload_mbps{host=\"$location\"}",
+          "legendFormat": "Up (manual: {{triggered_by}})",
+          "refId": "D"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Mbps",
+          "min": 0,
+          "custom": {
+            "drawStyle": "points",
+            "pointSize": 10,
+            "showPoints": "always",
+            "spanNulls": false,
+            "lineWidth": 0,
+            "fillOpacity": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "id": 32,
+      "title": "Daily Avg Download Throughput (14d)",
+      "description": "One bar per calendar day, 14-day fixed window. Each bar is the mean of all towerwatch_http_throughput_mbps samples for that day. Time range is panel-fixed \u2014 does not follow the dashboard time picker.",
+      "type": "barchart",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 58
+      },
+      "targets": [
+        {
+          "expr": "avg_over_time(towerwatch_http_throughput_mbps{host=\"$location\"}[1d])",
+          "legendFormat": "Download",
+          "refId": "A",
+          "interval": "1d",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Mbps",
+          "min": 0,
+          "decimals": 1,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#73BF69"
+          },
+          "noValue": "\u2014"
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "vertical",
+        "xTickLabelRotation": -45,
+        "showValue": "auto",
+        "stacking": "none",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "legend": {
+          "displayMode": "hidden",
+          "placement": "bottom",
+          "calcs": []
+        }
+      },
+      "timeFrom": "14d"
+    },
+    {
+      "id": 33,
+      "title": "Daily Avg Upload Throughput (14d)",
+      "description": "One bar per calendar day, 14-day fixed window. Each bar is the mean of all towerwatch_http_upload_mbps samples for that day. Will appear empty until upload probe samples have accumulated.",
+      "type": "barchart",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 58
+      },
+      "targets": [
+        {
+          "expr": "avg_over_time(towerwatch_http_upload_mbps{host=\"$location\"}[1d])",
+          "legendFormat": "Upload",
+          "refId": "A",
+          "interval": "1d",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Mbps",
+          "min": 0,
+          "decimals": 1,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#F2CC0C"
+          },
+          "noValue": "\u2014"
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "vertical",
+        "xTickLabelRotation": -45,
+        "showValue": "auto",
+        "stacking": "none",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "legend": {
+          "displayMode": "hidden",
+          "placement": "bottom",
+          "calcs": []
+        }
+      },
+      "timeFrom": "14d"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 66
+      },
+      "id": 62,
+      "panels": [],
+      "title": "Cellular Radio (M6)",
+      "type": "row"
+    },
+    {
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 67
+      },
+      "id": 12,
+      "title": "M6 Signal Quality",
+      "description": "Nighthawk M6 signal metrics: RSRP, RSRQ, SINR",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "targets": [
+        {
+          "expr": "towerwatch_m6_rsrp{host=\"$location\"}",
+          "legendFormat": "RSRP (dBm)",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "towerwatch_m6_rsrq{host=\"$location\"}",
+          "legendFormat": "RSRQ (dB)",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "towerwatch_m6_sinr{host=\"$location\"}",
+          "legendFormat": "SINR (dB)",
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dB",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "min",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 67
+      },
+      "id": 50,
+      "title": "M6 Carrier Aggregation",
+      "description": "Total aggregated downlink spectrum and number of component carriers. A drop here (e.g. 3 carriers -> 1) is a throughput cliff that would otherwise be misattributed.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "targets": [
+        {
+          "expr": "towerwatch_m6_agg_dl_bandwidth_mhz{host=\"$location\"}",
+          "legendFormat": "Aggregated DL bandwidth (MHz)",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "towerwatch_m6_carrier_count{host=\"$location\"}",
+          "legendFormat": "Carrier count",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 6,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "scaleDistribution": {
+              "type": "log",
+              "log": 2
+            },
+            "thresholdsStyle": {
+              "mode": "area"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 100
+              },
+              {
+                "color": "red",
+                "value": 500
+              }
+            ]
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 75
+      },
+      "id": 51,
+      "title": "M6 Serving Cell (PCC)",
+      "description": "Primary-carrier PCI / band and serving eNB. A change in PCC PCI or eNB ID is a handover / cell reselection - correlate with latency or throughput dips.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "targets": [
+        {
+          "expr": "towerwatch_m6_pcc_pci{host=\"$location\"}",
+          "legendFormat": "PCC PCI",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "towerwatch_m6_pcc_band{host=\"$location\"}",
+          "legendFormat": "PCC band",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "towerwatch_m6_enb_id{host=\"$location\"}",
+          "legendFormat": "eNB ID",
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 6,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "scaleDistribution": {
+              "type": "log",
+              "log": 2
+            },
+            "thresholdsStyle": {
+              "mode": "area"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 100
+              },
+              {
+                "color": "red",
+                "value": 500
+              }
+            ]
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 75
+      },
+      "id": 52,
+      "title": "M6 Thermal State",
+      "description": "Device thermal state. Hotspots in sunny windows thermally throttle - a common hidden cause of afternoon slowdowns.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "targets": [
+        {
+          "expr": "towerwatch_m6_thermal_state{host=\"$location\"}",
+          "legendFormat": "Thermal state (0=Normal,1=Warm,2=Hot,3=Critical)",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 6,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "scaleDistribution": {
+              "type": "log",
+              "log": 2
+            },
+            "thresholdsStyle": {
+              "mode": "area"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 100
+              },
+              {
+                "color": "red",
+                "value": 500
+              }
+            ]
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 83
+      },
+      "id": 63,
+      "panels": [],
+      "title": "Logs & Events",
+      "type": "row"
+    },
+    {
+      "id": 13,
+      "title": "Towerwatch Event Log",
+      "type": "logs",
+      "datasource": {
+        "type": "loki",
+        "uid": "grafanacloud-towerwatch-logs"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "grafanacloud-towerwatch-logs"
+          },
+          "editorMode": "code",
+          "expr": "{job=\"towerwatch\", host=\"$location\"} | json",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 84
+      },
+      "options": {
+        "showLabels": false,
+        "showTime": true,
+        "wrapLogMessage": true,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending",
+        "prettifyLogMessage": false,
+        "showCommonLabels": false
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 84
+      },
+      "id": 25,
+      "title": "Service Restarts",
+      "description": "All service restarts (planned deploys and unplanned crashes) in the selected time range.",
+      "type": "logs",
+      "datasource": {
+        "type": "loki",
+        "uid": "grafanacloud-towerwatch-logs"
+      },
+      "targets": [
+        {
+          "expr": "{job=\"towerwatch\", host=\"$location\", level=\"info\"} | json | event=`service_restarted` | line_format \"{{.version}}  {{.build_date}}  {{.platform}}\"",
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "grafanacloud-towerwatch-logs"
+          },
+          "queryType": "range"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": false,
+        "prettifyLogMessage": false,
+        "enableLogDetails": false,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none"
       }
     }
   ],
