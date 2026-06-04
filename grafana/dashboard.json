@@ -345,7 +345,7 @@
       },
       "targets": [
         {
-          "expr": "max by (host) (max_over_time({__name__=~\"towerwatch_pkt_loss_(google|cloudflare)\", host=\"$location\"}[1h]))",
+          "expr": "max_over_time((max without (__name__) ({__name__=~\"towerwatch_pkt_loss_(google|cloudflare)\", host=\"$location\"}))[1h:1m])",
           "instant": true,
           "refId": "A",
           "datasource": {
