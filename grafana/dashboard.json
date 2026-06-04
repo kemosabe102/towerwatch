@@ -2380,8 +2380,8 @@
       },
       "id": 51,
       "title": "M6 Serving Cell (PCC)",
-      "description": "Primary-carrier PCI / band and serving eNB. A change in PCC PCI or eNB ID is a handover / cell reselection - correlate with latency or throughput dips.",
-      "type": "timeseries",
+      "description": "Serving-cell identifiers as state bands: each row holds steady while you're on a cell and changes colour/value at a handover or reselection. Watch for frequent PCI/eNB flips correlating with latency or throughput dips.",
+      "type": "state-timeline",
       "datasource": {
         "type": "prometheus",
         "uid": "grafanacloud-towerwatch-prom"
@@ -2417,58 +2417,40 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "min": 0,
           "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "stepAfter",
-            "lineWidth": 2,
-            "fillOpacity": 0,
-            "pointSize": 5,
-            "showPoints": "auto",
-            "spanNulls": false,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
+            "lineWidth": 0,
+            "fillOpacity": 80
           },
+          "color": {
+            "mode": "continuous-GrYlRd"
+          },
+          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 100
-              },
-              {
-                "color": "red",
-                "value": 500
+                "value": null,
+                "color": "green"
               }
             ]
           },
-          "color": {
-            "mode": "palette-classic"
-          }
+          "unit": "short"
         },
         "overrides": []
       },
       "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
+        "mergeValues": true,
+        "showValue": "auto",
+        "alignValue": "left",
+        "rowHeight": 0.9,
         "legend": {
           "displayMode": "list",
           "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max"
-          ]
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
         }
       }
     },
