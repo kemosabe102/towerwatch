@@ -85,6 +85,17 @@ def test_m6_parses_live_standstill_fixture():
     assert result["m6_enb_id"] == 1403
     assert result["m6_sector_id"] == 16
 
+    # Thermal state enum ("Normal" → 0)
+    assert result["m6_thermal_state"] == 0
+
+    # Per-carrier band info (lteBandInfo: 4 real carriers 10+20+10+10 MHz,
+    # last list entry is the {} sentinel and is ignored)
+    assert result["m6_carrier_count"] == 4
+    assert result["m6_agg_dl_bandwidth_mhz"] == 50
+    assert result["m6_pcc_band"] == 66
+    assert result["m6_pcc_bandwidth_mhz"] == 10
+    assert result["m6_pcc_pci"] == 81  # phyCid "81"
+
 
 # ---------------------------------------------------------------------------
 # Connection-type gate
@@ -190,6 +201,82 @@ def test_m6_ca_count_excludes_sentinel():
     result = probe.poll()
     assert result["m6_ca_scc_count"] == 2
     assert result["m6_ca_scc_declared"] == 2
+
+
+# ---------------------------------------------------------------------------
+# Thermal state
+# ---------------------------------------------------------------------------
+def test_m6_thermal_state_normal():
+    model = {"wwan": {"thermalState": "Normal"}}
+    probe, _ = _build_probe(responses=[_ok_resp(model)])
+    assert probe.poll()["m6_thermal_state"] == 0
+
+
+def test_m6_thermal_state_unknown_falls_back_to_zero():
+    model = {"wwan": {"thermalState": "SomethingNew"}}
+    probe, _ = _build_probe(responses=[_ok_resp(model)])
+    assert probe.poll()["m6_thermal_state"] == 0
+
+
+def test_m6_thermal_state_absent_omitted():
+    model = {"wwan": {"signalStrength": {"rsrp": -90}}}
+    probe, _ = _build_probe(responses=[_ok_resp(model)])
+    assert "m6_thermal_state" not in probe.poll()
+
+
+# ---------------------------------------------------------------------------
+# Per-carrier band info (lteBandInfo)
+# ---------------------------------------------------------------------------
+def test_m6_band_info_aggregates_bandwidth_and_counts_carriers():
+    model = {
+        "wwan": {
+            "lteBandInfo": [
+                {"band": 66, "dlBandwidth": "10MHz", "phyCid": "81", "sccId": 0, "isPcc": True},
+                {"band": 66, "dlBandwidth": "20MHz", "phyCid": "81", "sccId": 1, "isPcc": False},
+                {"band": 2, "dlBandwidth": "10MHz", "phyCid": "81", "sccId": 2, "isPcc": False},
+                {},  # sentinel
+            ]
+        }
+    }
+    probe, _ = _build_probe(responses=[_ok_resp(model)])
+    result = probe.poll()
+    assert result["m6_carrier_count"] == 3
+    assert result["m6_agg_dl_bandwidth_mhz"] == 40
+    assert result["m6_pcc_band"] == 66
+    assert result["m6_pcc_bandwidth_mhz"] == 10
+    assert result["m6_pcc_pci"] == 81
+
+
+def test_m6_band_info_absent_omits_keys():
+    model = {"wwan": {"signalStrength": {"rsrp": -90}}}
+    probe, _ = _build_probe(responses=[_ok_resp(model)])
+    result = probe.poll()
+    for key in (
+        "m6_carrier_count",
+        "m6_agg_dl_bandwidth_mhz",
+        "m6_pcc_band",
+        "m6_pcc_bandwidth_mhz",
+        "m6_pcc_pci",
+    ):
+        assert key not in result
+
+
+def test_m6_band_info_no_pcc_flag_falls_back_to_first_entry():
+    """If no entry is flagged isPcc, the first real carrier is treated as PCC."""
+    model = {
+        "wwan": {
+            "lteBandInfo": [
+                {"band": 13, "dlBandwidth": "5MHz", "phyCid": "42", "sccId": 0},
+                {},
+            ]
+        }
+    }
+    probe, _ = _build_probe(responses=[_ok_resp(model)])
+    result = probe.poll()
+    assert result["m6_carrier_count"] == 1
+    assert result["m6_agg_dl_bandwidth_mhz"] == 5
+    assert result["m6_pcc_band"] == 13
+    assert result["m6_pcc_pci"] == 42
 
 
 # ---------------------------------------------------------------------------

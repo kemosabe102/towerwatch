@@ -19,7 +19,7 @@ from towerwatch import config as _config
 from towerwatch import events as events_mod
 from towerwatch import startup as startup_mod
 from towerwatch.clock import Clock, SystemClock
-from towerwatch.probes.cloudflare import measure_http_throughput, measure_http_upload
+from towerwatch.probes.bufferbloat import measure_throughput_with_bufferbloat
 from towerwatch.probes.dns import measure_dns
 from towerwatch.probes.gateway import poll_gateway
 from towerwatch.probes.http import measure_http_latency
@@ -174,9 +174,9 @@ def collect_probes(ctx: TickContext) -> tuple[dict, bool]:
         fields["http_latency_ms"] = measure_http_latency()
     if ctx.scheduler and ctx.scheduler.should_run_throughput(now):
         # Download + upload run back-to-back on the same scheduler tick so both
-        # directions get matched cadence and a single time-series row.
-        fields.update(measure_http_throughput())
-        fields.update(measure_http_upload())
+        # directions get matched cadence and a single time-series row. Latency is
+        # sampled concurrently for the bufferbloat (latency-under-load) deltas.
+        fields.update(measure_throughput_with_bufferbloat())
 
     return fields, any_connected
 

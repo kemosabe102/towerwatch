@@ -162,7 +162,10 @@ TCP_TARGET_PORT = 443
 TCP_TIMEOUT_S = 5
 
 # --- DNS Resolution ---
-DNS_TARGETS = ["8.8.8.8", "1.1.1.1"]
+# Google + Cloudflare public resolvers, plus Verizon's resolver for an A/B
+# comparison — if the carrier resolver is the source of multi-second DNS spikes,
+# the per-resolver series (dns_resolve_ms_198_224_166_135) will show it.
+DNS_TARGETS = ["8.8.8.8", "1.1.1.1", "198.224.166.135"]
 DNS_QUERY_DOMAIN = "example.com"
 DNS_TIMEOUT_S = 5
 
@@ -207,6 +210,17 @@ CLOUDFLARE_THROUGHPUT_TESTS_PER_DAY = _load_int_credential(
 CLOUDFLARE_THROUGHPUT_WINDOWS: list[tuple[int, int]] | None = _load_windows_credential(
     "CLOUDFLARE_THROUGHPUT_WINDOWS_OVERRIDE", None
 )
+
+# --- Bufferbloat / latency-under-load ---
+# Piggybacks the scheduled Cloudflare throughput run: a background thread pings
+# BUFFERBLOAT_TARGET while the download (then upload) saturates the link, and we
+# compare the loaded RTT against an idle baseline taken just before. Zero extra
+# data cost beyond the ICMP traffic, which is negligible. Fires at the throughput
+# cadence (~2/day), so it adds nothing meaningful to the data budget.
+BUFFERBLOAT_TARGET = "8.8.8.8"
+BUFFERBLOAT_PING_INTERVAL_S = 0.25  # spacing between in-load ping samples
+BUFFERBLOAT_BASELINE_COUNT = 5  # pings in the idle baseline burst
+BUFFERBLOAT_PING_TIMEOUT_S = 2  # per single-ping timeout
 
 # Upload caps tend to be lower than download on cellular/cable, so we use a
 # smaller default total-bytes cap and (optionally) fewer streams to avoid

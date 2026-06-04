@@ -438,6 +438,17 @@
             "type": "prometheus",
             "uid": "grafanacloud-towerwatch-prom"
           }
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          },
+          "editorMode": "code",
+          "expr": "towerwatch_dns_resolve_ms_198_224_166_135{host=\"$location\"}",
+          "legendFormat": "Verizon (198.224.166.135)",
+          "range": true,
+          "refId": "C"
         }
       ],
       "fieldConfig": {
@@ -2203,6 +2214,405 @@
       "title": "Speedtest Data (7d)",
       "type": "stat",
       "description": "Total bytes consumed by speedtests (scheduled + manual) over the past 7 days. Budget reference: 30 GB/month \u2248 7 GB/week."
+    },
+    {
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 74
+      },
+      "id": 50,
+      "title": "M6 Carrier Aggregation",
+      "description": "Total aggregated downlink spectrum and number of component carriers. A drop here (e.g. 3 carriers -> 1) is a throughput cliff that would otherwise be misattributed.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "targets": [
+        {
+          "expr": "towerwatch_m6_agg_dl_bandwidth_mhz{host=\"$location\"}",
+          "legendFormat": "Aggregated DL bandwidth (MHz)",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "towerwatch_m6_carrier_count{host=\"$location\"}",
+          "legendFormat": "Carrier count",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 6,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "scaleDistribution": {
+              "type": "log",
+              "log": 2
+            },
+            "thresholdsStyle": {
+              "mode": "area"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 100
+              },
+              {
+                "color": "red",
+                "value": 500
+              }
+            ]
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 74
+      },
+      "id": 51,
+      "title": "M6 Serving Cell (PCC)",
+      "description": "Primary-carrier PCI / band and serving eNB. A change in PCC PCI or eNB ID is a handover / cell reselection - correlate with latency or throughput dips.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "targets": [
+        {
+          "expr": "towerwatch_m6_pcc_pci{host=\"$location\"}",
+          "legendFormat": "PCC PCI",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "towerwatch_m6_pcc_band{host=\"$location\"}",
+          "legendFormat": "PCC band",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "towerwatch_m6_enb_id{host=\"$location\"}",
+          "legendFormat": "eNB ID",
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 6,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "scaleDistribution": {
+              "type": "log",
+              "log": 2
+            },
+            "thresholdsStyle": {
+              "mode": "area"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 100
+              },
+              {
+                "color": "red",
+                "value": 500
+              }
+            ]
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 82
+      },
+      "id": 52,
+      "title": "M6 Thermal State",
+      "description": "Device thermal state. Hotspots in sunny windows thermally throttle - a common hidden cause of afternoon slowdowns.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "targets": [
+        {
+          "expr": "towerwatch_m6_thermal_state{host=\"$location\"}",
+          "legendFormat": "Thermal state (0=Normal,1=Warm,2=Hot,3=Critical)",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 6,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "scaleDistribution": {
+              "type": "log",
+              "log": 2
+            },
+            "thresholdsStyle": {
+              "mode": "area"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 100
+              },
+              {
+                "color": "red",
+                "value": 500
+              }
+            ]
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 82
+      },
+      "id": 53,
+      "title": "Bufferbloat (latency under load)",
+      "description": "RTT idle vs. under download/upload load, plus the deltas. A large delta means bufferbloat (our own traffic inflating latency); a flat delta with bad absolute latency points at the carrier.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "targets": [
+        {
+          "expr": "towerwatch_bufferbloat_rtt_idle_ms{host=\"$location\"}",
+          "legendFormat": "Idle",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "towerwatch_bufferbloat_rtt_download_ms{host=\"$location\"}",
+          "legendFormat": "Loaded (download)",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "towerwatch_bufferbloat_rtt_upload_ms{host=\"$location\"}",
+          "legendFormat": "Loaded (upload)",
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "towerwatch_bufferbloat_download_delta_ms{host=\"$location\"}",
+          "legendFormat": "Delta download",
+          "refId": "D",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "towerwatch_bufferbloat_upload_delta_ms{host=\"$location\"}",
+          "legendFormat": "Delta upload",
+          "refId": "E",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 6,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "scaleDistribution": {
+              "type": "log",
+              "log": 2
+            },
+            "thresholdsStyle": {
+              "mode": "area"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 100
+              },
+              {
+                "color": "red",
+                "value": 500
+              }
+            ]
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      }
     }
   ],
   "schemaVersion": 38,

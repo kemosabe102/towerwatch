@@ -69,6 +69,35 @@ def _bool_int(v: Any) -> int | None:
     return 1 if bool(v) else 0
 
 
+def _bandwidth_mhz(v: Any) -> int | None:
+    """`dlBandwidth` is a string like '10MHz' or '20MHz' (occasionally a bare
+    '50') — extract the leading integer count of MHz."""
+    if v is None:
+        return None
+    digits = "".join(ch for ch in str(v) if ch.isdigit())
+    return int(digits) if digits else None
+
+
+# Thermal-state enum → small int code so a state-timeline panel can colour by
+# severity. Only "Normal" is seen on the live fixture; higher codes are reserved
+# for values a live dump on a hot device reveals (warm/hot/critical throttle).
+_THERMAL_CODE = {
+    "": 0,
+    "Normal": 0,
+    "Warm": 1,
+    "High": 1,
+    "Hot": 2,
+    "Critical": 3,
+}
+
+
+def _thermal_int(v: Any) -> int | None:
+    """Map `wwan.thermalState` enum string to a code; unknown strings → 0."""
+    if v is None:
+        return None
+    return _THERMAL_CODE.get(str(v).strip(), 0)
+
+
 # Each entry: (metric_field, [path_alternatives], converter).
 # Paths are tuples of nested keys.
 _FIELD_MAP: list[tuple[str, list[tuple[str | int, ...]], Any]] = [
@@ -99,6 +128,8 @@ _FIELD_MAP: list[tuple[str, list[tuple[str | int, ...]], Any]] = [
     ("m6_lte_attached", [("wwan", "diagInfo", 0, "lteAttached")], _bool_int),
     ("m6_nr5g_attached", [("wwan", "diagInfo", 0, "nr5gAttached")], _bool_int),
     ("m6_endc_enabled", [("wwan", "diagInfo", 0, "endcEnabledConfig")], _bool_int),
+    # --- Device thermal state ---
+    ("m6_thermal_state", [("wwan", "thermalState")], _thermal_int),
 ]
 
 
@@ -148,6 +179,55 @@ def _extract_ca_fields(model: dict) -> dict:
         n = _safe_int(declared)
         if n is not None:
             out["m6_ca_scc_declared"] = n
+    return out
+
+
+def _extract_band_info(model: dict) -> dict:
+    """Extract per-component-carrier band + channel-bandwidth detail.
+
+    `wwan.lteBandInfo` is a list, one entry per aggregated carrier (the last
+    entry is the `{}` sentinel, same convention as `wwan.ca.SCClist`). Each real
+    entry carries `band`, `dlBandwidth` ("10MHz"), `phyCid` (the physical cell
+    ID), and `isPcc`/`sccId` (the primary carrier is `isPcc==True`, falling back
+    to `sccId==0`).
+
+    Emits the aggregate spectrum picture — `m6_carrier_count` and
+    `m6_agg_dl_bandwidth_mhz` are the throughput-cliff signal (3 carriers → 1
+    drops the aggregate bandwidth directly) — plus the primary cell's band,
+    bandwidth, and PCI (`m6_pcc_pci` is the handover/reselection signal).
+
+    Returns {} (not zeros) when `lteBandInfo` is absent so a partial payload
+    doesn't fabricate a fake "0 carriers".
+    """
+    out: dict = {}
+    band_info = _walk(model, ("wwan", "lteBandInfo"))
+    if not isinstance(band_info, list):
+        return out
+    carriers = [e for e in band_info if isinstance(e, dict) and e.get("band") is not None]
+    if not carriers:
+        return out
+
+    out["m6_carrier_count"] = len(carriers)
+    agg = 0
+    for e in carriers:
+        bw = _bandwidth_mhz(e.get("dlBandwidth"))
+        if bw is not None:
+            agg += bw
+    out["m6_agg_dl_bandwidth_mhz"] = agg
+
+    # Primary carrier: prefer the isPcc flag, fall back to sccId==0, then first.
+    pcc = next((e for e in carriers if e.get("isPcc")), None)
+    if pcc is None:
+        pcc = next((e for e in carriers if _safe_int(e.get("sccId")) == 0), carriers[0])
+    pcc_band = _safe_int(pcc.get("band"))
+    if pcc_band is not None:
+        out["m6_pcc_band"] = pcc_band
+    pcc_bw = _bandwidth_mhz(pcc.get("dlBandwidth"))
+    if pcc_bw is not None:
+        out["m6_pcc_bandwidth_mhz"] = pcc_bw
+    pcc_pci = _safe_int(pcc.get("phyCid"))
+    if pcc_pci is not None:
+        out["m6_pcc_pci"] = pcc_pci
     return out
 
 
@@ -285,6 +365,7 @@ class M6Probe:
 
         fields = _extract_fields(model)
         fields.update(_extract_ca_fields(model))
+        fields.update(_extract_band_info(model))
         fields.update(_extract_service_type(model))
         fields.update(_derive_tower_fields(fields))
         return fields
