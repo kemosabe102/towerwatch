@@ -2479,8 +2479,8 @@
         "y": 75
       },
       "id": 52,
-      "title": "M6 Thermal State",
-      "description": "Device thermal state. Hotspots in sunny windows thermally throttle - a common hidden cause of afternoon slowdowns.",
+      "title": "M6 Device Temperature",
+      "description": "Numeric chassis temperature from the M6 (\u00b0C). The prime suspect for afternoon thermal throttling \u2014 watch it climb in a sunny window.",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -2488,8 +2488,8 @@
       },
       "targets": [
         {
-          "expr": "towerwatch_m6_thermal_state{host=\"$location\"}",
-          "legendFormat": "Thermal state (0=Normal,1=Warm,2=Hot,3=Critical)",
+          "expr": "towerwatch_m6_dev_temperature{host=\"$location\"}",
+          "legendFormat": "Device temp (\u00b0C)",
           "refId": "A",
           "datasource": {
             "type": "prometheus",
@@ -2499,13 +2499,13 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "min": 0,
+          "unit": "celsius",
+          "min": 20,
           "custom": {
             "drawStyle": "line",
-            "lineInterpolation": "stepAfter",
+            "lineInterpolation": "smooth",
             "lineWidth": 2,
-            "fillOpacity": 12,
+            "fillOpacity": 10,
             "pointSize": 5,
             "showPoints": "auto",
             "spanNulls": false,
@@ -2524,15 +2524,15 @@
                 "color": "green"
               },
               {
-                "value": 1,
+                "value": 65,
                 "color": "yellow"
               },
               {
-                "value": 2,
+                "value": 75,
                 "color": "orange"
               },
               {
-                "value": 3,
+                "value": 85,
                 "color": "red"
               }
             ]
@@ -2540,34 +2540,7 @@
           "color": {
             "mode": "palette-classic"
           },
-          "max": 3,
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "Normal",
-                  "color": "green",
-                  "index": 0
-                },
-                "1": {
-                  "text": "Warm",
-                  "color": "yellow",
-                  "index": 1
-                },
-                "2": {
-                  "text": "Hot",
-                  "color": "orange",
-                  "index": 2
-                },
-                "3": {
-                  "text": "Critical",
-                  "color": "red",
-                  "index": 3
-                }
-              }
-            }
-          ]
+          "max": 95
         },
         "overrides": []
       },

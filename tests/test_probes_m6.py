@@ -204,6 +204,42 @@ def test_m6_ca_count_excludes_sentinel():
 
 
 # ---------------------------------------------------------------------------
+# Device telemetry (general / power sections)
+# ---------------------------------------------------------------------------
+def test_m6_device_temperature_numeric():
+    """general.devTemperature is the real numeric device temp (°C, metric)."""
+    model = {"general": {"devTemperature": 61, "useMetricSystem": True}}
+    probe, _ = _build_probe(responses=[_ok_resp(model)])
+    assert probe.poll()["m6_dev_temperature"] == 61
+
+
+def test_m6_device_temp_critical_flag():
+    model = {"power": {"deviceTempCritical": True}}
+    probe, _ = _build_probe(responses=[_ok_resp(model)])
+    assert probe.poll()["m6_dev_temp_critical"] == 1
+
+
+def test_m6_ethernet_speed_parsed_to_mbps():
+    model = {"power": {"ethernetSpeed": "1000M"}}
+    probe, _ = _build_probe(responses=[_ok_resp(model)])
+    assert probe.poll()["m6_eth_speed_mbps"] == 1000
+
+
+def test_m6_uptime_seconds():
+    model = {"general": {"upTime": 6926342}}
+    probe, _ = _build_probe(responses=[_ok_resp(model)])
+    assert probe.poll()["m6_uptime_s"] == 6926342
+
+
+def test_m6_device_fields_absent_omitted():
+    model = {"wwan": {"signalStrength": {"rsrp": -90}}}
+    probe, _ = _build_probe(responses=[_ok_resp(model)])
+    result = probe.poll()
+    for key in ("m6_dev_temperature", "m6_dev_temp_critical", "m6_eth_speed_mbps", "m6_uptime_s"):
+        assert key not in result
+
+
+# ---------------------------------------------------------------------------
 # Thermal state
 # ---------------------------------------------------------------------------
 def test_m6_thermal_state_normal():

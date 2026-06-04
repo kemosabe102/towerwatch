@@ -78,6 +78,14 @@ def _bandwidth_mhz(v: Any) -> int | None:
     return int(digits) if digits else None
 
 
+def _digits_int(v: Any) -> int | None:
+    """Extract the integer from a unit-suffixed string like '1000M' → 1000."""
+    if v is None:
+        return None
+    digits = "".join(ch for ch in str(v) if ch.isdigit())
+    return int(digits) if digits else None
+
+
 # Thermal-state enum → small int code so a state-timeline panel can colour by
 # severity. Only "Normal" is seen on the live fixture; higher codes are reserved
 # for values a live dump on a hot device reveals (warm/hot/critical throttle).
@@ -130,6 +138,16 @@ _FIELD_MAP: list[tuple[str, list[tuple[str | int, ...]], Any]] = [
     ("m6_endc_enabled", [("wwan", "diagInfo", 0, "endcEnabledConfig")], _bool_int),
     # --- Device thermal state ---
     ("m6_thermal_state", [("wwan", "thermalState")], _thermal_int),
+    # --- Device telemetry (general / power sections) ---
+    # devTemperature is the real numeric chassis temp in °C (useMetricSystem);
+    # the prime suspect for afternoon thermal throttling in a sunny window.
+    ("m6_dev_temperature", [("general", "devTemperature")], _safe_int),
+    ("m6_dev_temp_critical", [("power", "deviceTempCritical")], _bool_int),
+    # ethernetSpeed is a string like '1000M' — a renegotiation down to 100M is
+    # a quiet throughput cap worth catching.
+    ("m6_eth_speed_mbps", [("power", "ethernetSpeed")], _digits_int),
+    # upTime resets on an M6 reboot — correlate sudden drops with outages.
+    ("m6_uptime_s", [("general", "upTime")], _safe_int),
 ]
 
 
