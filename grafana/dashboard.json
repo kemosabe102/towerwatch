@@ -551,7 +551,8 @@
                 "value": 200
               }
             ]
-          }
+          },
+          "max": 2000
         },
         "overrides": [
           {
@@ -721,7 +722,8 @@
                 "value": 200
               }
             ]
-          }
+          },
+          "max": 2000
         },
         "overrides": [
           {
@@ -891,7 +893,8 @@
                 "value": 200
               }
             ]
-          }
+          },
+          "max": 2000
         },
         "overrides": [
           {
@@ -1236,7 +1239,8 @@
           },
           "color": {
             "mode": "palette-classic"
-          }
+          },
+          "max": 2000
         },
         "overrides": []
       },
@@ -1340,7 +1344,8 @@
           },
           "color": {
             "mode": "palette-classic"
-          }
+          },
+          "max": 5000
         },
         "overrides": [
           {
@@ -1454,7 +1459,8 @@
           },
           "color": {
             "mode": "thresholds"
-          }
+          },
+          "max": 2000
         },
         "overrides": []
       },
@@ -1537,7 +1543,8 @@
           },
           "color": {
             "mode": "thresholds"
-          }
+          },
+          "max": 5000
         },
         "overrides": []
       },
@@ -1604,7 +1611,8 @@
               "type": "log",
               "log": 2
             }
-          }
+          },
+          "max": 2000
         },
         "overrides": []
       },
@@ -2313,16 +2321,15 @@
             "drawStyle": "line",
             "lineInterpolation": "smooth",
             "lineWidth": 2,
-            "fillOpacity": 6,
+            "fillOpacity": 4,
             "pointSize": 5,
             "showPoints": "auto",
             "spanNulls": false,
             "scaleDistribution": {
-              "type": "log",
-              "log": 2
+              "type": "linear"
             },
             "thresholdsStyle": {
-              "mode": "area"
+              "mode": "off"
             }
           },
           "thresholds": {
@@ -2413,18 +2420,17 @@
           "min": 0,
           "custom": {
             "drawStyle": "line",
-            "lineInterpolation": "smooth",
+            "lineInterpolation": "stepAfter",
             "lineWidth": 2,
-            "fillOpacity": 6,
+            "fillOpacity": 0,
             "pointSize": 5,
             "showPoints": "auto",
             "spanNulls": false,
             "scaleDistribution": {
-              "type": "log",
-              "log": 2
+              "type": "linear"
             },
             "thresholdsStyle": {
-              "mode": "area"
+              "mode": "off"
             }
           },
           "thresholds": {
@@ -2497,15 +2503,14 @@
           "min": 0,
           "custom": {
             "drawStyle": "line",
-            "lineInterpolation": "smooth",
+            "lineInterpolation": "stepAfter",
             "lineWidth": 2,
-            "fillOpacity": 6,
+            "fillOpacity": 12,
             "pointSize": 5,
             "showPoints": "auto",
             "spanNulls": false,
             "scaleDistribution": {
-              "type": "log",
-              "log": 2
+              "type": "linear"
             },
             "thresholdsStyle": {
               "mode": "area"
@@ -2515,22 +2520,54 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "value": null,
+                "color": "green"
               },
               {
-                "color": "yellow",
-                "value": 100
+                "value": 1,
+                "color": "yellow"
               },
               {
-                "color": "red",
-                "value": 500
+                "value": 2,
+                "color": "orange"
+              },
+              {
+                "value": 3,
+                "color": "red"
               }
             ]
           },
           "color": {
             "mode": "palette-classic"
-          }
+          },
+          "max": 3,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Normal",
+                  "color": "green",
+                  "index": 0
+                },
+                "1": {
+                  "text": "Warm",
+                  "color": "yellow",
+                  "index": 1
+                },
+                "2": {
+                  "text": "Hot",
+                  "color": "orange",
+                  "index": 2
+                },
+                "3": {
+                  "text": "Critical",
+                  "color": "red",
+                  "index": 3
+                }
+              }
+            }
+          ]
         },
         "overrides": []
       },
