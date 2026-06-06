@@ -38,3 +38,7 @@ pi/bench/reports/
 pi/bench/snapshots/
 pi/bench/state.json
 .worktrees/
+
+# Code-review session artifacts — kept locally as a record, never committed
+# (also keeps ci.sh's clean-tree check from blocking on them)
+docs/code-review-*.md
