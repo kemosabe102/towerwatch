@@ -2720,7 +2720,7 @@
   },
   "timezone": "",
   "title": "Towerwatch \u2014 5G Connection Quality",
-  "uid": "",
+  "uid": "towerwatch-main",
   "version": 0,
   "refresh": "30s"
 }

@@ -203,7 +203,7 @@
   "time": { "from": "now-24h", "to": "now" },
   "timezone": "",
   "title": "Towerwatch — Side-by-Side Comparison",
-  "uid": "",
+  "uid": "towerwatch-compare",
   "version": 0,
   "refresh": "30s"
 }

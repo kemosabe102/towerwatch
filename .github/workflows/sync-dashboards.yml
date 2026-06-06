@@ -1,0 +1,30 @@
+name: Sync Dashboards
+
+# Push grafana/*.json to Grafana Cloud whenever a dashboard changes on main.
+# Overwrites in place by uid (no duplicates). See scripts/sync_dashboards.py.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "grafana/*.json"
+      - "scripts/sync_dashboards.py"
+      - ".github/workflows/sync-dashboards.yml"
+  workflow_dispatch: {} # allow manual re-sync from the Actions tab
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Push dashboards to Grafana Cloud
+        env:
+          GRAFANA_URL: ${{ vars.GRAFANA_URL }}
+          GRAFANA_SA_TOKEN: ${{ secrets.GRAFANA_SA_TOKEN }}
+        run: python scripts/sync_dashboards.py

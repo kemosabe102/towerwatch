@@ -22,6 +22,7 @@ A continuous network-quality probe for a Raspberry Pi. Ships latency, jitter, pa
 | [`docs/probe-m6.md`](docs/probe-m6.md) | Optional Netgear M6 cellular signal probe — setup or port to another router |
 | [`docs/design.md`](docs/design.md) | Per-component code reference (functions, config tables, error patterns) |
 | [`docs/bench-tests.md`](docs/bench-tests.md) | Failure-mode bench test catalog |
+| [`docs/dashboard-sync.md`](docs/dashboard-sync.md) | Auto-sync `grafana/*.json` to Grafana Cloud from CI — token setup |
 | [`pi/bench/README.md`](pi/bench/README.md) | Bench harness quick-start — prerequisites, running, adding tests |
 | [`docs/code-health.md`](docs/code-health.md) | Radon complexity tracker |
 | [`CLAUDE.md`](CLAUDE.md) | Agent-facing invariants, CI/CD workflow, deploy gotchas |
@@ -259,7 +260,7 @@ To enable sticky outage annotations: create a service account in your Grafana st
 
 Run `./ci.sh full && ./scripts/deploy.sh <user@host>` from your dev machine. `ci.sh` stamps `src/towerwatch/_version.txt` (after ruff, pyright, pytest); `scripts/deploy.sh` SSHes in, `git pull`s, `pip install`s into the Pi's venv, and restarts the service. `./cd.sh` still works as a shim.
 
-For dashboard updates: re-import `grafana/dashboard.json` in Grafana Cloud (Dashboards → New → Import → Upload JSON).
+Dashboard updates sync automatically: pushing a change to `grafana/*.json` on `main` triggers the **Sync Dashboards** workflow, which overwrites the live dashboards in place by `uid`. See [`docs/dashboard-sync.md`](docs/dashboard-sync.md) for the one-time token setup. (Manual fallback: re-import the JSON in Grafana Cloud — Dashboards → New → Import → Upload JSON.)
 
 See [`docs/runbook.md#remote-deploy`](docs/runbook.md#remote-deploy) for post-deploy verification, failure modes, and manual fallback.
 
