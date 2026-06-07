@@ -2390,8 +2390,8 @@
         "y": 75
       },
       "id": 51,
-      "title": "M6 Serving Cell (PCC)",
-      "description": "Serving-cell identifiers as state bands: each row holds steady while you're on a cell and changes colour/value at a handover or reselection. Watch for frequent PCI/eNB flips correlating with latency or throughput dips.",
+      "title": "M6 Handover History (PCI / band / eNB)",
+      "description": "Serving-cell identifiers as state bands: each row holds steady while on a cell and changes colour at a handover or reselection. Each distinct value gets its own colour (not a good/bad gradient), so frequent flips stand out. Watch for constant PCI/eNB flapping correlating with latency or throughput dips.",
       "type": "state-timeline",
       "datasource": {
         "type": "prometheus",
@@ -2433,7 +2433,7 @@
             "fillOpacity": 80
           },
           "color": {
-            "mode": "continuous-GrYlRd"
+            "mode": "palette-classic"
           },
           "mappings": [],
           "thresholds": {
@@ -2462,6 +2462,267 @@
         "tooltip": {
           "mode": "single",
           "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 70,
+      "title": "M6 Current Cell",
+      "description": "Current serving-cell identity and signal \u2014 what cell/band the M6 is on right now. Plain identifiers; no good/bad coloring (these are IDs, not magnitudes).",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 83
+      },
+      "targets": [
+        {
+          "expr": "towerwatch_m6_pcc_pci{host=\"$location\"}",
+          "legendFormat": "PCI",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "towerwatch_m6_pcc_band{host=\"$location\"}",
+          "legendFormat": "Band",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "towerwatch_m6_enb_id{host=\"$location\"}",
+          "legendFormat": "eNB ID",
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "towerwatch_m6_rsrp{host=\"$location\"}",
+          "legendFormat": "RSRP (dBm)",
+          "refId": "D",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "towerwatch_m6_sinr{host=\"$location\"}",
+          "legendFormat": "SINR (dB)",
+          "refId": "E",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "noValue": "\u2014"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 71,
+      "title": "Band Performance Ranking",
+      "description": "Average signal per serving band over the dashboard range, from the bands the M6 naturally roams across (it can't be force-locked). Samples = dwell time on that band (more samples = more time spent there). Sort by SINR to see which band performed best.",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "targets": [
+        {
+          "expr": "avg by (band) (avg_over_time(towerwatch_m6_sig_sinr{host=\"$location\"}[$__range]))",
+          "format": "table",
+          "instant": true,
+          "refId": "SINR",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "avg by (band) (avg_over_time(towerwatch_m6_sig_rsrp{host=\"$location\"}[$__range]))",
+          "format": "table",
+          "instant": true,
+          "refId": "RSRP",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "count by (band) (count_over_time(towerwatch_m6_sig_sinr{host=\"$location\"}[$__range]))",
+          "format": "table",
+          "instant": true,
+          "refId": "SAMPLES",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 83
+      },
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "band": "Band",
+              "Value #SINR": "Avg SINR (dB)",
+              "Value #RSRP": "Avg RSRP (dBm)",
+              "Value #SAMPLES": "Samples"
+            },
+            "indexByName": {
+              "band": 0,
+              "Value #SINR": 1,
+              "Value #RSRP": 2,
+              "Value #SAMPLES": 3
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "decimals": 1,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Avg SINR (dB)"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "gradient"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 5
+                    },
+                    {
+                      "color": "green",
+                      "value": 13
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Samples"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Avg SINR (dB)",
+            "desc": true
+          }
+        ],
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": ""
         }
       }
     },
@@ -2559,7 +2820,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 83
+        "y": 91
       },
       "id": 63,
       "panels": [],
@@ -2590,7 +2851,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 84
+        "y": 92
       },
       "options": {
         "showLabels": false,
@@ -2612,7 +2873,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 84
+        "y": 92
       },
       "id": 25,
       "title": "Service Restarts",
