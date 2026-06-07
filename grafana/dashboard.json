@@ -2299,7 +2299,7 @@
       },
       "id": 50,
       "title": "M6 Carrier Aggregation",
-      "description": "Total aggregated downlink spectrum and number of component carriers. A drop here (e.g. 3 carriers -> 1) is a throughput cliff that would otherwise be misattributed.",
+      "description": "Aggregated downlink spectrum + component carriers, and the antenna GATE: SCC declared (offered by the tower) vs active (held by the device). declared > active = the tower offers carriers the device cannot hold (signal-limited, antenna may help); declared = active = 1 = no extra spectrum on offer, so an antenna gives ~0 throughput upside. A drop in aggregated bandwidth/carrier count is a throughput cliff.",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -2319,6 +2319,24 @@
           "expr": "towerwatch_m6_carrier_count{host=\"$location\"}",
           "legendFormat": "Carrier count",
           "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "towerwatch_m6_ca_scc_declared{host=\"$location\"}",
+          "legendFormat": "SCC declared (offered)",
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "towerwatch_m6_ca_scc_count{host=\"$location\"}",
+          "legendFormat": "SCC active (held)",
+          "refId": "D",
           "datasource": {
             "type": "prometheus",
             "uid": "grafanacloud-towerwatch-prom"
