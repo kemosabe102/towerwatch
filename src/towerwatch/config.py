@@ -315,6 +315,14 @@ def _slug(s: str) -> str:
 INFLUX_CARRIER_TAG = _slug(_load_credential("CARRIER", "unknown"))
 INFLUX_CONNECTION_TYPE_TAG = _slug(_load_credential("CONNECTION_TYPE", "unknown"))
 
+# EXPERIMENT_LABEL groups a batch of metrics under a named A/B test (e.g. an
+# antenna position). It rides on every line as a Prometheus label so
+# `avg by (experiment) (...)` compares a run against baseline in one query.
+# Defaults to "none" — set it in credentials.py for the duration of an
+# experiment, then reset to "none" and redeploy. Keep the value set small: each
+# distinct value multiplies the live series count against the free-tier cap.
+INFLUX_EXPERIMENT_TAG = _slug(_load_credential("EXPERIMENT_LABEL", "none"))
+
 # --- Push Optimization (batching + compression) ---
 PUSH_BATCH_SIZE = 2  # Accumulate N lines before pushing (at 60s = push every 2 min)
 PUSH_COMPRESS = True  # gzip Influx POST body

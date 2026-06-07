@@ -47,16 +47,19 @@ class TickContext:
 
 
 def _common_tags() -> str:
-    """Influx tag set baked into every line — `host`, `carrier`, `connection_type`.
+    """Influx tag set baked into every line — `host`, `carrier`,
+    `connection_type`, `experiment`.
 
     Tag values must not contain spaces or commas in line protocol; the slug
-    helper in config.py guarantees that for carrier/connection_type. host is
-    set by the operator and assumed clean.
+    helper in config.py guarantees that for carrier/connection_type/experiment.
+    host is set by the operator and assumed clean. `experiment` defaults to
+    "none" and is set per-A/B-run (see config.INFLUX_EXPERIMENT_TAG).
     """
     return (
         f"host={_config.INFLUX_HOST_TAG},"
         f"carrier={_config.INFLUX_CARRIER_TAG},"
-        f"connection_type={_config.INFLUX_CONNECTION_TYPE_TAG}"
+        f"connection_type={_config.INFLUX_CONNECTION_TYPE_TAG},"
+        f"experiment={_config.INFLUX_EXPERIMENT_TAG}"
     )
 
 

@@ -2815,12 +2815,341 @@
       }
     },
     {
+      "id": 79,
+      "type": "row",
+      "title": "Experiment & A/B Analysis",
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
         "y": 91
+      },
+      "panels": []
+    },
+    {
+      "id": 80,
+      "title": "Latency Tails (p95 + worst) \u2014 per target",
+      "description": "95th-percentile and worst-case RTT over the dashboard range, per target. Tails matter more than means for A/B comparison \u2014 the win is fixing the worst moments, not the average. Pure analysis on existing ping data; no extra cost. Pair with the $location and time picker to scope an experiment window.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 92
+      },
+      "targets": [
+        {
+          "expr": "quantile_over_time(0.95, towerwatch_rtt_avg_google{host=\"$location\"}[$__range])",
+          "legendFormat": "google p95",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "quantile_over_time(0.95, towerwatch_rtt_avg_cloudflare{host=\"$location\"}[$__range])",
+          "legendFormat": "cloudflare p95",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "quantile_over_time(0.95, towerwatch_rtt_avg_gateway{host=\"$location\"}[$__range])",
+          "legendFormat": "gateway p95",
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "max_over_time(towerwatch_rtt_max_google{host=\"$location\"}[$__range])",
+          "legendFormat": "google worst",
+          "refId": "D",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "max_over_time(towerwatch_rtt_max_cloudflare{host=\"$location\"}[$__range])",
+          "legendFormat": "cloudflare worst",
+          "refId": "E",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "max_over_time(towerwatch_rtt_max_gateway{host=\"$location\"}[$__range])",
+          "legendFormat": "gateway worst",
+          "refId": "F",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 40,
+            "lineWidth": 1
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "noValue": "\u2014"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull"
+          ],
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 81,
+      "title": "Uplink Effort \u2014 M6 Tx Level (lower is better)",
+      "description": "M6 transmit power level. Counterintuitive success signal: you want this to DROP. If the modem transmits near max to reach the tower, a better antenna lets it reach the same tower with less power \u2014 a falling tx_level after an antenna change is direct evidence the uplink path improved (and explains any upload gain). Grouped by experiment when a run is active.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 92
+      },
+      "targets": [
+        {
+          "expr": "towerwatch_m6_tx_level{host=\"$location\"}",
+          "legendFormat": "Tx level ({{experiment}})",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "noValue": "\u2014"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 82,
+      "title": "Experiment Comparison (avg by experiment)",
+      "description": "Side-by-side averages per experiment over the dashboard range \u2014 the antenna on/off view. Set EXPERIMENT_LABEL in credentials for a run (e.g. 'antenna_pos_a'), let it collect, and compare against the 'none' baseline row. SINR/RSRP/DL up = better; bufferbloat/loss/tx down = better. Empty until at least one experiment has run.",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 100
+      },
+      "targets": [
+        {
+          "expr": "avg by (experiment) (avg_over_time(towerwatch_m6_sig_sinr{host=\"$location\"}[$__range]))",
+          "legendFormat": "{{experiment}}",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          },
+          "format": "table",
+          "instant": true
+        },
+        {
+          "expr": "avg by (experiment) (avg_over_time(towerwatch_m6_sig_rsrp{host=\"$location\"}[$__range]))",
+          "legendFormat": "{{experiment}}",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          },
+          "format": "table",
+          "instant": true
+        },
+        {
+          "expr": "avg by (experiment) (avg_over_time(towerwatch_http_throughput_mbps{host=\"$location\"}[$__range]))",
+          "legendFormat": "{{experiment}}",
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          },
+          "format": "table",
+          "instant": true
+        },
+        {
+          "expr": "avg by (experiment) (avg_over_time(towerwatch_bufferbloat_download_delta_ms{host=\"$location\"}[$__range]))",
+          "legendFormat": "{{experiment}}",
+          "refId": "D",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          },
+          "format": "table",
+          "instant": true
+        },
+        {
+          "expr": "avg by (experiment) (avg_over_time(towerwatch_pkt_loss_google{host=\"$location\"}[$__range]))",
+          "legendFormat": "{{experiment}}",
+          "refId": "E",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          },
+          "format": "table",
+          "instant": true
+        },
+        {
+          "expr": "avg by (experiment) (avg_over_time(towerwatch_m6_tx_level{host=\"$location\"}[$__range]))",
+          "legendFormat": "{{experiment}}",
+          "refId": "F",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          },
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "experiment": "Experiment",
+              "Value #A": "Avg SINR (dB)",
+              "Value #B": "Avg RSRP (dBm)",
+              "Value #C": "Avg DL (Mbps)",
+              "Value #D": "Bufferbloat \u0394 (ms)",
+              "Value #E": "Loss (%)",
+              "Value #F": "Tx level"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          },
+          "decimals": 1,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": ""
+        }
+      }
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 108
       },
       "id": 63,
       "panels": [],
@@ -2851,7 +3180,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 92
+        "y": 109
       },
       "options": {
         "showLabels": false,
@@ -2873,7 +3202,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 92
+        "y": 109
       },
       "id": 25,
       "title": "Service Restarts",

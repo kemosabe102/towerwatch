@@ -25,6 +25,7 @@ def _pin_tags(monkeypatch):
     monkeypatch.setattr(_config, "INFLUX_HOST_TAG", "towerwatch")
     monkeypatch.setattr(_config, "INFLUX_CARRIER_TAG", "comcast")
     monkeypatch.setattr(_config, "INFLUX_CONNECTION_TYPE_TAG", "cable")
+    monkeypatch.setattr(_config, "INFLUX_EXPERIMENT_TAG", "none")
 
 
 def _fmt(fields, ts=1700000000):
@@ -35,7 +36,17 @@ def _fmt(fields, ts=1700000000):
 
 def test_influx_measurement_and_host_tag():
     line = _fmt({"rtt_avg_google": 12})
-    assert line.startswith("towerwatch,host=towerwatch,carrier=comcast,connection_type=cable ")
+    assert line.startswith(
+        "towerwatch,host=towerwatch,carrier=comcast,connection_type=cable,experiment=none "
+    )
+
+
+def test_influx_experiment_tag_present():
+    """The experiment tag rides on every metric line so an A/B run is groupable
+    by `avg by (experiment) (...)`. Defaults to "none" (pinned by the fixture)."""
+    line = _fmt({"connected": 1})
+    tag_section = line.split(" ", 1)[0]
+    assert "experiment=none" in tag_section
 
 
 def test_influx_carrier_and_connection_type_tags_present():

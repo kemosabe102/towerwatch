@@ -28,6 +28,17 @@ Failure modes to expect:
 
 `BUILD_VERSION` / `BUILD_DATE` are loaded by `config.py` from `_version.txt`; they appear in the `service_restarted` log and in outage-annotation text. Don't re-derive them from `git` on the Pi — version authority lives on the dev machine.
 
+## Running an A/B experiment (e.g. antenna position)
+
+To compare a config against baseline, set `EXPERIMENT_LABEL` in the per-site `credentials.<site>.py`, deploy, run, then reset:
+
+1. Set `EXPERIMENT_LABEL = "antenna_pos_a"` in `credentials.standstill.py`.
+2. `cp credentials.standstill.py credentials.py` → `touch _version.txt` → `./scripts/deploy.sh admin@<ip>` (restart marks the experiment start in the data).
+3. Let it run; the tag rides on every metric. Compare with `avg by (experiment) (...)` in Grafana — SINR, throughput, `bufferbloat_download_delta_ms`, loss, `m6_tx_level` (lower tx = better uplink path).
+4. **Reset to `EXPERIMENT_LABEL = None` and redeploy** when done — distinct values pile up against the free-tier ~10k series cap. Keep the value set small.
+
+The label is read once at startup (not per-tick), so a deploy/restart is required to change it. Use short lowercase/underscore values (slugged by `config._slug`).
+
 ## First-time Pi onboarding (ordered)
 
 For onboarding a brand-new Pi (vs. deploying changes to an existing one). Each step assumes the previous succeeded; never reorder.
@@ -119,7 +130,7 @@ See [`docs/architecture.md`](docs/architecture.md) for the design narrative.
 ## Invariants — do not "clean up"
 
 - **Metric units are `_ms`, not seconds.** Prometheus convention says seconds; dashboards query `_ms`. Don't normalise.
-- **Target labels are baked into field names** (`rtt_avg_google`, `jitter_cloudflare`), not Prometheus label selectors. Dashboards query by metric name — do not refactor into labels. **Sanctioned exceptions** (where a dimension is genuinely query-time, not a fixed target): `version`/`build_date`/`link_max_*` on `build_info`, `triggered_by` on speedtest lines, and `band`/`pci` on the `m6_sig_*` line (`format_band_sig_line` in `tick.py`). The last enables `avg by (band) (m6_sig_sinr)` to rank serving bands — band/pci are low-cardinality and genuinely vary at runtime as the M6 roams. Don't add new label dimensions without the same justification (low cardinality + a real group-by need a baked name can't serve).
+- **Target labels are baked into field names** (`rtt_avg_google`, `jitter_cloudflare`), not Prometheus label selectors. Dashboards query by metric name — do not refactor into labels. **Sanctioned exceptions** (where a dimension is genuinely query-time, not a fixed target): `version`/`build_date`/`link_max_*` on `build_info`, `triggered_by` on speedtest lines, `band`/`pci` on the `m6_sig_*` line (`format_band_sig_line` in `tick.py`), and `experiment` on **every** line (`_common_tags()`). The band/pci pair enables `avg by (band) (m6_sig_sinr)` to rank serving bands. `experiment` (from `credentials.EXPERIMENT_LABEL`, default `"none"`) groups an A/B run — e.g. `avg by (experiment) (bufferbloat_download_delta_ms)` for an antenna on/off comparison. Don't add new label dimensions without the same justification (low cardinality + a real group-by need a baked name can't serve).
 - **`INFLUX_HOST_TAG` is loaded lazily from `credentials.LOCATION`.** It's the per-site identifier baked into every metric line and Loki stream. Do not convert this back to a hard-coded constant — each deployment has its own `LOCATION`. Default fallback is `"towerwatch"` to preserve single-site history.
 - **`LOKI_PUSH_LEVEL = "INFO"`; per-tick logs must NOT use `loki.push`/`loki.log_and_push`.** The Loki gate is informational, not the throttle. The actual throttle is: anything that fires every tick (~1/min) or every push (~30/hour) stays out of the Loki call surface entirely — use stdlib `log.debug`/`log.info` only. `loki.push` is reserved for events that fire per-restart, per-state-change, or at most a few times per day. New event types must justify their cadence against the ~230 MB/month data budget.
 - **Buffer capped at 256 KB** (`LOKI_BUFFER_MAX_BYTES`) — the data partition is 1 GB; don't raise this without thinking.
