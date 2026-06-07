@@ -42,3 +42,7 @@ pi/bench/state.json
 # Code-review session artifacts — kept locally as a record, never committed
 # (also keeps ci.sh's clean-tree check from blocking on them)
 docs/code-review-*.md
+
+# Static curl binary for the phone-compare tool (vetted external arm64 build,
+# pushed to the phone via adb — not committed). See docs/phone-compare.md.
+scripts/curl-android-arm64

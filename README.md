@@ -23,6 +23,7 @@ A continuous network-quality probe for a Raspberry Pi. Ships latency, jitter, pa
 | [`docs/design.md`](docs/design.md) | Per-component code reference (functions, config tables, error patterns) |
 | [`docs/bench-tests.md`](docs/bench-tests.md) | Failure-mode bench test catalog |
 | [`docs/dashboard-sync.md`](docs/dashboard-sync.md) | Auto-sync `grafana/*.json` to Grafana Cloud from CI — token setup |
+| [`docs/phone-compare.md`](docs/phone-compare.md) | Phone-vs-hotspot cellular comparison over ADB — congestion/deprioritization test |
 | [`pi/bench/README.md`](pi/bench/README.md) | Bench harness quick-start — prerequisites, running, adding tests |
 | [`docs/code-health.md`](docs/code-health.md) | Radon complexity tracker |
 | [`CLAUDE.md`](CLAUDE.md) | Agent-facing invariants, CI/CD workflow, deploy gotchas |
