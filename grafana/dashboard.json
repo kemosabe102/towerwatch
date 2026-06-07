@@ -345,7 +345,7 @@
       },
       "targets": [
         {
-          "expr": "label_replace(max_over_time(towerwatch_pkt_loss_google{host=\"$location\"}[1h:1m]), \"target\", \"Google\", \"host\", \".*\")",
+          "expr": "label_replace(max(max_over_time(towerwatch_pkt_loss_google{host=\"$location\"}[1h:1m])), \"target\", \"Google\", \"\", \"\")",
           "instant": true,
           "legendFormat": "{{target}}",
           "refId": "A",
@@ -355,7 +355,7 @@
           }
         },
         {
-          "expr": "label_replace(max_over_time(towerwatch_pkt_loss_cloudflare{host=\"$location\"}[1h:1m]), \"target\", \"Cloudflare\", \"host\", \".*\")",
+          "expr": "label_replace(max(max_over_time(towerwatch_pkt_loss_cloudflare{host=\"$location\"}[1h:1m])), \"target\", \"Cloudflare\", \"\", \"\")",
           "instant": true,
           "legendFormat": "{{target}}",
           "refId": "B",

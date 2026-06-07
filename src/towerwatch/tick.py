@@ -133,6 +133,53 @@ def format_speedtest_line(
     )
 
 
+# Signal fields to carry on the band-tagged line, mapped from the m6 probe's
+# field names to the new tagged-line field names. New names (m6_sig_*) keep the
+# untagged m6_rsrp/m6_sinr history intact.
+_BAND_SIG_FIELDS = (
+    ("m6_rsrp", "m6_sig_rsrp"),
+    ("m6_sinr", "m6_sig_sinr"),
+    ("m6_nr5g_rsrp", "m6_sig_nr5g_rsrp"),
+    ("m6_nr5g_sinr", "m6_sig_nr5g_sinr"),
+)
+
+
+def format_band_sig_line(fields: dict, ts: int) -> str | None:
+    """Influx line carrying signal quality tagged by serving **band** + **pci**.
+
+    band/pci are emitted as tags (-> Prom labels) — the one sanctioned exception
+    to "target labels are baked into field names" (CLAUDE.md), mirroring the
+    build_info/speedtest tag pattern. This makes `avg by (band) (m6_sig_sinr)`
+    queryable so a dashboard can rank which band the device performs best on, from
+    the bands it naturally roams across (the M6 can't be force-locked to a band).
+
+    Reads the m6 fields already collected in the main tick dict. Prefers the
+    primary-carrier band (`m6_pcc_band`); falls back to `m6_band` for
+    single-carrier sites. Returns ``None`` when no band is present (non-cellular
+    site or a tick where the M6 poll failed) or when no signal value rode along —
+    a bare band tag with no field is useless and invalid line protocol.
+    """
+    band = fields.get("m6_pcc_band")
+    if band is None:
+        band = fields.get("m6_band")
+    if band is None:
+        return None
+
+    sig_parts = [
+        f"{out_name}={fields[src]}"
+        for src, out_name in _BAND_SIG_FIELDS
+        if fields.get(src) is not None
+    ]
+    if not sig_parts:
+        return None
+
+    tags = f"{_common_tags()},band={band}"
+    pci = fields.get("m6_pcc_pci")
+    if pci is not None:
+        tags += f",pci={pci}"
+    return f"{_config.INFLUX_MEASUREMENT},{tags} " + ",".join(sig_parts) + f" {ts}"
+
+
 def update_connection_state(ctx: TickContext, state, connected: bool, timestamp: int) -> None:
     if connected and not state.connected:
         if state.outage_start:

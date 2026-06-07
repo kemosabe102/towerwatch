@@ -19,6 +19,7 @@ from towerwatch.lifecycle import RuntimeState
 from towerwatch.tick import (
     TickContext,
     collect_probes,
+    format_band_sig_line,
     format_build_info_line,
     format_influx_line,
     push_batch,
@@ -82,6 +83,9 @@ def run_loop(ctx: TickContext, state: RuntimeState) -> None:
 
         startup_mod.write_marker(Path(config.LAST_ALIVE_MARKER_FILE), time.time())
         state.metric_batch.append(format_build_info_line(timestamp))
+        band_sig_line = format_band_sig_line(fields, timestamp)
+        if band_sig_line is not None:
+            state.metric_batch.append(band_sig_line)
         push_batch(ctx, state, format_influx_line(fields, timestamp), any_connected)
 
         if scheduler and scheduler.should_heartbeat(time.time()):

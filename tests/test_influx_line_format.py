@@ -208,3 +208,71 @@ def test_speedtest_line_defaults_bytes_to_zero():
     field_section = line.split(" ")[1]
     assert "speedtest_download_bytes=0i" in field_section
     assert "speedtest_upload_bytes=0i" in field_section
+
+
+def test_band_sig_line_shape():
+    """Band-tagged signal line: band + pci are tags (-> Prom labels) so a
+    dashboard can `avg by (band)`. LTE anchor signal goes in fields named
+    m6_sig_* so the existing untagged m6_rsrp/m6_sinr history is untouched."""
+    from towerwatch.tick import format_band_sig_line
+
+    line = format_band_sig_line(
+        {"m6_pcc_band": 66, "m6_pcc_pci": 81, "m6_rsrp": -97, "m6_sinr": 18},
+        1700000000,
+    )
+    assert line is not None
+    tag_section = line.split(" ", 1)[0]
+    assert tag_section.startswith("towerwatch,host=towerwatch,")
+    assert "band=66" in tag_section
+    assert "pci=81" in tag_section
+    field_section = line.split(" ")[1]
+    assert "m6_sig_rsrp=-97" in field_section
+    assert "m6_sig_sinr=18" in field_section
+    assert line.endswith(" 1700000000")
+
+
+def test_band_sig_line_includes_nr5g_when_present():
+    """5G NR signal fields ride along when the device reports them."""
+    from towerwatch.tick import format_band_sig_line
+
+    line = format_band_sig_line(
+        {
+            "m6_pcc_band": 2,
+            "m6_pcc_pci": 42,
+            "m6_rsrp": -90,
+            "m6_sinr": 12,
+            "m6_nr5g_rsrp": -80,
+            "m6_nr5g_sinr": 20,
+        },
+        1700000000,
+    )
+    assert line is not None
+    field_section = line.split(" ")[1]
+    assert "m6_sig_nr5g_rsrp=-80" in field_section
+    assert "m6_sig_nr5g_sinr=20" in field_section
+
+
+def test_band_sig_line_falls_back_to_band_when_no_pcc_band():
+    """Single-carrier sites have m6_band but not m6_pcc_band; use it as fallback."""
+    from towerwatch.tick import format_band_sig_line
+
+    line = format_band_sig_line({"m6_band": 13, "m6_rsrp": -100}, 1700000000)
+    assert line is not None
+    assert "band=13" in line.split(" ", 1)[0]
+    assert "m6_sig_rsrp=-100" in line.split(" ")[1]
+
+
+def test_band_sig_line_none_without_band():
+    """No band -> no tagged line (non-cellular site, or a tick where the M6
+    poll failed). Must not fabricate a band=0 row."""
+    from towerwatch.tick import format_band_sig_line
+
+    assert format_band_sig_line({"rtt_avg_google": 12}, 1700000000) is None
+
+
+def test_band_sig_line_none_without_any_signal():
+    """Band present but no signal value -> no line. A bare band tag with no
+    field would be a useless (and line-protocol-invalid) row."""
+    from towerwatch.tick import format_band_sig_line
+
+    assert format_band_sig_line({"m6_pcc_band": 66}, 1700000000) is None
