@@ -3251,6 +3251,513 @@
         "sortOrder": "Descending",
         "dedupStrategy": "none"
       }
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 92
+      },
+      "id": 83,
+      "panels": [],
+      "title": "Phone RF (standstill-phone)",
+      "type": "row"
+    },
+    {
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 93
+      },
+      "id": 84,
+      "title": "Phone Serving LTE Signal",
+      "description": "Pixel serving-cell LTE metrics from the towerwatch-rflogger Android app: RSRP, RSRQ, SINR. Fixed host=standstill-phone (does NOT follow the $location picker). Session-based — gaps mean no logging session was running.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "targets": [
+        {
+          "expr": "towerwatch_phone_rsrp{host=\"standstill-phone\"}",
+          "legendFormat": "RSRP (dBm)",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "towerwatch_phone_rsrq{host=\"standstill-phone\"}",
+          "legendFormat": "RSRQ (dB)",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "towerwatch_phone_sinr{host=\"standstill-phone\"}",
+          "legendFormat": "SINR (dB)",
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dB",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "noValue": "—"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "RSRP (dBm)"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dBm"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "min",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 93
+      },
+      "id": 85,
+      "title": "Phone NR Signal (5G)",
+      "description": "Pixel 5G NR signal — the M6's blind spot (its firmware can't expose NR). Populated only while the phone is camped on 5G NR; flat/absent means the phone is on LTE. host=standstill-phone (fixed).",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "targets": [
+        {
+          "expr": "towerwatch_phone_nr_rsrp{host=\"standstill-phone\"}",
+          "legendFormat": "NR RSRP (dBm)",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "towerwatch_phone_nr_rsrq{host=\"standstill-phone\"}",
+          "legendFormat": "NR RSRQ (dB)",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "towerwatch_phone_nr_sinr{host=\"standstill-phone\"}",
+          "legendFormat": "NR SINR (dB)",
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dB",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "noValue": "—"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "NR RSRP (dBm)"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dBm"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "min",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 101
+      },
+      "id": 86,
+      "title": "Phone Neighbor Cells",
+      "description": "Aggregated neighbor-cell signal seen by the phone (requires location services on the device). Neighbor count is how many cells are visible besides the serving cell; max/min RSRP bound their signal. Per-PCI series are intentionally NOT emitted (cardinality). host=standstill-phone (fixed).",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "targets": [
+        {
+          "expr": "towerwatch_phone_neighbor_rsrp_max{host=\"standstill-phone\"}",
+          "legendFormat": "Neighbor RSRP max (dBm)",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "towerwatch_phone_neighbor_rsrp_min{host=\"standstill-phone\"}",
+          "legendFormat": "Neighbor RSRP min (dBm)",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "towerwatch_phone_neighbor_count{host=\"standstill-phone\"}",
+          "legendFormat": "Neighbor count",
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dBm",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "noValue": "—"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Neighbor count"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "min",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 101
+      },
+      "id": 87,
+      "title": "Phone CA Carriers",
+      "description": "Carrier-aggregation component-carrier count held by the phone (from PhysicalChannelConfig). Higher = more aggregated spectrum. Compare against the M6's carrier count to see if the phone holds more carriers on the same tower. host=standstill-phone (fixed).",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "targets": [
+        {
+          "expr": "towerwatch_phone_ca_count{host=\"standstill-phone\"}",
+          "instant": true,
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 2
+              },
+              {
+                "color": "green",
+                "value": 3
+              }
+            ]
+          },
+          "noValue": "—"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 88,
+      "title": "Phone Band Ranking",
+      "description": "Average signal per serving band the phone roamed across over the dashboard range. Samples = dwell time on that band. Sort by SINR to see which band performed best for the phone; compare against the M6 Band Performance Ranking for the same window. host=standstill-phone (fixed).",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "targets": [
+        {
+          "expr": "avg by (band) (avg_over_time(towerwatch_phone_sig_sinr{host=\"standstill-phone\"}[$__range]))",
+          "format": "table",
+          "instant": true,
+          "refId": "SINR",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "avg by (band) (avg_over_time(towerwatch_phone_sig_rsrp{host=\"standstill-phone\"}[$__range]))",
+          "format": "table",
+          "instant": true,
+          "refId": "RSRP",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "count by (band) (count_over_time(towerwatch_phone_sig_sinr{host=\"standstill-phone\"}[$__range]))",
+          "format": "table",
+          "instant": true,
+          "refId": "SAMPLES",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 18,
+        "x": 6,
+        "y": 109
+      },
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "band": "Band",
+              "Value #SINR": "Avg SINR (dB)",
+              "Value #RSRP": "Avg RSRP (dBm)",
+              "Value #SAMPLES": "Samples"
+            },
+            "indexByName": {
+              "band": 0,
+              "Value #SINR": 1,
+              "Value #RSRP": 2,
+              "Value #SAMPLES": 3
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "decimals": 1,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Avg SINR (dB)"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "gradient"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 5
+                    },
+                    {
+                      "color": "green",
+                      "value": 13
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
     }
   ],
   "schemaVersion": 38,
