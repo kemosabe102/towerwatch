@@ -144,6 +144,11 @@ class GrafanaClient:
         if not self._annotation_token:
             return
         tags = list(config.OUTAGE_ANNOTATION_TAGS)
+        # Scope the annotation to this site so the dashboard can filter outages
+        # per-$location. Without this host tag, an outage at one site renders on
+        # every site's dashboard view (the Grafana-native annotation query
+        # matches on tags alone). Mirrors INFLUX_HOST_TAG / the `host` metric tag.
+        tags.append(f"host:{config.INFLUX_HOST_TAG}")
         if reason:
             tags.append(f"reason:{reason}")
         if version and version != "dev":

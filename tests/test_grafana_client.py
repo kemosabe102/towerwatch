@@ -5,6 +5,7 @@ import base64
 import requests
 
 from tests.fakes import FakeEvents, FakeLoki, FakeResponse, FakeSession
+from towerwatch import config
 
 
 class RecordingPost:
@@ -165,6 +166,9 @@ def test_annotation_payload_shape():
     assert payload["timeEnd"] == 1_700_001_000_000
     assert "reason:process_restart" in payload["tags"]
     assert "version:abc1234" in payload["tags"]
+    # Per-site scoping: the annotation must carry a host: tag so the dashboard
+    # can filter outages by $location (otherwise one site's outage shows on all).
+    assert f"host:{config.INFLUX_HOST_TAG}" in payload["tags"]
 
 
 def test_annotation_skipped_when_no_token():
