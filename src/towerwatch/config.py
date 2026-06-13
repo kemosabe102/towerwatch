@@ -145,6 +145,23 @@ def _load_windows_credential(
         return fallback
 
 
+def _load_str_list_credential(field: str, fallback: list[str]) -> list[str]:
+    """Read a list-of-strings credential with a safe fallback. Returns the
+    fallback when the attribute is missing or explicitly None (so
+    credentials.py.example's `FIELD = None` placeholder doesn't crash). Used for
+    per-site target lists like DNS resolvers, where roaming sites need to drop
+    network-specific entries (e.g. a carrier-only resolver) that won't resolve
+    on an arbitrary network.
+    """
+    try:
+        from towerwatch import credentials
+
+        value = getattr(credentials, field, None)
+        return [str(v) for v in value] if value else fallback
+    except ImportError:
+        return fallback
+
+
 # --- Probe Targets (multi-target for evidence isolation) ---
 # Each tuple: (ip, label). Labels become Prometheus tag values — must be stable strings.
 PROBE_TARGETS = [
@@ -162,10 +179,19 @@ TCP_TARGET_PORT = 443
 TCP_TIMEOUT_S = 5
 
 # --- DNS Resolution ---
-# Google + Cloudflare public resolvers, plus Verizon's resolver for an A/B
-# comparison — if the carrier resolver is the source of multi-second DNS spikes,
-# the per-resolver series (dns_resolve_ms_198_224_166_135) will show it.
-DNS_TARGETS = ["8.8.8.8", "1.1.1.1", "198.224.166.135"]
+# Default: Google + Cloudflare public resolvers, plus Verizon's resolver for an
+# A/B comparison — if the carrier resolver is the source of multi-second DNS
+# spikes, the per-resolver series (dns_resolve_ms_198_224_166_135) will show it.
+#
+# The Verizon resolver only answers on Verizon networks, so a site that roams
+# across unknown networks (or any non-Verizon link) should override this via
+# credentials.DNS_TARGETS_OVERRIDE to drop it — otherwise every tick logs a
+# spurious "DNS … failed" warning. Roaming sites typically set
+# DNS_TARGETS_OVERRIDE = ["8.8.8.8", "1.1.1.1"] (public resolvers that answer
+# on any network), optionally adding "9.9.9.9" (Quad9) for a 3-way comparison.
+DNS_TARGETS = _load_str_list_credential(
+    "DNS_TARGETS_OVERRIDE", ["8.8.8.8", "1.1.1.1", "198.224.166.135"]
+)
 DNS_QUERY_DOMAIN = "example.com"
 DNS_TIMEOUT_S = 5
 

@@ -83,3 +83,43 @@ def test_windows_credential_coerces_strings_to_ints(fake_credentials):
     assert result is not None
     assert result == [(6, 10), (17, 21)]
     assert all(isinstance(s, int) and isinstance(e, int) for s, e in result)
+
+
+def test_str_list_credential_returns_fallback_when_attribute_missing(fake_credentials):
+    from towerwatch.config import _load_str_list_credential
+
+    assert _load_str_list_credential("DOES_NOT_EXIST", ["8.8.8.8"]) == ["8.8.8.8"]
+
+
+def test_str_list_credential_returns_fallback_when_explicit_none(fake_credentials):
+    fake_credentials.DNS_TARGETS_OVERRIDE = None
+    from towerwatch.config import _load_str_list_credential
+
+    assert _load_str_list_credential("DNS_TARGETS_OVERRIDE", ["8.8.8.8"]) == ["8.8.8.8"]
+
+
+def test_str_list_credential_returns_fallback_when_empty_list(fake_credentials):
+    """An empty override is treated as 'unset' — fall back rather than probe
+    zero resolvers (which would silently disable the DNS probe)."""
+    fake_credentials.DNS_TARGETS_OVERRIDE = []
+    from towerwatch.config import _load_str_list_credential
+
+    assert _load_str_list_credential("DNS_TARGETS_OVERRIDE", ["8.8.8.8"]) == ["8.8.8.8"]
+
+
+def test_str_list_credential_returns_override_when_set(fake_credentials):
+    fake_credentials.DNS_TARGETS_OVERRIDE = ["8.8.8.8", "1.1.1.1"]
+    from towerwatch.config import _load_str_list_credential
+
+    result = _load_str_list_credential("DNS_TARGETS_OVERRIDE", ["9.9.9.9"])
+    assert result == ["8.8.8.8", "1.1.1.1"]
+
+
+def test_str_list_credential_coerces_entries_to_str(fake_credentials):
+    """Defensive: entries arrive as non-strings; nameserver field expects str."""
+    fake_credentials.DNS_TARGETS_OVERRIDE = [8, "1.1.1.1"]
+    from towerwatch.config import _load_str_list_credential
+
+    result = _load_str_list_credential("DNS_TARGETS_OVERRIDE", ["9.9.9.9"])
+    assert result == ["8", "1.1.1.1"]
+    assert all(isinstance(v, str) for v in result)
