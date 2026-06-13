@@ -87,7 +87,8 @@
           "matchAny": false,
           "tags": [
             "towerwatch",
-            "outage"
+            "outage",
+            "host:$location"
           ]
         }
       },
