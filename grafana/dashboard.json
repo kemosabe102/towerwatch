@@ -1417,7 +1417,7 @@
       },
       "id": 7,
       "title": "TCP Connection Time",
-      "description": "TCP handshake time to 8.8.8.8:443",
+      "description": "TCP handshake time. M6/Pi: tcp_connect_ms to 8.8.8.8:443. Phone (standstill-phone): phone_rtt_ms = mean TCP-connect to 8.8.8.8 + 1.1.1.1:443, with phone_jitter_ms (stddev). Same method (TCP connect), so they overlay here; the phone series is tagged host=standstill-phone.",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -1428,6 +1428,24 @@
           "expr": "towerwatch_tcp_connect_ms{host=\"$location\"}",
           "legendFormat": "TCP Connect",
           "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "towerwatch_phone_rtt_ms{host=\"$location\"}",
+          "legendFormat": "Phone TCP RTT (8.8.8.8 + 1.1.1.1)",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "towerwatch_phone_jitter_ms{host=\"$location\"}",
+          "legendFormat": "Phone TCP jitter (stddev)",
+          "refId": "C",
           "datasource": {
             "type": "prometheus",
             "uid": "grafanacloud-towerwatch-prom"
