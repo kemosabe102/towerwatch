@@ -44,7 +44,7 @@
           "uid": "-- Grafana --"
         },
         "enable": true,
-        "hide": true,
+        "hide": false,
         "iconColor": "rgba(0, 211, 255, 1)",
         "name": "Annotations & Alerts",
         "type": "dashboard"
@@ -451,7 +451,8 @@
                 "value": null
               }
             ]
-          }
+          },
+          "noValue": "\u2014 phone: see rflogger"
         },
         "overrides": []
       },
@@ -552,15 +553,15 @@
               },
               {
                 "color": "yellow",
-                "value": 50
+                "value": 150
               },
               {
                 "color": "orange",
-                "value": 100
+                "value": 300
               },
               {
                 "color": "red",
-                "value": 200
+                "value": 500
               }
             ]
           },
@@ -723,15 +724,15 @@
               },
               {
                 "color": "yellow",
-                "value": 50
+                "value": 150
               },
               {
                 "color": "orange",
-                "value": 100
+                "value": 300
               },
               {
                 "color": "red",
-                "value": 200
+                "value": 500
               }
             ]
           },
@@ -894,15 +895,15 @@
               },
               {
                 "color": "yellow",
-                "value": 50
+                "value": 30
               },
               {
                 "color": "orange",
-                "value": 100
+                "value": 75
               },
               {
                 "color": "red",
-                "value": 200
+                "value": 150
               }
             ]
           },
@@ -1281,7 +1282,7 @@
       },
       "id": 6,
       "title": "DNS Resolution Time",
-      "description": "DNS query time per nameserver (bypasses local cache)",
+      "description": "DNS query time per nameserver (bypasses local cache). Pi/M6 only on phone sessions; the phone's DNS timing is in the Phone HTTP Waterfall panel (phone_dns_ms), a different method.",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -1519,7 +1520,7 @@
       },
       "id": 8,
       "title": "HTTP Latency Probe",
-      "description": "Timed 10KB download from Cloudflare CDN (every 5 min)",
+      "description": "Timed 10KB download from Cloudflare CDN (every 5 min). The phone overlays this panel via the unprefixed http_latency_ms field \u2014 pick standstill-phone to see the phone series.",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -1663,7 +1664,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 37
+        "y": 70
       },
       "id": 61,
       "panels": [],
@@ -1683,7 +1684,7 @@
         "h": 4,
         "w": 8,
         "x": 0,
-        "y": 38
+        "y": 71
       },
       "targets": [
         {
@@ -1776,7 +1777,7 @@
         "h": 4,
         "w": 8,
         "x": 8,
-        "y": 38
+        "y": 71
       },
       "id": 47,
       "options": {
@@ -1842,7 +1843,7 @@
         "h": 4,
         "w": 8,
         "x": 16,
-        "y": 38
+        "y": 71
       },
       "id": 46,
       "options": {
@@ -1914,7 +1915,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 42
+        "y": 75
       },
       "id": 44,
       "options": {
@@ -1987,7 +1988,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 42
+        "y": 75
       },
       "id": 45,
       "options": {
@@ -2030,7 +2031,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 50
+        "y": 83
       },
       "targets": [
         {
@@ -2114,7 +2115,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 58
+        "y": 91
       },
       "targets": [
         {
@@ -2171,7 +2172,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 58
+        "y": 91
       },
       "targets": [
         {
@@ -2216,653 +2217,704 @@
       "timeFrom": "14d"
     },
     {
-      "collapsed": false,
+      "collapsed": true,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 66
+        "y": 99
       },
       "id": 62,
-      "panels": [],
+      "panels": [
+        {
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 100
+          },
+          "id": 12,
+          "title": "M6 Signal Quality",
+          "description": "Nighthawk M6 signal metrics: RSRP, RSRQ, SINR",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          },
+          "targets": [
+            {
+              "expr": "towerwatch_m6_rsrp{host=\"$location\"}",
+              "legendFormat": "RSRP (dBm)",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "grafanacloud-towerwatch-prom"
+              }
+            },
+            {
+              "expr": "towerwatch_m6_rsrq{host=\"$location\"}",
+              "legendFormat": "RSRQ (dB)",
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "grafanacloud-towerwatch-prom"
+              }
+            },
+            {
+              "expr": "towerwatch_m6_sinr{host=\"$location\"}",
+              "legendFormat": "SINR (dB)",
+              "refId": "C",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "grafanacloud-towerwatch-prom"
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "dB",
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "fillOpacity": 0,
+                "pointSize": 5,
+                "showPoints": "auto",
+                "spanNulls": false,
+                "scaleDistribution": {
+                  "type": "linear"
+                }
+              },
+              "color": {
+                "mode": "palette-classic"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            },
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "calcs": [
+                "mean",
+                "min",
+                "max"
+              ]
+            }
+          }
+        },
+        {
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 100
+          },
+          "id": 50,
+          "title": "M6 Carrier Aggregation",
+          "description": "Aggregated downlink spectrum + component carriers, and the antenna GATE: SCC declared (offered by the tower) vs active (held by the device). declared > active = the tower offers carriers the device cannot hold (signal-limited, antenna may help); declared = active = 1 = no extra spectrum on offer, so an antenna gives ~0 throughput upside. A drop in aggregated bandwidth/carrier count is a throughput cliff.",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          },
+          "targets": [
+            {
+              "expr": "towerwatch_m6_agg_dl_bandwidth_mhz{host=\"$location\"}",
+              "legendFormat": "Aggregated DL bandwidth (MHz)",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "grafanacloud-towerwatch-prom"
+              }
+            },
+            {
+              "expr": "towerwatch_m6_carrier_count{host=\"$location\"}",
+              "legendFormat": "Carrier count",
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "grafanacloud-towerwatch-prom"
+              }
+            },
+            {
+              "expr": "towerwatch_m6_ca_scc_declared{host=\"$location\"}",
+              "legendFormat": "SCC declared (offered)",
+              "refId": "C",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "grafanacloud-towerwatch-prom"
+              }
+            },
+            {
+              "expr": "towerwatch_m6_ca_scc_count{host=\"$location\"}",
+              "legendFormat": "SCC active (held)",
+              "refId": "D",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "grafanacloud-towerwatch-prom"
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "min": 0,
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "fillOpacity": 4,
+                "pointSize": 5,
+                "showPoints": "auto",
+                "spanNulls": false,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 100
+                  },
+                  {
+                    "color": "red",
+                    "value": 500
+                  }
+                ]
+              },
+              "color": {
+                "mode": "palette-classic"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            },
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "calcs": [
+                "mean",
+                "max"
+              ]
+            }
+          }
+        },
+        {
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 108
+          },
+          "id": 51,
+          "title": "M6 Handover History (PCI / band / eNB)",
+          "description": "Serving-cell identifiers as state bands: each row holds steady while on a cell and changes colour at a handover or reselection. Each distinct value gets its own colour (not a good/bad gradient), so frequent flips stand out. Watch for constant PCI/eNB flapping correlating with latency or throughput dips.",
+          "type": "state-timeline",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          },
+          "targets": [
+            {
+              "expr": "towerwatch_m6_pcc_pci{host=\"$location\"}",
+              "legendFormat": "PCC PCI",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "grafanacloud-towerwatch-prom"
+              }
+            },
+            {
+              "expr": "towerwatch_m6_pcc_band{host=\"$location\"}",
+              "legendFormat": "PCC band",
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "grafanacloud-towerwatch-prom"
+              }
+            },
+            {
+              "expr": "towerwatch_m6_enb_id{host=\"$location\"}",
+              "legendFormat": "eNB ID",
+              "refId": "C",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "grafanacloud-towerwatch-prom"
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "lineWidth": 0,
+                "fillOpacity": 80
+              },
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "value": null,
+                    "color": "green"
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "options": {
+            "mergeValues": true,
+            "showValue": "auto",
+            "alignValue": "left",
+            "rowHeight": 0.9,
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          }
+        },
+        {
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 108
+          },
+          "id": 52,
+          "title": "M6 Device Temperature",
+          "description": "Numeric chassis temperature from the M6 (\u00b0C). The prime suspect for afternoon thermal throttling \u2014 watch it climb in a sunny window.",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          },
+          "targets": [
+            {
+              "expr": "towerwatch_m6_dev_temperature{host=\"$location\"}",
+              "legendFormat": "Device temp (\u00b0C)",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "grafanacloud-towerwatch-prom"
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "celsius",
+              "min": 20,
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "pointSize": 5,
+                "showPoints": "auto",
+                "spanNulls": false,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "thresholdsStyle": {
+                  "mode": "area"
+                }
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "value": null,
+                    "color": "green"
+                  },
+                  {
+                    "value": 65,
+                    "color": "yellow"
+                  },
+                  {
+                    "value": 75,
+                    "color": "orange"
+                  },
+                  {
+                    "value": 85,
+                    "color": "red"
+                  }
+                ]
+              },
+              "color": {
+                "mode": "palette-classic"
+              },
+              "max": 95
+            },
+            "overrides": []
+          },
+          "options": {
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            },
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "calcs": [
+                "mean",
+                "max"
+              ]
+            }
+          }
+        },
+        {
+          "id": 70,
+          "title": "M6 Current Cell",
+          "description": "Current serving-cell identity and signal \u2014 what cell/band the M6 is on right now. Plain identifiers; no good/bad coloring (these are IDs, not magnitudes).",
+          "type": "stat",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 116
+          },
+          "targets": [
+            {
+              "expr": "towerwatch_m6_pcc_pci{host=\"$location\"}",
+              "legendFormat": "PCI",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "grafanacloud-towerwatch-prom"
+              }
+            },
+            {
+              "expr": "towerwatch_m6_pcc_band{host=\"$location\"}",
+              "legendFormat": "Band",
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "grafanacloud-towerwatch-prom"
+              }
+            },
+            {
+              "expr": "towerwatch_m6_enb_id{host=\"$location\"}",
+              "legendFormat": "eNB ID",
+              "refId": "C",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "grafanacloud-towerwatch-prom"
+              }
+            },
+            {
+              "expr": "towerwatch_m6_rsrp{host=\"$location\"}",
+              "legendFormat": "RSRP (dBm)",
+              "refId": "D",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "grafanacloud-towerwatch-prom"
+              }
+            },
+            {
+              "expr": "towerwatch_m6_sinr{host=\"$location\"}",
+              "legendFormat": "SINR (dB)",
+              "refId": "E",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "grafanacloud-towerwatch-prom"
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "text"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              },
+              "noValue": "\u2014"
+            },
+            "overrides": []
+          },
+          "options": {
+            "colorMode": "none",
+            "graphMode": "none",
+            "textMode": "value_and_name",
+            "justifyMode": "center",
+            "orientation": "vertical",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            }
+          }
+        },
+        {
+          "id": 71,
+          "title": "Band Performance Ranking",
+          "description": "Average signal per serving band over the dashboard range, from the bands the M6 naturally roams across (it can't be force-locked). Samples = dwell time on that band (more samples = more time spent there). Sort by SINR to see which band performed best.",
+          "type": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          },
+          "targets": [
+            {
+              "expr": "avg by (band) (avg_over_time(towerwatch_m6_sig_sinr{host=\"$location\"}[$__range]))",
+              "format": "table",
+              "instant": true,
+              "refId": "SINR",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "grafanacloud-towerwatch-prom"
+              }
+            },
+            {
+              "expr": "avg by (band) (avg_over_time(towerwatch_m6_sig_rsrp{host=\"$location\"}[$__range]))",
+              "format": "table",
+              "instant": true,
+              "refId": "RSRP",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "grafanacloud-towerwatch-prom"
+              }
+            },
+            {
+              "expr": "count by (band) (count_over_time(towerwatch_m6_sig_sinr{host=\"$location\"}[$__range]))",
+              "format": "table",
+              "instant": true,
+              "refId": "SAMPLES",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "grafanacloud-towerwatch-prom"
+              }
+            }
+          ],
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 116
+          },
+          "transformations": [
+            {
+              "id": "merge",
+              "options": {}
+            },
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true
+                },
+                "renameByName": {
+                  "band": "Band",
+                  "Value #SINR": "Avg SINR (dB)",
+                  "Value #RSRP": "Avg RSRP (dBm)",
+                  "Value #SAMPLES": "Samples"
+                },
+                "indexByName": {
+                  "band": 0,
+                  "Value #SINR": 1,
+                  "Value #RSRP": 2,
+                  "Value #SAMPLES": 3
+                }
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "inspect": false
+              },
+              "decimals": 1,
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              },
+              "color": {
+                "mode": "thresholds"
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Avg SINR (dB)"
+                },
+                "properties": [
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "color-background",
+                      "mode": "gradient"
+                    }
+                  },
+                  {
+                    "id": "thresholds",
+                    "value": {
+                      "mode": "absolute",
+                      "steps": [
+                        {
+                          "color": "red",
+                          "value": null
+                        },
+                        {
+                          "color": "yellow",
+                          "value": 5
+                        },
+                        {
+                          "color": "green",
+                          "value": 13
+                        }
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Samples"
+                },
+                "properties": [
+                  {
+                    "id": "decimals",
+                    "value": 0
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "showHeader": true,
+            "sortBy": [
+              {
+                "displayName": "Avg SINR (dB)",
+                "desc": true
+              }
+            ],
+            "footer": {
+              "show": false,
+              "reducer": [
+                "sum"
+              ],
+              "fields": ""
+            }
+          }
+        },
+        {
+          "id": 81,
+          "title": "Uplink Effort \u2014 M6 Tx Level (lower is better)",
+          "description": "M6 transmit power level. Counterintuitive success signal: you want this to DROP. If the modem transmits near max to reach the tower, a better antenna lets it reach the same tower with less power \u2014 a falling tx_level after an antenna change is direct evidence the uplink path improved (and explains any upload gain). Grouped by experiment when a run is active.",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 124,
+            "w": 12,
+            "h": 8
+          },
+          "targets": [
+            {
+              "expr": "towerwatch_m6_tx_level{host=\"$location\"}",
+              "legendFormat": "Tx level ({{experiment}})",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "grafanacloud-towerwatch-prom"
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 2
+              },
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "noValue": "\u2014"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          }
+        }
+      ],
       "title": "Cellular Radio (M6)",
       "type": "row"
-    },
-    {
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 67
-      },
-      "id": 12,
-      "title": "M6 Signal Quality",
-      "description": "Nighthawk M6 signal metrics: RSRP, RSRQ, SINR",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "grafanacloud-towerwatch-prom"
-      },
-      "targets": [
-        {
-          "expr": "towerwatch_m6_rsrp{host=\"$location\"}",
-          "legendFormat": "RSRP (dBm)",
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        },
-        {
-          "expr": "towerwatch_m6_rsrq{host=\"$location\"}",
-          "legendFormat": "RSRQ (dB)",
-          "refId": "B",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        },
-        {
-          "expr": "towerwatch_m6_sinr{host=\"$location\"}",
-          "legendFormat": "SINR (dB)",
-          "refId": "C",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "dB",
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "fillOpacity": 0,
-            "pointSize": 5,
-            "showPoints": "auto",
-            "spanNulls": false,
-            "scaleDistribution": {
-              "type": "linear"
-            }
-          },
-          "color": {
-            "mode": "palette-classic"
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "calcs": [
-            "mean",
-            "min",
-            "max"
-          ]
-        }
-      }
-    },
-    {
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 67
-      },
-      "id": 50,
-      "title": "M6 Carrier Aggregation",
-      "description": "Aggregated downlink spectrum + component carriers, and the antenna GATE: SCC declared (offered by the tower) vs active (held by the device). declared > active = the tower offers carriers the device cannot hold (signal-limited, antenna may help); declared = active = 1 = no extra spectrum on offer, so an antenna gives ~0 throughput upside. A drop in aggregated bandwidth/carrier count is a throughput cliff.",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "grafanacloud-towerwatch-prom"
-      },
-      "targets": [
-        {
-          "expr": "towerwatch_m6_agg_dl_bandwidth_mhz{host=\"$location\"}",
-          "legendFormat": "Aggregated DL bandwidth (MHz)",
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        },
-        {
-          "expr": "towerwatch_m6_carrier_count{host=\"$location\"}",
-          "legendFormat": "Carrier count",
-          "refId": "B",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        },
-        {
-          "expr": "towerwatch_m6_ca_scc_declared{host=\"$location\"}",
-          "legendFormat": "SCC declared (offered)",
-          "refId": "C",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        },
-        {
-          "expr": "towerwatch_m6_ca_scc_count{host=\"$location\"}",
-          "legendFormat": "SCC active (held)",
-          "refId": "D",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "min": 0,
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "fillOpacity": 4,
-            "pointSize": 5,
-            "showPoints": "auto",
-            "spanNulls": false,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 100
-              },
-              {
-                "color": "red",
-                "value": 500
-              }
-            ]
-          },
-          "color": {
-            "mode": "palette-classic"
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        }
-      }
-    },
-    {
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 75
-      },
-      "id": 51,
-      "title": "M6 Handover History (PCI / band / eNB)",
-      "description": "Serving-cell identifiers as state bands: each row holds steady while on a cell and changes colour at a handover or reselection. Each distinct value gets its own colour (not a good/bad gradient), so frequent flips stand out. Watch for constant PCI/eNB flapping correlating with latency or throughput dips.",
-      "type": "state-timeline",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "grafanacloud-towerwatch-prom"
-      },
-      "targets": [
-        {
-          "expr": "towerwatch_m6_pcc_pci{host=\"$location\"}",
-          "legendFormat": "PCC PCI",
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        },
-        {
-          "expr": "towerwatch_m6_pcc_band{host=\"$location\"}",
-          "legendFormat": "PCC band",
-          "refId": "B",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        },
-        {
-          "expr": "towerwatch_m6_enb_id{host=\"$location\"}",
-          "legendFormat": "eNB ID",
-          "refId": "C",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "lineWidth": 0,
-            "fillOpacity": 80
-          },
-          "color": {
-            "mode": "palette-classic"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "value": null,
-                "color": "green"
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "options": {
-        "mergeValues": true,
-        "showValue": "auto",
-        "alignValue": "left",
-        "rowHeight": 0.9,
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      }
-    },
-    {
-      "id": 70,
-      "title": "M6 Current Cell",
-      "description": "Current serving-cell identity and signal \u2014 what cell/band the M6 is on right now. Plain identifiers; no good/bad coloring (these are IDs, not magnitudes).",
-      "type": "stat",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "grafanacloud-towerwatch-prom"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 83
-      },
-      "targets": [
-        {
-          "expr": "towerwatch_m6_pcc_pci{host=\"$location\"}",
-          "legendFormat": "PCI",
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        },
-        {
-          "expr": "towerwatch_m6_pcc_band{host=\"$location\"}",
-          "legendFormat": "Band",
-          "refId": "B",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        },
-        {
-          "expr": "towerwatch_m6_enb_id{host=\"$location\"}",
-          "legendFormat": "eNB ID",
-          "refId": "C",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        },
-        {
-          "expr": "towerwatch_m6_rsrp{host=\"$location\"}",
-          "legendFormat": "RSRP (dBm)",
-          "refId": "D",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        },
-        {
-          "expr": "towerwatch_m6_sinr{host=\"$location\"}",
-          "legendFormat": "SINR (dB)",
-          "refId": "E",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "text"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "text",
-                "value": null
-              }
-            ]
-          },
-          "noValue": "\u2014"
-        },
-        "overrides": []
-      },
-      "options": {
-        "colorMode": "none",
-        "graphMode": "none",
-        "textMode": "value_and_name",
-        "justifyMode": "center",
-        "orientation": "vertical",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      }
-    },
-    {
-      "id": 71,
-      "title": "Band Performance Ranking",
-      "description": "Average signal per serving band over the dashboard range, from the bands the M6 naturally roams across (it can't be force-locked). Samples = dwell time on that band (more samples = more time spent there). Sort by SINR to see which band performed best.",
-      "type": "table",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "grafanacloud-towerwatch-prom"
-      },
-      "targets": [
-        {
-          "expr": "avg by (band) (avg_over_time(towerwatch_m6_sig_sinr{host=\"$location\"}[$__range]))",
-          "format": "table",
-          "instant": true,
-          "refId": "SINR",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        },
-        {
-          "expr": "avg by (band) (avg_over_time(towerwatch_m6_sig_rsrp{host=\"$location\"}[$__range]))",
-          "format": "table",
-          "instant": true,
-          "refId": "RSRP",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        },
-        {
-          "expr": "count by (band) (count_over_time(towerwatch_m6_sig_sinr{host=\"$location\"}[$__range]))",
-          "format": "table",
-          "instant": true,
-          "refId": "SAMPLES",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        }
-      ],
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 83
-      },
-      "transformations": [
-        {
-          "id": "merge",
-          "options": {}
-        },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true
-            },
-            "renameByName": {
-              "band": "Band",
-              "Value #SINR": "Avg SINR (dB)",
-              "Value #RSRP": "Avg RSRP (dBm)",
-              "Value #SAMPLES": "Samples"
-            },
-            "indexByName": {
-              "band": 0,
-              "Value #SINR": 1,
-              "Value #RSRP": 2,
-              "Value #SAMPLES": 3
-            }
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "inspect": false
-          },
-          "decimals": 1,
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "text",
-                "value": null
-              }
-            ]
-          },
-          "color": {
-            "mode": "thresholds"
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Avg SINR (dB)"
-            },
-            "properties": [
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "color-background",
-                  "mode": "gradient"
-                }
-              },
-              {
-                "id": "thresholds",
-                "value": {
-                  "mode": "absolute",
-                  "steps": [
-                    {
-                      "color": "red",
-                      "value": null
-                    },
-                    {
-                      "color": "yellow",
-                      "value": 5
-                    },
-                    {
-                      "color": "green",
-                      "value": 13
-                    }
-                  ]
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Samples"
-            },
-            "properties": [
-              {
-                "id": "decimals",
-                "value": 0
-              }
-            ]
-          }
-        ]
-      },
-      "options": {
-        "showHeader": true,
-        "sortBy": [
-          {
-            "displayName": "Avg SINR (dB)",
-            "desc": true
-          }
-        ],
-        "footer": {
-          "show": false,
-          "reducer": [
-            "sum"
-          ],
-          "fields": ""
-        }
-      }
-    },
-    {
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 75
-      },
-      "id": 52,
-      "title": "M6 Device Temperature",
-      "description": "Numeric chassis temperature from the M6 (\u00b0C). The prime suspect for afternoon thermal throttling \u2014 watch it climb in a sunny window.",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "grafanacloud-towerwatch-prom"
-      },
-      "targets": [
-        {
-          "expr": "towerwatch_m6_dev_temperature{host=\"$location\"}",
-          "legendFormat": "Device temp (\u00b0C)",
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "celsius",
-          "min": 20,
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "fillOpacity": 10,
-            "pointSize": 5,
-            "showPoints": "auto",
-            "spanNulls": false,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "thresholdsStyle": {
-              "mode": "area"
-            }
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "value": null,
-                "color": "green"
-              },
-              {
-                "value": 65,
-                "color": "yellow"
-              },
-              {
-                "value": 75,
-                "color": "orange"
-              },
-              {
-                "value": 85,
-                "color": "red"
-              }
-            ]
-          },
-          "color": {
-            "mode": "palette-classic"
-          },
-          "max": 95
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        }
-      }
-    },
-    {
-      "id": 79,
-      "type": "row",
-      "title": "Experiment & A/B Analysis",
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 91
-      },
-      "panels": []
     },
     {
       "id": 80,
@@ -2874,10 +2926,10 @@
         "uid": "grafanacloud-towerwatch-prom"
       },
       "gridPos": {
-        "h": 8,
-        "w": 12,
         "x": 0,
-        "y": 92
+        "y": 37,
+        "w": 12,
+        "h": 8
       },
       "targets": [
         {
@@ -2976,217 +3028,12 @@
       }
     },
     {
-      "id": 81,
-      "title": "Uplink Effort \u2014 M6 Tx Level (lower is better)",
-      "description": "M6 transmit power level. Counterintuitive success signal: you want this to DROP. If the modem transmits near max to reach the tower, a better antenna lets it reach the same tower with less power \u2014 a falling tx_level after an antenna change is direct evidence the uplink path improved (and explains any upload gain). Grouped by experiment when a run is active.",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "grafanacloud-towerwatch-prom"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 92
-      },
-      "targets": [
-        {
-          "expr": "towerwatch_m6_tx_level{host=\"$location\"}",
-          "legendFormat": "Tx level ({{experiment}})",
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "none",
-          "custom": {
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "lineWidth": 2
-          },
-          "color": {
-            "mode": "palette-classic"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "noValue": "\u2014"
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      }
-    },
-    {
-      "id": 82,
-      "title": "Experiment Comparison (avg by experiment)",
-      "description": "Side-by-side averages per experiment over the dashboard range \u2014 the antenna on/off view. Set EXPERIMENT_LABEL in credentials for a run (e.g. 'antenna_pos_a'), let it collect, and compare against the 'none' baseline row. SINR/RSRP/DL up = better; bufferbloat/loss/tx down = better. Empty until at least one experiment has run.",
-      "type": "table",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "grafanacloud-towerwatch-prom"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 100
-      },
-      "targets": [
-        {
-          "expr": "avg by (experiment) (avg_over_time(towerwatch_m6_sig_sinr{host=\"$location\"}[$__range]))",
-          "legendFormat": "{{experiment}}",
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          },
-          "format": "table",
-          "instant": true
-        },
-        {
-          "expr": "avg by (experiment) (avg_over_time(towerwatch_m6_sig_rsrp{host=\"$location\"}[$__range]))",
-          "legendFormat": "{{experiment}}",
-          "refId": "B",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          },
-          "format": "table",
-          "instant": true
-        },
-        {
-          "expr": "avg by (experiment) (avg_over_time(towerwatch_http_throughput_mbps{host=\"$location\"}[$__range]))",
-          "legendFormat": "{{experiment}}",
-          "refId": "C",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          },
-          "format": "table",
-          "instant": true
-        },
-        {
-          "expr": "avg by (experiment) (avg_over_time(towerwatch_bufferbloat_download_delta_ms{host=\"$location\"}[$__range]))",
-          "legendFormat": "{{experiment}}",
-          "refId": "D",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          },
-          "format": "table",
-          "instant": true
-        },
-        {
-          "expr": "avg by (experiment) (avg_over_time(towerwatch_pkt_loss_google{host=\"$location\"}[$__range]))",
-          "legendFormat": "{{experiment}}",
-          "refId": "E",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          },
-          "format": "table",
-          "instant": true
-        },
-        {
-          "expr": "avg by (experiment) (avg_over_time(towerwatch_m6_tx_level{host=\"$location\"}[$__range]))",
-          "legendFormat": "{{experiment}}",
-          "refId": "F",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "grafanacloud-towerwatch-prom"
-          },
-          "format": "table",
-          "instant": true
-        }
-      ],
-      "transformations": [
-        {
-          "id": "merge",
-          "options": {}
-        },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true
-            },
-            "renameByName": {
-              "experiment": "Experiment",
-              "Value #A": "Avg SINR (dB)",
-              "Value #B": "Avg RSRP (dBm)",
-              "Value #C": "Avg DL (Mbps)",
-              "Value #D": "Bufferbloat \u0394 (ms)",
-              "Value #E": "Loss (%)",
-              "Value #F": "Tx level"
-            }
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            }
-          },
-          "decimals": 1,
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "text",
-                "value": null
-              }
-            ]
-          },
-          "color": {
-            "mode": "thresholds"
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "showHeader": true,
-        "footer": {
-          "show": false,
-          "reducer": [
-            "sum"
-          ],
-          "fields": ""
-        }
-      }
-    },
-    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 108
+        "y": 100
       },
       "id": 63,
       "panels": [],
@@ -3217,7 +3064,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 109
+        "y": 101
       },
       "options": {
         "showLabels": false,
@@ -3239,7 +3086,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 109
+        "y": 101
       },
       "id": 25,
       "title": "Service Restarts",
@@ -3277,7 +3124,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 92
+        "y": 45
       },
       "id": 83,
       "panels": [],
@@ -3289,11 +3136,11 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 93
+        "y": 46
       },
       "id": 84,
       "title": "Phone Serving LTE Signal",
-      "description": "Pixel serving-cell LTE metrics from the towerwatch-rflogger Android app: RSRP, RSRQ, SINR. Fixed host=standstill-phone (does NOT follow the $location picker). Session-based — gaps mean no logging session was running.",
+      "description": "Pixel serving-cell LTE metrics from the towerwatch-rflogger Android app: RSRP, RSRQ, SINR. Fixed host=standstill-phone (does NOT follow the $location picker). Session-based \u2014 gaps mean no logging session was running.",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -3346,7 +3193,7 @@
           "color": {
             "mode": "palette-classic"
           },
-          "noValue": "—"
+          "noValue": "\u2014"
         },
         "overrides": [
           {
@@ -3384,11 +3231,11 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 93
+        "y": 46
       },
       "id": 85,
       "title": "Phone NR Signal (5G)",
-      "description": "Pixel 5G NR signal — the M6's blind spot (its firmware can't expose NR). Populated only while the phone is camped on 5G NR; flat/absent means the phone is on LTE. host=standstill-phone (fixed).",
+      "description": "Pixel 5G NR signal \u2014 the M6's blind spot (its firmware can't expose NR). Populated only while the phone is camped on 5G NR; flat/absent means the phone is on LTE. host=standstill-phone (fixed).",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -3441,7 +3288,7 @@
           "color": {
             "mode": "palette-classic"
           },
-          "noValue": "—"
+          "noValue": "\u2014"
         },
         "overrides": [
           {
@@ -3476,10 +3323,10 @@
     },
     {
       "gridPos": {
-        "h": 8,
-        "w": 12,
         "x": 0,
-        "y": 101
+        "y": 54,
+        "w": 12,
+        "h": 8
       },
       "id": 86,
       "title": "Phone Neighbor Cells",
@@ -3536,7 +3383,7 @@
           "color": {
             "mode": "palette-classic"
           },
-          "noValue": "—"
+          "noValue": "\u2014"
         },
         "overrides": [
           {
@@ -3575,14 +3422,14 @@
     },
     {
       "gridPos": {
-        "h": 8,
-        "w": 6,
         "x": 12,
-        "y": 101
+        "y": 54,
+        "w": 6,
+        "h": 8
       },
       "id": 87,
       "title": "Phone CA Carriers",
-      "description": "Carrier-aggregation component-carrier count held by the phone (from PhysicalChannelConfig). Higher = more aggregated spectrum. Compare against the M6's carrier count to see if the phone holds more carriers on the same tower. host=standstill-phone (fixed).",
+      "description": "Carrier-aggregation component-carrier count held by the phone (from PhysicalChannelConfig). Higher = more aggregated spectrum. Compare against the M6's carrier count to see if the phone holds more carriers on the same tower. host=standstill-phone (fixed). Sparse/blank = few samples in range (short logging session) or the phone is on LTE; expected, not an error.",
       "type": "stat",
       "datasource": {
         "type": "prometheus",
@@ -3610,20 +3457,20 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
+                "color": "text",
                 "value": null
               },
               {
                 "color": "yellow",
-                "value": 2
+                "value": 1
               },
               {
                 "color": "green",
-                "value": 3
+                "value": 2
               }
             ]
           },
-          "noValue": "—"
+          "noValue": "\u2014"
         },
         "overrides": []
       },
@@ -3645,7 +3492,7 @@
     {
       "id": 88,
       "title": "Phone Band Ranking",
-      "description": "Average signal per serving band the phone roamed across over the dashboard range. Samples = dwell time on that band. Sort by SINR to see which band performed best for the phone; compare against the M6 Band Performance Ranking for the same window. host=standstill-phone (fixed).",
+      "description": "Average signal per serving band the phone roamed across over the dashboard range. Samples = dwell time on that band. Sort by SINR to see which band performed best for the phone; compare against the M6 Band Performance Ranking for the same window. host=standstill-phone (fixed). Sparse/blank = few samples in range (short logging session); expected, not an error.",
       "type": "table",
       "datasource": {
         "type": "prometheus",
@@ -3684,10 +3531,10 @@
         }
       ],
       "gridPos": {
-        "h": 8,
-        "w": 18,
         "x": 6,
-        "y": 109
+        "y": 62,
+        "w": 18,
+        "h": 8
       },
       "transformations": [
         {
@@ -3776,6 +3623,101 @@
             ]
           }
         ]
+      }
+    },
+    {
+      "id": 89,
+      "title": "Phone HTTP Waterfall (DNS \u00b7 connect \u00b7 TLS \u00b7 TTFB)",
+      "description": "Cold-connection setup breakdown from the rflogger waterfall probe. Lines overlay (not stacked): TTFB is the full first-byte total; DNS / Connect / TLS are components inside it (Connect already includes TLS). Phone-only (no M6 equivalent); phone_dns_ms ~0 on a DNS cache hit is expected. host=standstill-phone (fixed).",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "grafanacloud-towerwatch-prom"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 62,
+        "w": 6,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "towerwatch_phone_ttfb_ms{host=\"standstill-phone\"}",
+          "legendFormat": "TTFB (total)",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "towerwatch_phone_dns_ms{host=\"standstill-phone\"}",
+          "legendFormat": "DNS",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "towerwatch_phone_connect_ms{host=\"standstill-phone\"}",
+          "legendFormat": "Connect (incl TLS)",
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        },
+        {
+          "expr": "towerwatch_phone_tls_ms{host=\"standstill-phone\"}",
+          "legendFormat": "TLS",
+          "refId": "D",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "grafanacloud-towerwatch-prom"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "noValue": "\u2014"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "min",
+            "max"
+          ]
+        }
       }
     }
   ],
