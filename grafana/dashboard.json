@@ -541,7 +541,7 @@
               "log": 2
             },
             "thresholdsStyle": {
-              "mode": "area"
+              "mode": "line"
             }
           },
           "thresholds": {
@@ -712,7 +712,7 @@
               "log": 2
             },
             "thresholdsStyle": {
-              "mode": "area"
+              "mode": "line"
             }
           },
           "thresholds": {
@@ -883,7 +883,7 @@
               "log": 2
             },
             "thresholdsStyle": {
-              "mode": "area"
+              "mode": "line"
             }
           },
           "thresholds": {
@@ -1231,7 +1231,7 @@
               "log": 2
             },
             "thresholdsStyle": {
-              "mode": "area"
+              "mode": "line"
             }
           },
           "thresholds": {
@@ -1469,7 +1469,7 @@
               "type": "linear"
             },
             "thresholdsStyle": {
-              "mode": "area"
+              "mode": "line"
             }
           },
           "thresholds": {
@@ -2105,7 +2105,7 @@
     {
       "id": 32,
       "title": "Daily Avg Download Throughput (14d)",
-      "description": "One bar per calendar day, 14-day fixed window. Each bar is the mean of all towerwatch_http_throughput_mbps samples for that day. Time range is panel-fixed \u2014 does not follow the dashboard time picker.",
+      "description": "One bar per calendar day, 14-day fixed window: the daily mean of Cloudflare speedtest download runs (scheduled + manual). Both the Pi and the phone emit speedtest_download_mbps, so this populates on every site. Sparse until enough runs accumulate. Time range is panel-fixed \u2014 does not follow the dashboard time picker.",
       "type": "barchart",
       "datasource": {
         "type": "prometheus",
@@ -2119,7 +2119,7 @@
       },
       "targets": [
         {
-          "expr": "avg_over_time(towerwatch_http_throughput_mbps{host=\"$location\"}[1d])",
+          "expr": "avg_over_time(towerwatch_speedtest_download_mbps{host=\"$location\"}[1d])",
           "legendFormat": "Download",
           "refId": "A",
           "interval": "1d",
@@ -2162,7 +2162,7 @@
     {
       "id": 33,
       "title": "Daily Avg Upload Throughput (14d)",
-      "description": "One bar per calendar day, 14-day fixed window. Each bar is the mean of all towerwatch_http_upload_mbps samples for that day. Will appear empty until upload probe samples have accumulated.",
+      "description": "One bar per calendar day, 14-day fixed window: the daily mean of Cloudflare speedtest upload runs (scheduled + manual). Both the Pi and the phone emit speedtest_upload_mbps, so this populates on every site. Sparse until enough runs accumulate. Time range is panel-fixed \u2014 does not follow the dashboard time picker.",
       "type": "barchart",
       "datasource": {
         "type": "prometheus",
@@ -2176,7 +2176,7 @@
       },
       "targets": [
         {
-          "expr": "avg_over_time(towerwatch_http_upload_mbps{host=\"$location\"}[1d])",
+          "expr": "avg_over_time(towerwatch_speedtest_upload_mbps{host=\"$location\"}[1d])",
           "legendFormat": "Upload",
           "refId": "A",
           "interval": "1d",
@@ -3608,6 +3608,10 @@
                     {
                       "color": "red",
                       "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 0
                     },
                     {
                       "color": "yellow",
