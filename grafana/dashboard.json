@@ -1673,8 +1673,8 @@
     },
     {
       "id": 43,
-      "title": "Saturation Down (6h)",
-      "description": "6-hour average HTTP throughput as a percentage of the plan capacity ($max_download_mbps). 30\u201380% is healthy active use; >95% means the link is saturated; near 0% means light usage. The Saturation Golden Signal.",
+      "title": "Avg Download (6h)",
+      "description": "6-hour average of the Pi's scheduled HTTP-throughput probe, in Mbps. Pi-only \u2014 the phone emits no http_throughput_mbps, so this is 'No data' on a phone session. Note: this probe is sparse (fires rarely), so the Cloudflare Speedtest panels are the primary throughput read.",
       "type": "stat",
       "datasource": {
         "type": "prometheus",
@@ -1688,7 +1688,7 @@
       },
       "targets": [
         {
-          "expr": "avg_over_time(towerwatch_http_throughput_mbps{host=\"$location\"}[6h]) / $max_download_mbps * 100",
+          "expr": "avg_over_time(towerwatch_http_throughput_mbps{host=\"$location\"}[6h])",
           "instant": true,
           "refId": "A",
           "datasource": {
@@ -1699,7 +1699,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "percent",
+          "unit": "Mbits",
           "decimals": 1,
           "color": {
             "mode": "thresholds"
@@ -1708,16 +1708,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "text",
                 "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 80
-              },
-              {
-                "color": "red",
-                "value": 95
               }
             ]
           },
@@ -1750,26 +1742,18 @@
           "color": {
             "mode": "thresholds"
           },
-          "decimals": 0,
+          "decimals": 1,
           "mappings": [],
           "thresholds": {
-            "mode": "percentage",
+            "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "text",
                 "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 75
-              },
-              {
-                "color": "red",
-                "value": 90
               }
             ]
           },
-          "unit": "percent"
+          "unit": "Mbits"
         },
         "overrides": []
       },
@@ -1797,14 +1781,14 @@
             "type": "prometheus",
             "uid": "grafanacloud-towerwatch-prom"
           },
-          "expr": "avg_over_time(towerwatch_http_upload_mbps{host=\"$location\"}[6h]) / $max_upload_mbps * 100",
+          "expr": "avg_over_time(towerwatch_http_upload_mbps{host=\"$location\"}[6h])",
           "instant": true,
           "refId": "A"
         }
       ],
-      "title": "Saturation Up (6h)",
+      "title": "Avg Upload (6h)",
       "type": "stat",
-      "description": "Upload utilization as % of configured max."
+      "description": "6-hour average of the Pi's scheduled HTTP-upload probe, in Mbps. Pi-only \u2014 the phone emits no http_upload_mbps, so this is 'No data' on a phone session. Note: this probe is sparse; see the Cloudflare Speedtest panels for the primary throughput read."
     },
     {
       "datasource": {
@@ -2126,7 +2110,9 @@
           "datasource": {
             "type": "prometheus",
             "uid": "grafanacloud-towerwatch-prom"
-          }
+          },
+          "range": true,
+          "instant": false
         }
       ],
       "fieldConfig": {
@@ -2183,7 +2169,9 @@
           "datasource": {
             "type": "prometheus",
             "uid": "grafanacloud-towerwatch-prom"
-          }
+          },
+          "range": true,
+          "instant": false
         }
       ],
       "fieldConfig": {
@@ -3742,7 +3730,7 @@
           "uid": "${DS_PROMETHEUS}"
         },
         "query": "label_values(towerwatch_connected, host)",
-        "refresh": 1,
+        "refresh": 2,
         "sort": 1,
         "includeAll": false,
         "multi": false,
