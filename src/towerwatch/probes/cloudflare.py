@@ -191,12 +191,26 @@ class CloudflareThroughputProbe:
         loki=None,
         rand_bytes=os.urandom,
         executor_factory: Any = ThreadPoolExecutor,
+        dl_max_total_bytes: int | None = None,
+        ul_max_total_bytes: int | None = None,
     ):
         self._session = session if session is not None else requests.Session()
         self._clock = clock if clock is not None else SystemClock()
         self._loki = loki if loki is not None else _ModuleLokiSink()
         self._rand_bytes = rand_bytes
         self._executor_factory = executor_factory
+        # Per-run byte-cap overrides (manual field runs shrink these for tight
+        # ABAB alternation without a redeploy). None -> use the config defaults.
+        self._dl_max_total_bytes = (
+            dl_max_total_bytes
+            if dl_max_total_bytes is not None
+            else config.CLOUDFLARE_THROUGHPUT_MAX_TOTAL_BYTES
+        )
+        self._ul_max_total_bytes = (
+            ul_max_total_bytes
+            if ul_max_total_bytes is not None
+            else config.CLOUDFLARE_UPLOAD_MAX_TOTAL_BYTES
+        )
 
     # ------------------------------------------------------------------
     # Shared ramp + parallel-stream driver
@@ -264,7 +278,7 @@ class CloudflareThroughputProbe:
                 worker,
                 config.CLOUDFLARE_THROUGHPUT_RAMP_BYTES,
                 config.CLOUDFLARE_THROUGHPUT_STREAMS,
-                config.CLOUDFLARE_THROUGHPUT_MAX_TOTAL_BYTES,
+                self._dl_max_total_bytes,
                 config.CLOUDFLARE_THROUGHPUT_TARGET_S,
                 config.CLOUDFLARE_THROUGHPUT_WARMUP_DISCARD_S,
                 config.CLOUDFLARE_THROUGHPUT_TIMEOUT_S,
@@ -321,7 +335,7 @@ class CloudflareThroughputProbe:
                 worker,
                 config.CLOUDFLARE_UPLOAD_RAMP_BYTES,
                 config.CLOUDFLARE_UPLOAD_STREAMS,
-                config.CLOUDFLARE_UPLOAD_MAX_TOTAL_BYTES,
+                self._ul_max_total_bytes,
                 config.CLOUDFLARE_THROUGHPUT_TARGET_S,
                 config.CLOUDFLARE_THROUGHPUT_WARMUP_DISCARD_S,
                 config.CLOUDFLARE_THROUGHPUT_TIMEOUT_S,
@@ -385,14 +399,28 @@ def run_speedtest(
     *,
     triggered_by: str | None = None,
     loki=None,
+    max_total_bytes: int | None = None,
 ) -> dict:
     """Manual-speedtest entrypoint. Returns {download_mbps, upload_mbps, success}.
 
     Used by `speedtest_cli.py` — the SSH-triggered manual flow. The metric
     field names match the old Ookla function so format_speedtest_line and
     the dashboard's Manual Speedtest History panel keep working.
+
+    `max_total_bytes` caps BOTH the download and upload byte budgets for this
+    one run (overriding the config defaults). Use it to shrink a field run for
+    tight back-to-back alternation on a metered link; None keeps the defaults.
+    A dedicated probe is constructed whenever an override or a loki sink is
+    given — the shared singleton is only used for the plain default path.
     """
-    probe = CloudflareThroughputProbe(loki=loki) if loki else _shared()
+    if loki is not None or max_total_bytes is not None:
+        probe = CloudflareThroughputProbe(
+            loki=loki,
+            dl_max_total_bytes=max_total_bytes,
+            ul_max_total_bytes=max_total_bytes,
+        )
+    else:
+        probe = _shared()
     dl = probe.measure_download()
     ul = probe.measure_upload()
     success = 1 if (dl["http_throughput_mbps"] > 0 and ul["http_upload_mbps"] > 0) else 0

@@ -2,6 +2,8 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 
 def _fake_loki_client():
     m = MagicMock()
@@ -197,3 +199,104 @@ def test_tailscale_whois_returns_none_when_binary_missing():
 
     with patch.object(speedtest_cli.shutil, "which", return_value=None):
         assert speedtest_cli._tailscale_whois("100.64.0.5") is None
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("50M", 50_000_000),
+        ("25_000_000", 25_000_000),
+        ("1G", 1_000_000_000),
+        ("500k", 500_000),
+        ("1234", 1234),
+        ("1.5M", 1_500_000),
+    ],
+)
+def test_parse_size_accepts_suffixes(raw, expected):
+    from towerwatch import speedtest_cli
+
+    assert speedtest_cli._parse_size(raw) == expected
+
+
+@pytest.mark.parametrize("raw", ["", "abc", "0", "-5M", "5X"])
+def test_parse_size_rejects_bad_input(raw):
+    from towerwatch import speedtest_cli
+
+    with pytest.raises(ValueError):
+        speedtest_cli._parse_size(raw)
+
+
+def test_cli_max_bytes_threads_into_run_speedtest(capsys, monkeypatch):
+    """--max-bytes 50M reaches run_speedtest as max_total_bytes=50_000_000."""
+    from towerwatch import speedtest_cli
+
+    _isolate_ssh_env(monkeypatch)
+    fake_grafana = _fake_grafana_client(push_return=True)
+    fake_loki = _fake_loki_client()
+    fake_run = MagicMock(return_value={"download_mbps": 12.0, "upload_mbps": 3.0, "success": 1})
+
+    with (
+        patch.object(
+            speedtest_cli.grafana_mod.GrafanaClient, "from_config", return_value=fake_grafana
+        ),
+        patch.object(speedtest_cli.loki_mod.LokiClient, "from_config", return_value=fake_loki),
+        patch.object(speedtest_cli, "run_speedtest", fake_run),
+    ):
+        rc = speedtest_cli.main(["--triggered-by", "alice", "--max-bytes", "50M"])
+
+    assert rc == 0
+    assert fake_run.call_args.kwargs["max_total_bytes"] == 50_000_000
+    # Started line reflects the cap, not the default ~550 MB.
+    out = capsys.readouterr().out
+    assert "capped at ~50 MB" in out
+
+
+def test_cli_no_max_bytes_passes_none(monkeypatch):
+    """Without --max-bytes, run_speedtest gets max_total_bytes=None (config defaults)."""
+    from towerwatch import speedtest_cli
+
+    _isolate_ssh_env(monkeypatch)
+    monkeypatch.setenv("USER", "envuser")
+    fake_run = MagicMock(return_value={"download_mbps": 1.0, "upload_mbps": 1.0, "success": 1})
+
+    with (
+        patch.object(
+            speedtest_cli.grafana_mod.GrafanaClient,
+            "from_config",
+            return_value=_fake_grafana_client(),
+        ),
+        patch.object(
+            speedtest_cli.loki_mod.LokiClient, "from_config", return_value=_fake_loki_client()
+        ),
+        patch.object(speedtest_cli, "run_speedtest", fake_run),
+    ):
+        rc = speedtest_cli.main([])
+
+    assert rc == 0
+    assert fake_run.call_args.kwargs["max_total_bytes"] is None
+
+
+def test_run_speedtest_respects_byte_cap_override():
+    """run_speedtest(max_total_bytes=N) builds a probe capped at N both directions."""
+    from towerwatch.probes import cloudflare
+
+    captured = {}
+
+    class _FakeProbe:
+        def __init__(self, *, loki=None, dl_max_total_bytes=None, ul_max_total_bytes=None):
+            captured["loki"] = loki
+            captured["dl"] = dl_max_total_bytes
+            captured["ul"] = ul_max_total_bytes
+
+        def measure_download(self):
+            return {"http_throughput_mbps": 10.0, "http_throughput_bytes": 5}
+
+        def measure_upload(self):
+            return {"http_upload_mbps": 5.0, "http_upload_bytes": 3}
+
+    with patch.object(cloudflare, "CloudflareThroughputProbe", _FakeProbe):
+        result = cloudflare.run_speedtest(triggered_by="t", max_total_bytes=40_000_000)
+
+    assert captured["dl"] == 40_000_000
+    assert captured["ul"] == 40_000_000
+    assert result["success"] == 1

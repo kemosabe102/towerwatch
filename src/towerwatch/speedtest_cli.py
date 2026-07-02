@@ -32,6 +32,26 @@ from towerwatch.tick import format_speedtest_line
 log = logging.getLogger("towerwatch")
 
 
+def _parse_size(raw: str) -> int:
+    """Parse a byte size like '50M', '25_000_000', '1G' into an int of bytes.
+
+    Suffixes K/M/G are powers of 1000 (matches how the data budget is discussed
+    in MB/GB, not MiB). Raises argparse-friendly ValueError on bad input.
+    """
+    s = raw.strip().replace("_", "").upper()
+    mult = 1
+    if s and s[-1] in ("K", "M", "G"):
+        mult = {"K": 1000, "M": 1000**2, "G": 1000**3}[s[-1]]
+        s = s[:-1]
+    try:
+        val = int(float(s) * mult)
+    except ValueError:
+        raise ValueError(f"invalid size {raw!r} (use bytes or a K/M/G suffix, e.g. 50M)") from None
+    if val <= 0:
+        raise ValueError(f"size must be positive, got {raw!r}")
+    return val
+
+
 def _ssh_peer_ip() -> str | None:
     """Return the connecting client IP from sshd-set env vars, or None.
 
@@ -103,6 +123,18 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help=argparse.SUPPRESS,
     )
+    parser.add_argument(
+        "--max-bytes",
+        type=_parse_size,
+        default=None,
+        metavar="N",
+        help=(
+            "Cap per-run download AND upload bytes (overrides config defaults). "
+            "Accepts plain bytes or a K/M/G suffix, e.g. 50M. Use on a metered "
+            "link to shrink a run for back-to-back alternation; a smaller cap "
+            "under-reports fast links (slow-start eats the transfer)."
+        ),
+    )
     args = parser.parse_args(argv)
     triggered_by = (args.triggered_by or _resolve_operator()).strip() or "unknown"
 
@@ -115,15 +147,19 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     location = config.INFLUX_HOST_TAG
+    if args.max_bytes is not None:
+        budget_note = f"capped at ~{args.max_bytes // 1_000_000} MB/direction"
+    else:
+        budget_note = "uses up to ~550 MB"
     print(
-        f"Speedtest started on {location}... (takes ~10-30s, uses up to ~550 MB)",
+        f"Speedtest started on {location}... (takes ~10-30s, {budget_note})",
         flush=True,
     )
 
     loki = loki_mod.LokiClient.from_config(config, credentials)
     grafana = grafana_mod.GrafanaClient.from_config(config, credentials)
 
-    result = run_speedtest(loki=loki, triggered_by=triggered_by)
+    result = run_speedtest(loki=loki, triggered_by=triggered_by, max_total_bytes=args.max_bytes)
 
     if not result.get("success"):
         _flush(loki)

@@ -170,6 +170,114 @@
         { "expr": "towerwatch_speedtest_upload_mbps{host=\"$location_b\"}", "legendFormat": "Up · {{triggered_by}}", "refId": "B" }
       ],
       "fieldConfig": { "defaults": { "unit": "Mbps", "min": 0, "custom": { "drawStyle": "points", "pointSize": 10, "showPoints": "always", "lineWidth": 0 } } }
+    },
+    {
+      "id": 90,
+      "type": "row",
+      "title": "Phone vs M6 — fixed overlay (standstill = M6, standstill-phone = Pixel; ignores the A/B pickers)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 40 },
+      "collapsed": false
+    },
+    {
+      "id": 91,
+      "title": "OUTCOME · Reachability — loss & connected (the dependent variable)",
+      "description": "Clean cross-device: same ICMP/TCP targets. Read this BESIDE the flap panel — the story is 'phone flaps but does not drop'. Primary outcome = connectivity-loss + packet loss.",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 41 },
+      "targets": [
+        { "expr": "towerwatch_pkt_loss_google{host=\"standstill\"}", "legendFormat": "M6 loss % (google)", "refId": "A" },
+        { "expr": "towerwatch_pkt_loss_google{host=\"standstill-phone\"}", "legendFormat": "Phone loss % (google)", "refId": "B" },
+        { "expr": "(1 - towerwatch_connected_google{host=\"standstill\"}) * 100", "legendFormat": "M6 unreachable (google)", "refId": "C" },
+        { "expr": "(1 - towerwatch_connected_google{host=\"standstill-phone\"}) * 100", "legendFormat": "Phone unreachable (google)", "refId": "D" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 } }
+    },
+    {
+      "id": 92,
+      "title": "INPUT · NR reality & flap rate (read beside Reachability)",
+      "description": "M6 is 4G-locked (nr5g_attached=0 by choice); phone chases NR and flaps. Flap rate is an INPUT, not the outcome — high flaps + low loss = graceful NSA fallback.",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 41 },
+      "targets": [
+        { "expr": "rate(towerwatch_phone_nr_flap_events_total{host=\"standstill-phone\"}[1h]) * 3600", "legendFormat": "Phone NR flaps/hr", "refId": "A" },
+        { "expr": "sum(changes(towerwatch_m6_nr5g_attached{host=\"standstill\"}[1h]))", "legendFormat": "M6 NR-attach toggles/hr", "refId": "B" },
+        { "expr": "towerwatch_phone_nr_connected{host=\"standstill-phone\"}", "legendFormat": "Phone on NR (0/1)", "refId": "C" }
+      ],
+      "fieldConfig": { "defaults": { "min": 0 } }
+    },
+    {
+      "id": 93,
+      "title": "OUTCOME · Latency p95 & jitter (clean cross-device)",
+      "description": "Same ping targets both devices, so cross-device comparable. p95 = the tail users feel. Secondary outcome for real-time use (calls).",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 49 },
+      "targets": [
+        { "expr": "quantile_over_time(0.95, towerwatch_rtt_avg_google{host=\"standstill\"}[$__interval])", "legendFormat": "M6 p95 RTT", "refId": "A" },
+        { "expr": "quantile_over_time(0.95, towerwatch_rtt_avg_google{host=\"standstill-phone\"}[$__interval])", "legendFormat": "Phone p95 RTT", "refId": "B" },
+        { "expr": "towerwatch_jitter_google{host=\"standstill\"}", "legendFormat": "M6 jitter", "refId": "C" },
+        { "expr": "towerwatch_jitter_google{host=\"standstill-phone\"}", "legendFormat": "Phone jitter", "refId": "D" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms", "min": 0 } }
+    },
+    {
+      "id": 94,
+      "title": "OUTCOME · Throughput floor p10 (DIRECTIONAL — different probes)",
+      "description": "Cross-device throughput is NOT apples-to-apples (Pi adaptive ramp + warm-up discard vs phone probe). Trust each device's own quiet->peak degradation, not the absolute gap. M6 queries both http_throughput (scheduled) + speedtest (manual, Jul 4); phone uses speedtest.",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 49 },
+      "targets": [
+        { "expr": "quantile_over_time(0.1, towerwatch_http_throughput_mbps{host=\"standstill\"}[$__range])", "legendFormat": "M6 p10 (scheduled)", "refId": "A" },
+        { "expr": "quantile_over_time(0.1, towerwatch_speedtest_download_mbps{host=\"standstill\"}[$__range])", "legendFormat": "M6 p10 (manual)", "refId": "B" },
+        { "expr": "quantile_over_time(0.1, towerwatch_speedtest_download_mbps{host=\"standstill-phone\"}[$__range])", "legendFormat": "Phone p10", "refId": "C" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "Mbps", "min": 0 } }
+    },
+    {
+      "id": 95,
+      "title": "INPUT · LTE serving signal (DIRECTIONAL — cross-instrument)",
+      "description": "M6 firmware vs Android API report on different scales — 'both read 14' is NOT the same RF condition. Use as a directional gate for the antenna/MIMO rung, never as a precise match.",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 57 },
+      "targets": [
+        { "expr": "towerwatch_m6_rsrp{host=\"standstill\"}", "legendFormat": "M6 RSRP", "refId": "A" },
+        { "expr": "towerwatch_phone_rsrp{host=\"standstill-phone\"}", "legendFormat": "Phone RSRP", "refId": "B" },
+        { "expr": "towerwatch_m6_sinr{host=\"standstill\"}", "legendFormat": "M6 SINR", "refId": "C" },
+        { "expr": "towerwatch_phone_sinr{host=\"standstill-phone\"}", "legendFormat": "Phone SINR", "refId": "D" }
+      ],
+      "fieldConfig": { "defaults": { "min": -140 } }
+    },
+    {
+      "id": 96,
+      "title": "INPUT · CA / aggregate bandwidth — how many channels (phone side gated on fix)",
+      "description": "M6 = m6_carrier_count / m6_agg_dl_bandwidth_mhz (2 / 30MHz baseline). Phone phone_ca_count is currently EMPTY (PhysicalChannelConfigListener capture gap) — populates only after the rflogger CA fix lands.",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 57 },
+      "targets": [
+        { "expr": "towerwatch_m6_carrier_count{host=\"standstill\"}", "legendFormat": "M6 carrier count", "refId": "A" },
+        { "expr": "towerwatch_phone_ca_count{host=\"standstill-phone\"}", "legendFormat": "Phone CA count (gated)", "refId": "B" },
+        { "expr": "towerwatch_m6_agg_dl_bandwidth_mhz{host=\"standstill\"}", "legendFormat": "M6 agg DL MHz", "refId": "C" },
+        { "expr": "towerwatch_phone_agg_dl_bandwidth_mhz{host=\"standstill-phone\"}", "legendFormat": "Phone agg DL MHz (gated)", "refId": "D" }
+      ],
+      "fieldConfig": { "defaults": { "min": 0 } }
+    },
+    {
+      "id": 97,
+      "title": "INPUT · Band ranking — avg SINR by serving band",
+      "description": "avg by (band) of the cardinality-safe *_sig_* lines. Shows which band each device performs best on. DIRECTIONAL cross-instrument (see LTE signal panel).",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 65 },
+      "targets": [
+        { "expr": "avg by (band) (towerwatch_m6_sig_sinr{host=\"standstill\"})", "legendFormat": "M6 SINR · band {{band}}", "refId": "A" },
+        { "expr": "avg by (band) (towerwatch_phone_sig_sinr{host=\"standstill-phone\"})", "legendFormat": "Phone SINR · band {{band}}", "refId": "B" }
+      ],
+      "fieldConfig": { "defaults": { "min": -20 } }
     }
   ],
   "schemaVersion": 38,
