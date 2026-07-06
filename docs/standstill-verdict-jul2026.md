@@ -13,10 +13,12 @@ All analysis re-derivable from those CSVs.
 The phone (Pixel 9 Pro, Xfinity/Verizon MVNO) delivered a usably better experience than
 the M6 hotspot (Verizon direct) on the same tower, same band (66), same cell (PCI 81) —
 **despite the M6 having the better radio**. The gap lives above the RF layer. The July 5
-quiet window shows the M6's *latency/loss fully recover overnight*, which points at
-**congestion-time contention** as the dominant driver — but a flat low-throughput floor
-that persists into the next morning keeps a **plan throttle** alive as a partial
-explanation. The tie-breaker is the M6's plan tier, still unknown.
+quiet window shows the M6's *latency/loss fully recover overnight*, and a live retest on a
+normal (non-holiday) Monday evening shows throughput **partly recovered to ~11 Mbps** (from
+the ~1 Mbps holiday floor), with **upload faster than download** — the wrong shape for a
+hard plan throttle. Together these point at **congestion-time contention** as the dominant
+driver, with plan-throttle now **unlikely but not fully excludable**. The tie-breaker
+remains the M6's plan tier, still unknown.
 
 ---
 
@@ -49,30 +51,44 @@ band 13 — coverage-band steering, §"caveats".)
 Download gap is ~10×. Latency is comparable (both cellular-bad); the felt difference is
 **throughput and loss**, not latency.
 
-### 4. Quiet-window verdict → congestion signature (with a caveat)
+### 4. Quiet-window verdict → congestion signature (latency), throughput INCONCLUSIVE
 M6-link outcomes, Jul 5 02:00–06:00 vs Jul 4 peak afternoon:
 | Metric | Jul 4 peak aftn | Jul 5 QUIET | Recovered? |
 |---|---|---|---|
-| RTT google | 508 ms | **51 ms** | ✅ fully |
-| HTTP latency | 1933 ms | **179 ms** | ✅ fully |
-| Loss google | 16.9% | **0.3%** | ✅ fully |
-| Throughput | 1.2 Mbps | *0.0 (1 probe)* | ⚠️ inconclusive |
+| RTT google | 508 ms | **51 ms** | ✅ fully (n=240) |
+| HTTP latency | 1933 ms | **179 ms** | ✅ fully (n=239) |
+| Loss google | 16.9% | **0.3%** | ✅ fully (n=240) |
+| Throughput | 1.2 Mbps | *0.0* | ⚠️ **n=1, unusable** |
 
 Latency, loss, and RTT **fully recover** overnight — the classic congestion fingerprint
 (load comes off, link is healthy). A hard plan-throttle would keep latency degraded; it
 didn't. **This weakens hypothesis (f) plan-throttle for the latency/loss dimensions.**
 
-**Caveat:** the single throughput probe in the quiet window read 0.0 (likely a probe
-failure — one run, 5 repeats), and M6 throughput stayed low (0.6 Mbps) at 09:41 the next
-morning, past the congestion peak. Throughput does **not** cleanly recover the way latency
-does. So throughput-specifically remains consistent with *either* a capacity floor under
-sustained load *or* a plan bandwidth cap. Cannot separate these without the M6 plan.
+**Throughput caveat — the claim rests on almost no data.** The scheduled M6 throughput
+probe runs only ~3×/day; the whole trip has **14 runs total**, and the Jul 5 quiet window
+has exactly **one** (04:19 → 0.0 Mbps, almost certainly a probe failure). So "throughput
+doesn't recover overnight" is **not supported** — there is no overnight throughput sample
+worth the name. What the 14 runs *do* show: M6 throughput collapsed the afternoon of Jul 3
+(16:13 → 1.1 Mbps) and stayed pinned 0.5–0.7 Mbps continuously through Jul 5 evening — a
+~2.5-day floor that is *too sustained* for pure evening congestion but cannot be
+distinguished from a plan throttle by this data. **Resolving it needs a live discriminator,
+not the Jul 5 morning data:** a manual speedtest in a genuine non-holiday quiet window
+(see §"Live discriminator" below).
 
 ### 5. Phone NR collapses under congestion (not absent)
 `phone_nr_connected` at standstill: whole-trip mean **0.47**, Jul 5 quiet **1.0**, Jul 4
 peak afternoon **0.22**. The phone **did** hold NR at the site (NR hypothesis does not die),
 but NR availability **collapses under load** — itself a congestion signal, and a secondary
 reason the phone felt rough at peak despite winning.
+
+**Decomposition (important):** because NR was mostly *gone* at peak (0.22), the phone was
+running **mostly on LTE during the July 4 peak — and still beat the M6 by ~20× on
+download.** Therefore the phone's **peak-time win cannot be attributed to NR access.** NR
+may explain part of its *quiet-time* edge (extra capacity when the tower isn't busy), but
+the thing we care about — why the phone was usable when the M6 collapsed at peak — happened
+on LTE for both. That **narrows the July 4 win to: priority (QCI), plan throttle, or modem
+capability (c')** — and removes NR from the peak-time explanation entirely. The M6 Verizon
+plan screenshots now arbitrate nearly all of what remains.
 
 ### 6. Deprioritization penalty is real and measurable (home baseline)
 The phone line was deprioritized the entire trip (125 GB June usage > 100 GB threshold,
@@ -81,11 +97,23 @@ RSRP ≥ −110) shows the diurnal deprio fingerprint:
 - Quiet-hour (02–06) download: **~42 Mbps**
 - Evening-peak (17–22) download: **~15–26 Mbps** → **~45–63% peak-hour penalty**
 
-This is a *within-deprioritized* diurnal gap at town-congestion levels. Because the penalty
-scales with congestion severity and **July 4 congestion ≫ town congestion**, this is a
-**lower bound** on what deprioritization cost the phone at standstill. Undeprioritized, the
-phone's July 4 numbers would have been *at least* this much better — so July 4 phone
-figures **understate** a premium line's capability.
+This is a *within-deprioritized* diurnal gap, and it is **NOT a clean deprioritization
+penalty** — it is a **composite of congestion + deprioritization**. A *premium* line also
+slows at peak hours (the tower is busy for everyone); the peak/quiet gap captures that
+baseline congestion PLUS whatever extra the QCI-9 deprioritization adds on top. So:
+
+- The ~45–63% gap is an **upper bound** on the deprioritization penalty *at town-congestion
+  levels* — most of it may be ordinary congestion that a premium line would feel too.
+- It is **not transferable to standstill** in either direction. Standstill congestion,
+  tower, and load are different; the town number does not scale to July 4.
+- The deprioritization penalty is **isolated only by the cycle-reset experiment**
+  (`docs/standstill-cycle-reset-experiment.md`), which holds location constant and flips
+  *only* the priority tier — the peak/quiet gap before vs after the reset is the clean
+  measurement this composite gap cannot provide.
+
+What this data *does* establish: the phone line was deprioritized the whole trip, and
+congestion-time slowdown at the home cell is real and sizable. It does **not** quantify how
+much of July 4's phone-vs-M6 gap was deprioritization — that stays open.
 
 ---
 
@@ -124,12 +152,49 @@ M6 plan screenshots arrive:
       Latency recovery overnight already supports this branch.
 ```
 
-**Current lean:** congestion + priority (latency fully recovers overnight; NR collapses
-under load; loss is contention-shaped), with plan-throttle unresolved for the throughput
-dimension specifically. The overnight latency recovery is the single strongest piece of
-evidence and it points away from a pure hard throttle.
+**Current lean:** congestion + priority. Latency fully recovers overnight; NR collapses
+under load; loss is contention-shaped; and the live Monday-evening retest (~11 Mbps, upload
+> download) is the wrong shape for a hard throttle and shows the holiday floor has partly
+lifted. Plan-throttle is now **unlikely** (not merely unresolved). The overnight latency
+recovery plus the live-retest asymmetry are the two strongest pieces of evidence, both
+pointing away from a hard throttle. Final confirmation still waits on the M6 plan.
 
 ---
+
+## Live discriminator (congestion vs throttle, run 2026-07-06 evening)
+
+The Jul 5 quiet-window throughput data is unusable (n=1). A cleaner test is available now:
+the Pi is remote-reachable and 2026-07-06 (Monday) is a **normal non-holiday** evening —
+July 4 holiday congestion is gone. Manual `towerwatch-speedtest` runs against the M6 tonight
+discriminate directly:
+
+- **M6 recovers to 25–40 Mbps** → the Jul 3–5 floor was congestion (holiday load). Plan
+  throttle (f) **dies**. July 4 collapse = congestion + priority.
+- **M6 still pinned at 0.5–3 Mbps** on a normal quiet Monday evening → a persistent floor
+  independent of holiday congestion = **plan throttle confirmed** (or a hard capacity cap).
+
+**Result (2026-07-06 ~16:05 PDT, `triggered_by=post-review-live`, n=3):**
+download **11.3 / 11.1 / 12.7 Mbps** (tight ~11–13), upload **16.2 / 17.8 / 14.3 Mbps**.
+The download<upload asymmetry is consistent across all three runs.
+
+**Interpretation — intermediate, and it argues AGAINST a hard throttle:**
+- **Not** recovered to 25–40 Mbps → holiday congestion wasn't the *whole* story; the link
+  is still below its Jul 2–3 pre-collapse baseline (41–56 Mbps).
+- **Not** pinned at 0.5–3 Mbps → clearly above the Jul 3–5 holiday floor (~4× the 0.6–1.2
+  Mbps seen then). So the July 4 collapse **was substantially holiday congestion** — it has
+  partly lifted on a normal Monday.
+- **Upload (16–18) > download (11).** A classic post-allotment hotspot **throttle caps the
+  downlink hard** (600 Kbps–3 Mbps) — an *upload-faster-than-download* result is the
+  opposite signature. This points away from plan throttle (f) and toward **downlink
+  congestion / capacity limiting** that persists at moderate levels even off-peak.
+
+**Provisional verdict shift:** hypothesis (f) hard-throttle is **weakened further** — the
+link isn't floored on a normal evening, and the asymmetry is wrong for a throttle. The
+residual ~11 Mbps downlink cap (vs 40+ baseline) reads as ongoing congestion/capacity, not
+a plan cap. Caveat: 16:05 is late-afternoon, not the deepest quiet window; a 02:00–04:00
+run would strengthen it. Still, combined with the overnight latency recovery, the weight of
+evidence now sits on **congestion + priority**, with plan-throttle unlikely but not fully
+excludable until the M6 plan is known.
 
 ## Artifacts corrected in this analysis
 
