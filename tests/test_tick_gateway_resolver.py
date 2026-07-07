@@ -97,6 +97,47 @@ def test_collect_probes_polls_gateway_with_resolver_ip(monkeypatch):
     assert polled_ip == ["10.0.1.1"]
 
 
+def test_collect_probes_measures_gateway_resolver_dns(monkeypatch):
+    """collect_probes probes the gateway's OWN resolver (a hung gateway resolver
+    is invisible if we only probe public resolvers) under a STABLE field name
+    `dns_resolve_ms_gateway` — the resolver's IP, not IP-derived, so the series
+    doesn't churn when the gateway IP changes."""
+    dns_targets: list[str] = []
+
+    monkeypatch.setattr(
+        tick_mod,
+        "run_ping",
+        lambda ip: {
+            "rtt_avg": 1,
+            "rtt_min": 1,
+            "rtt_max": 1,
+            "jitter": 0,
+            "pkt_loss": 0,
+            "connected": True,
+        },
+    )
+    monkeypatch.setattr(tick_mod, "measure_tcp_connect", lambda: 1)
+    monkeypatch.setattr(tick_mod, "poll_gateway", lambda ip=None: {})
+    monkeypatch.setattr(tick_mod._config, "PROBE_TARGETS", [("10.0.1.1", "gateway")])
+    monkeypatch.setattr(tick_mod._config, "DNS_TARGETS", ["8.8.8.8"])
+
+    def fake_measure_dns(ns):
+        dns_targets.append(ns)
+        return 5
+
+    monkeypatch.setattr(tick_mod, "measure_dns", fake_measure_dns)
+
+    resolver = _StubResolver(ip="10.0.1.1")
+    ctx = TickContext(gateway_resolver=resolver, clock=FakeClock(wall=[0.0]))
+    fields, _ = collect_probes(ctx)
+
+    # the gateway's own IP was probed for DNS, under the stable key
+    assert "10.0.1.1" in dns_targets
+    assert fields["dns_resolve_ms_gateway"] == 5
+    # public resolver still probed under its IP-derived key
+    assert fields["dns_resolve_ms_8_8_8_8"] == 5
+
+
 # ---------------------------------------------------------------------------
 # handle_gateway_reresolution — the per-tick re-resolve + notify step
 # ---------------------------------------------------------------------------

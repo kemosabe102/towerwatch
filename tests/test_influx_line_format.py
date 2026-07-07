@@ -188,6 +188,29 @@ def test_build_info_line_defaults_gateway_ip_from_config():
     assert f"gateway_ip={config.GATEWAY_IP}" in line
 
 
+def test_build_info_line_emits_egress_ip_tag_when_supplied():
+    """A known egress IP rides on build_info as a tag (same convention as gateway_ip)."""
+    from towerwatch.tick import format_build_info_line
+
+    line = format_build_info_line(ts=1700000000, egress_ip="203.0.113.45")
+    tag_section = line.split(" ", 1)[0]
+    assert "egress_ip=203.0.113.45" in tag_section
+
+
+def test_build_info_line_omits_egress_ip_tag_when_unknown():
+    """When egress_ip is None/empty, the tag is OMITTED entirely — not emitted as
+    egress_ip="" (invalid Influx tag value) or egress_ip=none (pollutes labels)."""
+    from towerwatch.tick import format_build_info_line
+
+    line_none = format_build_info_line(ts=1700000000)
+    line_empty = format_build_info_line(ts=1700000000, egress_ip="")
+    for line in (line_none, line_empty):
+        assert "egress_ip=" not in line
+    # still a valid line: build_info field + timestamp intact
+    assert line_none.endswith(" 1700000000")
+    assert " build_info=1 " in line_none
+
+
 def test_load_int_credential_handles_missing_field():
     """Defensive: credentials.py without the new override fields must not crash.
     Older Pis on a previous deploy lack HTTP_THROUGHPUT_BYTES_OVERRIDE etc.;

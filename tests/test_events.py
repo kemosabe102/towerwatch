@@ -53,6 +53,25 @@ def test_gateway_ip_changed_level_and_event():
     assert extra["new_ip"] == "10.0.1.1"
 
 
+def test_egress_ip_changed_level_and_event():
+    """Fires when a scheduled egress check sees a NEW public IP — the primary
+    LTE-failover signal. WARN, carries old/new/cgnat/colo. The message must NOT
+    claim 'CGNAT = LTE' (Cloudflare reports the post-NAT public IP)."""
+    loki = _make_loki()
+    events.egress_ip_changed(
+        loki, old_ip="203.0.113.45", new_ip="198.51.100.7", cgnat=0, colo="SEA"
+    )
+    level, msg, extra = _pushed(loki)
+    assert level == "WARN"
+    assert extra["event"] == config.LOG_EVENT_EGRESS_IP_CHANGED
+    assert extra["old_ip"] == "203.0.113.45"
+    assert extra["new_ip"] == "198.51.100.7"
+    assert extra["cgnat"] == 0
+    assert extra["colo"] == "SEA"
+    # must not over-claim attribution the data can't back
+    assert "cgnat" not in msg.lower() or "possible" in msg.lower()
+
+
 def test_connection_down_level_and_event():
     loki = _make_loki()
     events.connection_down(loki)

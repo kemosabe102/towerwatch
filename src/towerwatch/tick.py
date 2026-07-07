@@ -21,6 +21,7 @@ from towerwatch import startup as startup_mod
 from towerwatch.clock import Clock, SystemClock
 from towerwatch.probes.bufferbloat import measure_throughput_with_bufferbloat
 from towerwatch.probes.dns import measure_dns
+from towerwatch.probes.egress import measure_egress
 from towerwatch.probes.gateway import poll_gateway
 from towerwatch.probes.http import measure_http_latency
 from towerwatch.probes.ping import run_ping
@@ -77,13 +78,15 @@ def format_build_info_line(
     link_max_download_mbps: int | None = None,
     link_max_upload_mbps: int | None = None,
     gateway_ip: str | None = None,
+    egress_ip: str | None = None,
 ) -> str:
     """Influx line for the `towerwatch_build_info` Prom gauge.
 
-    `version`, `build_date`, `link_max_*`, and `gateway_ip` are emitted as Influx
-    **tags** (not fields) so Grafana Cloud Prom ingest turns them into metric
-    labels. Tag values are unquoted strings by spec; field string values are not
-    (see the pinned characterization test in test_influx_line_format.py).
+    `version`, `build_date`, `link_max_*`, `gateway_ip`, and (when known)
+    `egress_ip` are emitted as Influx **tags** (not fields) so Grafana Cloud
+    Prom ingest turns them into metric labels. Tag values are unquoted strings by
+    spec; field string values are not (see the pinned characterization test in
+    test_influx_line_format.py).
 
     `link_max_download_mbps` / `link_max_upload_mbps` carry per-site link
     capacity so the dashboard can `label_values()` them into templating
@@ -95,6 +98,12 @@ def format_build_info_line(
     mid-run gateway change silently diverges from what the dashboard shows. The
     caller (run_loop) passes the live `GatewayResolver.current()`. A changed IP
     creates one new build_info series — rare, and itself the visible audit trail.
+
+    `egress_ip` (same convention) surfaces the current public egress IP for
+    failover visibility. When unknown (None/empty — before the first egress check,
+    or on fetch failure) the tag is **OMITTED entirely**: an empty tag value is
+    invalid Influx line protocol, and `egress_ip=none` would pollute the label
+    space. Absent-when-unknown matches the probe's "no fields on failure".
     """
     v = version if version is not None else _config.BUILD_VERSION
     d = build_date if build_date is not None else _config.BUILD_DATE
@@ -105,16 +114,17 @@ def format_build_info_line(
     )
     lu = link_max_upload_mbps if link_max_upload_mbps is not None else _config.LINK_MAX_UPLOAD_MBPS
     gw = gateway_ip if gateway_ip is not None else _config.GATEWAY_IP
-    return (
-        f"{_config.INFLUX_MEASUREMENT},"
-        f"{_common_tags()},"
-        f"version={v},"
-        f"build_date={d},"
-        f"link_max_download_mbps={ld},"
-        f"link_max_upload_mbps={lu},"
-        f"gateway_ip={gw} "
-        f"build_info=1 {ts}"
-    )
+    tags = [
+        _common_tags(),
+        f"version={v}",
+        f"build_date={d}",
+        f"link_max_download_mbps={ld}",
+        f"link_max_upload_mbps={lu}",
+        f"gateway_ip={gw}",
+    ]
+    if egress_ip:  # omit the tag entirely when unknown (empty/None)
+        tags.append(f"egress_ip={egress_ip}")
+    return f"{_config.INFLUX_MEASUREMENT}," + ",".join(tags) + f" build_info=1 {ts}"
 
 
 def format_speedtest_line(
@@ -227,6 +237,40 @@ def handle_gateway_reresolution(ctx: TickContext) -> str:
     return old_ip
 
 
+def handle_egress_check(ctx: TickContext, state) -> str:
+    """Run the scheduled egress-IP check; on a real change emit the change-event.
+
+    Returns the current egress IP for `format_build_info_line` — held on
+    `state.last_egress_ip` between scheduled checks so the build_info label is
+    stable every tick (and "" until the first successful check → the tag is
+    omitted). Mirrors `handle_gateway_reresolution`.
+
+    First-observation guard: `state.last_egress_ip == ""` (fresh process / restart)
+    → set the value, do NOT fire an event. "" -> X is initialization, not a change.
+    A `{}` probe result (fetch failure) holds the last value and fires nothing, so
+    a transient miss can't fabricate a change.
+    """
+    if not _config.EGRESS_IP_CHECK_ENABLED:
+        return state.last_egress_ip
+    if not (ctx.scheduler and ctx.scheduler.should_run_egress_ip(ctx.clock.time())):
+        return state.last_egress_ip
+    result = measure_egress()
+    new_ip = result.get("egress_ip")
+    if not new_ip:  # fetch failure / no ip= → keep the held value, no event
+        return state.last_egress_ip
+    old_ip = state.last_egress_ip
+    if old_ip and new_ip != old_ip:  # real change (guard excludes "" -> X)
+        ctx.events.egress_ip_changed(
+            ctx.loki,
+            old_ip=old_ip,
+            new_ip=new_ip,
+            cgnat=result.get("egress_cgnat", 0),
+            colo=result.get("egress_colo", ""),
+        )
+    state.last_egress_ip = new_ip
+    return new_ip
+
+
 def collect_probes(ctx: TickContext) -> tuple[dict, bool]:
     fields = {}
     now = ctx.clock.time()
@@ -251,6 +295,11 @@ def collect_probes(ctx: TickContext) -> tuple[dict, bool]:
     fields["tcp_connect_ms"] = measure_tcp_connect()
     for ns in _config.DNS_TARGETS:
         fields[f"dns_resolve_ms_{ns.replace('.', '_')}"] = measure_dns(ns)
+    # Probe the gateway's OWN resolver — a hung gateway resolver ("everything
+    # stops working" while pings still pass) is invisible if we only probe public
+    # resolvers. Stable field name (not IP-derived) so the series doesn't churn
+    # when the gateway IP changes.
+    fields["dns_resolve_ms_gateway"] = measure_dns(gateway_ip)
 
     fields.update(poll_gateway(ip=gateway_ip))
 

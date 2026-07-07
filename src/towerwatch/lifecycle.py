@@ -30,6 +30,10 @@ class RuntimeState:
     last_successful_push_ts: float = field(default_factory=time.time)
     shutdown_requested: bool = False
     metric_batch: list = field(default_factory=list)
+    # Last-seen public egress IP, held between scheduled egress checks so the
+    # build_info label is stable every tick. "" = no reading yet (first check /
+    # process restart); the change-detector treats "" -> X as init, not a change.
+    last_egress_ip: str = ""
 
 
 def configure_logging() -> None:

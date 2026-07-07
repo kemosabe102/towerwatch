@@ -90,6 +90,25 @@ def test_heartbeat_due_after_interval():
 
 
 # ---------------------------------------------------------------------------
+# Egress-IP cadence
+# ---------------------------------------------------------------------------
+def test_egress_ip_not_yet_due():
+    from towerwatch import config
+
+    s = Scheduler.from_config(config)
+    s._last_egress_ip_ts = 0.0
+    assert s.should_run_egress_ip(1.0) is False
+
+
+def test_egress_ip_due_after_interval():
+    from towerwatch import config
+
+    s = Scheduler.from_config(config)
+    s._last_egress_ip_ts = 0.0
+    assert s.should_run_egress_ip(float(config.EGRESS_IP_INTERVAL_S + 1)) is True
+
+
+# ---------------------------------------------------------------------------
 # Day rollover rebuilds schedule
 # ---------------------------------------------------------------------------
 def test_day_rollover_rebuilds_schedule():

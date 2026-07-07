@@ -8,11 +8,32 @@ Windows / missing or unparseable file / no default route.
 
 from __future__ import annotations
 
+import ipaddress
 import sys
 from pathlib import Path
 
 DEFAULT_PROC_ROUTE = "/proc/net/route"
 RTF_GATEWAY = 0x2  # see <linux/route.h>
+
+# Carrier-grade NAT shared address space (RFC 6598).
+_CGNAT_NETWORK = ipaddress.ip_network("100.64.0.0/10")
+
+
+def is_cgnat(ip: str) -> bool:
+    """True iff `ip` is in the CGNAT range 100.64.0.0/10 (RFC 6598).
+
+    Note: this rarely fires on an LTE failover. Cloudflare's /cdn-cgi/trace
+    reports the *post-NAT public* IP, so the carrier's public pool address is
+    what we observe, not the private 100.64/10 WAN address. `is_cgnat` only
+    catches the case where the observed egress IP is itself CGNAT (e.g. the
+    carrier CGNATs the cable side). The egress-IP *change* event is the real
+    failover detector. Garbage input returns False, never raises.
+    """
+    try:
+        return ipaddress.ip_address(ip) in _CGNAT_NETWORK
+    except ValueError:
+        return False
+
 
 # Re-resolve discovery at most this often (seconds). The gateway rarely changes,
 # so a slow cadence is fine; the point is to heal a boot-race freeze or a DHCP

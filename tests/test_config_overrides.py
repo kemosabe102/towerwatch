@@ -53,6 +53,27 @@ def test_int_credential_returns_override_when_set(fake_credentials):
     assert _load_int_credential("MY_OVERRIDE", 42) == 7
 
 
+def test_bool_credential_returns_fallback_when_attribute_missing(fake_credentials):
+    from towerwatch.config import _load_bool_credential
+
+    assert _load_bool_credential("DOES_NOT_EXIST", True) is True
+    assert _load_bool_credential("DOES_NOT_EXIST", False) is False
+
+
+def test_bool_credential_returns_fallback_when_attribute_is_none(fake_credentials):
+    fake_credentials.MY_FLAG = None
+    from towerwatch.config import _load_bool_credential
+
+    assert _load_bool_credential("MY_FLAG", True) is True
+
+
+def test_bool_credential_returns_override_when_set(fake_credentials):
+    fake_credentials.MY_FLAG = False
+    from towerwatch.config import _load_bool_credential
+
+    assert _load_bool_credential("MY_FLAG", True) is False
+
+
 def test_windows_credential_returns_none_fallback_when_missing(fake_credentials):
     from towerwatch.config import _load_windows_credential
 

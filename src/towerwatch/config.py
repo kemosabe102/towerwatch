@@ -151,6 +151,21 @@ def _load_int_credential(field: str, fallback: int) -> int:
         return fallback
 
 
+def _load_bool_credential(field: str, fallback: bool) -> bool:
+    """Read a boolean credential with a safe fallback. Treats None and missing
+    attributes identically (returns fallback) so credentials.py.example's
+    `FIELD = None` placeholders don't crash the daemon. Sites override with an
+    explicit True/False.
+    """
+    try:
+        from towerwatch import credentials
+
+        value = getattr(credentials, field, None)
+        return bool(value) if value is not None else fallback
+    except ImportError:
+        return fallback
+
+
 def _load_windows_credential(
     field: str, fallback: list[tuple[int, int]] | None
 ) -> list[tuple[int, int]] | None:
@@ -226,6 +241,16 @@ METRIC_INTERVAL_S = 60  # Main loop: ping, TCP, DNS (was 30 — halved for data 
 HTTP_LATENCY_URL = "https://speed.cloudflare.com/__down?bytes=10000"  # 10 KB
 HTTP_LATENCY_INTERVAL_S = 300  # 5 minutes
 HTTP_LATENCY_TIMEOUT_S = 30
+
+# --- Egress IP / Failover Probe (low cadence; failover is a slow-changing state) ---
+# GETs Cloudflare's trace endpoint (~200 bytes key=value text) and reads the
+# egress IP + colo. An egress-IP *change* on a near-static cable line is the
+# failover signal (see docs/ullrich-gateway-ubc1340.md). Per-site enable via
+# EGRESS_IP_CHECK_ENABLED_OVERRIDE in credentials.
+EGRESS_IP_URL = "https://cloudflare.com/cdn-cgi/trace"
+EGRESS_IP_INTERVAL_S = 900  # 15 minutes
+EGRESS_IP_TIMEOUT_S = 10
+EGRESS_IP_CHECK_ENABLED = _load_bool_credential("EGRESS_IP_CHECK_ENABLED_OVERRIDE", True)
 
 # --- Cloudflare Adaptive Throughput Probe (replaces single-stream HTTP + Ookla) ---
 # Multi-stream adaptive probe against speed.cloudflare.com, faithful to the
@@ -429,6 +454,7 @@ LOG_EVENT_HEARTBEAT = "service_heartbeat"
 LOG_EVENT_OUTAGE_RECORDED = "outage_recorded"
 LOG_EVENT_ANNOTATION_FAILED = "annotation_push_failed"
 LOG_EVENT_GATEWAY_IP_CHANGED = "gateway_ip_changed"
+LOG_EVENT_EGRESS_IP_CHANGED = "egress_ip_changed"
 
 # --- Heartbeat ---
 HEARTBEAT_INTERVAL_S = 3600  # Emit a WARN-level heartbeat to Loki once per hour

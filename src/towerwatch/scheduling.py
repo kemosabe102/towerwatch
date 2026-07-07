@@ -35,6 +35,7 @@ class Scheduler:
         http_latency_interval_s: int,
         http_throughput_tests_per_day: int,
         heartbeat_interval_s: int,
+        egress_ip_interval_s: int = 900,
         throughput_windows: list[tuple[int, int]] | None = None,
         clock: Any = _time,
         rng: Any = _random,
@@ -42,12 +43,14 @@ class Scheduler:
         self._latency_interval = http_latency_interval_s
         self._throughput_n = http_throughput_tests_per_day
         self._heartbeat_interval = heartbeat_interval_s
+        self._egress_ip_interval = egress_ip_interval_s
         self._windows = throughput_windows
         self._clock = clock
         self._rng = rng
 
         self._last_latency_ts: float = 0.0
         self._last_heartbeat_ts: float = 0.0
+        self._last_egress_ip_ts: float = 0.0
         self._throughput_schedule: list[float] = []
         self._last_schedule_day: int = -1
 
@@ -58,6 +61,7 @@ class Scheduler:
             http_latency_interval_s=cfg.HTTP_LATENCY_INTERVAL_S,
             http_throughput_tests_per_day=cfg.CLOUDFLARE_THROUGHPUT_TESTS_PER_DAY,
             heartbeat_interval_s=cfg.HEARTBEAT_INTERVAL_S,
+            egress_ip_interval_s=cfg.EGRESS_IP_INTERVAL_S,
             throughput_windows=cfg.CLOUDFLARE_THROUGHPUT_WINDOWS,
         )
 
@@ -67,6 +71,15 @@ class Scheduler:
     def should_run_http_latency(self, now: float) -> bool:
         if now - self._last_latency_ts >= self._latency_interval:
             self._last_latency_ts = now
+            return True
+        return False
+
+    # ------------------------------------------------------------------
+    # Egress-IP / failover gate (low cadence — failover is slow-changing)
+    # ------------------------------------------------------------------
+    def should_run_egress_ip(self, now: float) -> bool:
+        if now - self._last_egress_ip_ts >= self._egress_ip_interval:
+            self._last_egress_ip_ts = now
             return True
         return False
 

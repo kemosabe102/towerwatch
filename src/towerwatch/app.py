@@ -22,6 +22,7 @@ from towerwatch.tick import (
     format_band_sig_line,
     format_build_info_line,
     format_influx_line,
+    handle_egress_check,
     handle_gateway_reresolution,
     push_batch,
     update_connection_state,
@@ -90,7 +91,12 @@ def run_loop(ctx: TickContext, state: RuntimeState) -> None:
         # Re-resolve the gateway (heals a frozen-IP boot race live) and surface
         # the current IP on build_info so the dashboard shows which IP is probed.
         gateway_ip = handle_gateway_reresolution(ctx)
-        state.metric_batch.append(format_build_info_line(timestamp, gateway_ip=gateway_ip))
+        # Egress-IP / failover check (scheduled, low cadence); surfaces the public
+        # IP on build_info + fires a change-event on a flip (LTE-failover signal).
+        egress_ip = handle_egress_check(ctx, state)
+        state.metric_batch.append(
+            format_build_info_line(timestamp, gateway_ip=gateway_ip, egress_ip=egress_ip)
+        )
         band_sig_line = format_band_sig_line(fields, timestamp)
         if band_sig_line is not None:
             state.metric_batch.append(band_sig_line)

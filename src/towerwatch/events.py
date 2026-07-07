@@ -132,6 +132,31 @@ def gateway_ip_changed(loki, *, old_ip: str, new_ip: str) -> None:
     )
 
 
+def egress_ip_changed(loki, *, old_ip: str, new_ip: str, cgnat: int, colo: str) -> None:
+    """Fires when a scheduled egress check sees a new public IP.
+
+    On a near-static cable line, an egress-IP change is the primary LTE-failover
+    signal (see docs/ullrich-gateway-ubc1340.md). Per-state-change cadence, so
+    loki.push is within budget. WARN because a public-IP flip is notable.
+
+    The message says "possible LTE failover; confirm via ASN" and does NOT claim
+    "CGNAT = LTE": Cloudflare reports the post-NAT public IP, so the cgnat flag
+    rarely fires on a real failover — attribution needs an ASN lookup (v2). The
+    cgnat + colo fields ride along as context.
+    """
+    loki.push(
+        "WARN",
+        f"Egress IP changed {old_ip} -> {new_ip} (possible LTE failover; confirm via ASN)",
+        {
+            "event": config.LOG_EVENT_EGRESS_IP_CHANGED,
+            "old_ip": old_ip,
+            "new_ip": new_ip,
+            "cgnat": cgnat,
+            "colo": colo,
+        },
+    )
+
+
 def log_buffer_flushed(loki, *, count: int) -> None:
     loki.push(
         "INFO",

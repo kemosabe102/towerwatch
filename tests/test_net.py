@@ -121,3 +121,30 @@ def test_discover_returns_fallback_when_no_default_route(tmp_path: Path):
 def test_parse_endianness(hex_be: str, expected: str):
     text = _route(f"eth0\t00000000\t{hex_be}\t0003\t0\t0\t100\t00000000\t0\t0\t0")
     assert _parse_proc_route(text) == expected
+
+
+# ---------------------------------------------------------------------------
+# is_cgnat — carrier-grade NAT range detection (100.64.0.0/10)
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize(
+    "ip, expected",
+    [
+        ("100.64.0.1", True),  # bottom of 100.64.0.0/10
+        ("100.127.255.254", True),  # top of the range
+        ("100.128.0.1", False),  # just past the /10 boundary
+        ("100.63.255.255", False),  # just below the range
+        # NOTE: a real LTE failover usually does NOT show up here — Cloudflare's
+        # /cdn-cgi/trace reports the POST-NAT public IP, so the carrier's public
+        # pool address is what we see, not the private 100.64/10 WAN address.
+        # is_cgnat only catches the rarer case where the *observed egress* IP is
+        # itself CGNAT. The egress-IP change-event is the real failover detector.
+        ("8.8.8.8", False),
+        ("192.168.1.1", False),  # RFC1918, not CGNAT
+        ("not-an-ip", False),  # garbage → False, never raises
+        ("", False),
+    ],
+)
+def test_is_cgnat(ip: str, expected: bool):
+    from towerwatch.net import is_cgnat
+
+    assert is_cgnat(ip) is expected
