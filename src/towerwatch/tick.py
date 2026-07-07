@@ -44,6 +44,7 @@ class TickContext:
     scheduler: Any = None
     events: Any = events_mod
     clock: Clock = field(default_factory=_default_clock)
+    gateway_resolver: Any = field(default_factory=lambda: _config.build_gateway_resolver())
 
 
 def _common_tags() -> str:
@@ -75,17 +76,25 @@ def format_build_info_line(
     build_date: str | None = None,
     link_max_download_mbps: int | None = None,
     link_max_upload_mbps: int | None = None,
+    gateway_ip: str | None = None,
 ) -> str:
     """Influx line for the `towerwatch_build_info` Prom gauge.
 
-    `version`, `build_date`, and `link_max_*` are emitted as Influx **tags**
-    (not fields) so Grafana Cloud Prom ingest turns them into metric labels.
-    Tag values are unquoted strings by spec; field string values are not (see
-    the pinned characterization test in test_influx_line_format.py).
+    `version`, `build_date`, `link_max_*`, and `gateway_ip` are emitted as Influx
+    **tags** (not fields) so Grafana Cloud Prom ingest turns them into metric
+    labels. Tag values are unquoted strings by spec; field string values are not
+    (see the pinned characterization test in test_influx_line_format.py).
 
     `link_max_download_mbps` / `link_max_upload_mbps` carry per-site link
     capacity so the dashboard can `label_values()` them into templating
     variables for gauge max + Saturation Golden Signal.
+
+    `gateway_ip` surfaces the *currently resolved* gateway IP so the dashboard
+    shows which IP is being probed — this is the observability half of the
+    frozen-IP fix. It must reflect re-resolution, not just the boot value, or a
+    mid-run gateway change silently diverges from what the dashboard shows. The
+    caller (run_loop) passes the live `GatewayResolver.current()`. A changed IP
+    creates one new build_info series — rare, and itself the visible audit trail.
     """
     v = version if version is not None else _config.BUILD_VERSION
     d = build_date if build_date is not None else _config.BUILD_DATE
@@ -95,13 +104,15 @@ def format_build_info_line(
         else _config.LINK_MAX_DOWNLOAD_MBPS
     )
     lu = link_max_upload_mbps if link_max_upload_mbps is not None else _config.LINK_MAX_UPLOAD_MBPS
+    gw = gateway_ip if gateway_ip is not None else _config.GATEWAY_IP
     return (
         f"{_config.INFLUX_MEASUREMENT},"
         f"{_common_tags()},"
         f"version={v},"
         f"build_date={d},"
         f"link_max_download_mbps={ld},"
-        f"link_max_upload_mbps={lu} "
+        f"link_max_upload_mbps={lu},"
+        f"gateway_ip={gw} "
         f"build_info=1 {ts}"
     )
 
@@ -198,13 +209,36 @@ def update_connection_state(ctx: TickContext, state, connected: bool, timestamp:
     state.connected = connected
 
 
+def handle_gateway_reresolution(ctx: TickContext) -> str:
+    """Re-resolve the gateway (if the cadence has elapsed) and, on a change,
+    emit the `gateway_ip_changed` event. Returns the current gateway IP for the
+    caller to feed into `format_build_info_line` — so the build_info label
+    reflects re-resolution, not just the boot value.
+
+    The event carries old -> new; a change is rare (DHCP renewal / router
+    reboot), so the loki.push in `events.gateway_ip_changed` is within budget.
+    """
+    resolver = ctx.gateway_resolver
+    old_ip = resolver.current()
+    new_ip = resolver.maybe_reresolve()
+    if new_ip is not None and new_ip != old_ip:
+        ctx.events.gateway_ip_changed(ctx.loki, old_ip=old_ip, new_ip=new_ip)
+        return new_ip
+    return old_ip
+
+
 def collect_probes(ctx: TickContext) -> tuple[dict, bool]:
     fields = {}
     now = ctx.clock.time()
 
+    # The gateway IP comes from the live resolver, not the frozen PROBE_TARGETS
+    # snapshot — a re-resolution heals the probe target without a restart.
+    gateway_ip = ctx.gateway_resolver.current()
+
     any_connected = False
     for target_ip, target_label in _config.PROBE_TARGETS:
-        ping = run_ping(target_ip)
+        ip = gateway_ip if target_label == "gateway" else target_ip
+        ping = run_ping(ip)
         any_connected = any_connected or ping["connected"]
         for metric, value in ping.items():
             if metric == "connected":
@@ -218,7 +252,7 @@ def collect_probes(ctx: TickContext) -> tuple[dict, bool]:
     for ns in _config.DNS_TARGETS:
         fields[f"dns_resolve_ms_{ns.replace('.', '_')}"] = measure_dns(ns)
 
-    fields.update(poll_gateway())
+    fields.update(poll_gateway(ip=gateway_ip))
 
     if ctx.scheduler and ctx.scheduler.should_run_http_latency(now):
         fields["http_latency_ms"] = measure_http_latency()

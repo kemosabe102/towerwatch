@@ -40,6 +40,19 @@ def test_service_started_level_and_event():
     assert extra["gateway_ip"] == "10.0.1.1"
 
 
+def test_gateway_ip_changed_level_and_event():
+    """Fires when periodic re-resolution picks up a new gateway IP — a
+    per-state-change event (rare), so loki.push is appropriate. Carries old +
+    new IP so the audit trail shows the transition."""
+    loki = _make_loki()
+    events.gateway_ip_changed(loki, old_ip="192.168.1.1", new_ip="10.0.1.1")
+    level, msg, extra = _pushed(loki)
+    assert level == "WARN"
+    assert extra["event"] == config.LOG_EVENT_GATEWAY_IP_CHANGED
+    assert extra["old_ip"] == "192.168.1.1"
+    assert extra["new_ip"] == "10.0.1.1"
+
+
 def test_connection_down_level_and_event():
     loki = _make_loki()
     events.connection_down(loki)

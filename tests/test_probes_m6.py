@@ -32,6 +32,33 @@ def _ok_resp(data, status=200):
     return FakeResponse(status_code=status, _json=data)
 
 
+def test_poll_m6_signal_ip_rebuilds_url():
+    """poll_m6_signal(ip=...) targets the live gateway IP, not the frozen
+    config.M6_ADMIN_URL — so a re-resolution reaches the M6 poll after a DHCP
+    change / boot-race heal."""
+    from towerwatch.probes import m6 as m6_mod
+
+    captured = {}
+
+    class _CapturingProbe:
+        def __init__(self, url=None, **kw):
+            captured["url"] = url
+
+        def poll(self):
+            return {}
+
+    orig = m6_mod.M6Probe
+    m6_mod.M6Probe = _CapturingProbe
+    # reset the module singleton so our ip is honored
+    m6_mod._shared_probe = None
+    try:
+        m6_mod.poll_m6_signal(ip="10.0.1.1")
+    finally:
+        m6_mod.M6Probe = orig
+        m6_mod._shared_probe = None
+    assert captured["url"] == "http://10.0.1.1/api/model.json"
+
+
 # ---------------------------------------------------------------------------
 # Live-fixture happy path — validate against the standstill capture
 # ---------------------------------------------------------------------------

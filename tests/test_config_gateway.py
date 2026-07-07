@@ -37,3 +37,14 @@ def test_gateway_label_is_stable():
     """Label stays 'gateway' regardless of IP — dashboards/alerts depend on it."""
     labels = [t[1] for t in config.PROBE_TARGETS]
     assert "gateway" in labels
+
+
+def test_build_gateway_resolver_returns_resolver():
+    """config.build_gateway_resolver() yields a GatewayResolver whose current()
+    matches the boot-time GATEWAY_IP — the runtime resolver and the frozen
+    constant agree at startup, then the resolver can diverge as it re-resolves."""
+    from towerwatch.net import GatewayResolver
+
+    r = config.build_gateway_resolver()
+    assert isinstance(r, GatewayResolver)
+    assert r.current() == config.GATEWAY_IP
