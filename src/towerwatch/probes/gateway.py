@@ -95,7 +95,9 @@ class GatewayProbe:
                 from towerwatch.probes.m6 import poll_m6_signal
 
                 self._m6_poll = poll_m6_signal
-            fields.update(self._m6_poll())
+            # Pass the live gateway IP so the M6 poll targets the resolved host,
+            # not the frozen config.M6_ADMIN_URL.
+            fields.update(self._m6_poll(self._ip))
         elif self._vendor == "orbi":
             fields.update(self._probe_orbi())
         return fields
@@ -108,6 +110,11 @@ class GatewayProbe:
 # ---------------------------------------------------------------------------
 # Back-compat module-level function
 # ---------------------------------------------------------------------------
-def poll_gateway() -> dict:
-    """Legacy API. Prefer `GatewayProbe().poll()`."""
-    return GatewayProbe().poll()
+def poll_gateway(ip: str | None = None) -> dict:
+    """Legacy API. Prefer `GatewayProbe().poll()`.
+
+    `ip` overrides the frozen `config.GATEWAY_IP` with the live resolver value so
+    a re-resolution reaches the baseline TCP/HTTP probe and (for cellular sites)
+    the M6 poll — both target the same current gateway.
+    """
+    return GatewayProbe(ip=ip).poll()

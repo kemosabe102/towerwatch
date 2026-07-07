@@ -22,6 +22,7 @@ from towerwatch.tick import (
     format_band_sig_line,
     format_build_info_line,
     format_influx_line,
+    handle_gateway_reresolution,
     push_batch,
     update_connection_state,
 )
@@ -46,11 +47,15 @@ def run_loop(ctx: TickContext, state: RuntimeState) -> None:
         build_date=config.BUILD_DATE,
         platform=sys.platform,
     )
+    # Resolve the gateway at startup with retry so a boot race (config imported
+    # before DHCP installed the default route) can't freeze us on the fallback.
+    # On Windows / with an override this is effectively immediate.
+    startup_gateway_ip = ctx.gateway_resolver.resolve_with_retry()
     events_mod.service_started(
         loki,
         log_level=config.LOKI_PUSH_LEVEL,
         platform=sys.platform,
-        gateway_ip=config.GATEWAY_IP,
+        gateway_ip=startup_gateway_ip,
     )
 
     state.metric_batch.append(format_influx_line({"service_restart": 1}, int(time.time())))
@@ -82,7 +87,10 @@ def run_loop(ctx: TickContext, state: RuntimeState) -> None:
         )
 
         startup_mod.write_marker(Path(config.LAST_ALIVE_MARKER_FILE), time.time())
-        state.metric_batch.append(format_build_info_line(timestamp))
+        # Re-resolve the gateway (heals a frozen-IP boot race live) and surface
+        # the current IP on build_info so the dashboard shows which IP is probed.
+        gateway_ip = handle_gateway_reresolution(ctx)
+        state.metric_batch.append(format_build_info_line(timestamp, gateway_ip=gateway_ip))
         band_sig_line = format_band_sig_line(fields, timestamp)
         if band_sig_line is not None:
             state.metric_batch.append(band_sig_line)

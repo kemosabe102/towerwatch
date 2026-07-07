@@ -402,9 +402,18 @@ class M6Probe:
 _shared_probe: M6Probe | None = None
 
 
-def poll_m6_signal() -> dict:
-    """Back-compat module-level probe. Prefer `M6Probe().poll()`."""
+def poll_m6_signal(ip: str | None = None) -> dict:
+    """Back-compat module-level probe. Prefer `M6Probe().poll()`.
+
+    `ip` overrides the frozen `config.M6_ADMIN_URL` with the live gateway IP so a
+    re-resolution (DHCP change / boot-race heal) reaches the M6 poll. When `ip`
+    is given a fresh probe is built (the cached singleton holds the old URL);
+    without it the singleton is reused as before.
+    """
     global _shared_probe
+    if ip is not None:
+        url = f"http://{ip}/api/model.json"
+        return M6Probe(url=url).poll()
     if _shared_probe is None:
         _shared_probe = M6Probe()
     return _shared_probe.poll()

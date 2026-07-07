@@ -100,6 +100,30 @@ def _resolve_gateway_ip() -> str:
 GATEWAY_IP = _resolve_gateway_ip()
 
 
+def _gateway_override() -> str | None:
+    """The GATEWAY_IP_OVERRIDE from credentials, or None. Authoritative when set."""
+    try:
+        from towerwatch import credentials
+
+        return getattr(credentials, "GATEWAY_IP_OVERRIDE", None) or None
+    except ImportError:
+        return None
+
+
+def build_gateway_resolver():
+    """Construct the runtime GatewayResolver for this site.
+
+    The resolver is the *live* source of the gateway IP: `GATEWAY_IP` /
+    `PROBE_TARGETS` / `M6_ADMIN_URL` are the boot-time snapshot (kept for the
+    pinning tests + startup wiring), but per-tick code reads `resolver.current()`
+    so a re-resolution heals the frozen-IP failure without a restart. When
+    `GATEWAY_IP_OVERRIDE` is set the resolver returns it and never re-resolves.
+    """
+    from towerwatch.net import GatewayResolver
+
+    return GatewayResolver(override=_gateway_override(), fallback="192.168.1.1")
+
+
 def _load_credential(field: str, fallback: str) -> str:
     """Read a string credential with a safe fallback when the file or attribute
     is missing. Used for Prometheus label values that must be stable strings.
@@ -404,6 +428,7 @@ LOG_EVENT_HTTP_UPLOAD_FAILED = "http_upload_failed"
 LOG_EVENT_HEARTBEAT = "service_heartbeat"
 LOG_EVENT_OUTAGE_RECORDED = "outage_recorded"
 LOG_EVENT_ANNOTATION_FAILED = "annotation_push_failed"
+LOG_EVENT_GATEWAY_IP_CHANGED = "gateway_ip_changed"
 
 # --- Heartbeat ---
 HEARTBEAT_INTERVAL_S = 3600  # Emit a WARN-level heartbeat to Loki once per hour

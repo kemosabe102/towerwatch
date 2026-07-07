@@ -112,6 +112,26 @@ def annotation_failed(loki, *, http_status: int | None = None, error: str | None
     loki.push("WARN", "Annotation POST failed", extra)
 
 
+def gateway_ip_changed(loki, *, old_ip: str, new_ip: str) -> None:
+    """Fires when periodic re-resolution picks up a new gateway IP.
+
+    Per-state-change cadence (a DHCP renewal / router reboot is rare), so
+    loki.push is within the data budget. WARN because a gateway change usually
+    means something notable happened to the link — and because the prior frozen
+    value silently produced false 100%-loss + a dead M6 scrape, so an operator
+    should see this transition in the log.
+    """
+    loki.push(
+        "WARN",
+        f"Gateway IP changed {old_ip} -> {new_ip}",
+        {
+            "event": config.LOG_EVENT_GATEWAY_IP_CHANGED,
+            "old_ip": old_ip,
+            "new_ip": new_ip,
+        },
+    )
+
+
 def log_buffer_flushed(loki, *, count: int) -> None:
     loki.push(
         "INFO",

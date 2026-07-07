@@ -95,11 +95,13 @@ def test_m6_vendor_delegates_via_injected_callable():
         socket_factory=fake_socket_factory(),
         requests_get=_recording_get([_http_ok()]),
         clock=FakeClock(perf=[0.0, 0.005, 0.0, 0.010]),
-        m6_poll=lambda: {"m6_rsrp": -85, "m6_rsrq": -12},
+        # m6_poll now receives the gateway IP so re-resolution reaches the M6 poll.
+        m6_poll=lambda ip: {"m6_rsrp": -85, "m6_rsrq": -12, "m6_polled_ip": ip},
     )
     result = probe.poll()
     assert result["m6_rsrp"] == -85
     assert result["m6_rsrq"] == -12
+    assert result["m6_polled_ip"] == "192.168.1.1"  # probe's ip flows to M6 poll
     assert "gateway_tcp_ms" in result
 
 

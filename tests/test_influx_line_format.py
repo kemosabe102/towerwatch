@@ -167,6 +167,27 @@ def test_build_info_line_uses_config_defaults():
     assert f"link_max_upload_mbps={config.LINK_MAX_UPLOAD_MBPS}" in line
 
 
+def test_build_info_line_emits_gateway_ip_tag():
+    """The resolved gateway IP rides on build_info as a tag so the dashboard shows
+    which IP is being probed — the frozen-IP failure becomes visible instead of
+    silent. The IP is kept literal (dots are legal in Influx tag values and in
+    Prometheus label *values*), matching how build_date keeps its ':'/'-'."""
+    from towerwatch.tick import format_build_info_line
+
+    line = format_build_info_line(ts=1700000000, gateway_ip="10.0.1.1")
+    tag_section = line.split(" ", 1)[0]
+    assert "gateway_ip=10.0.1.1" in tag_section
+
+
+def test_build_info_line_defaults_gateway_ip_from_config():
+    """Omitting gateway_ip falls back to config.GATEWAY_IP (the resolved value)."""
+    from towerwatch import config
+    from towerwatch.tick import format_build_info_line
+
+    line = format_build_info_line(ts=1700000000)
+    assert f"gateway_ip={config.GATEWAY_IP}" in line
+
+
 def test_load_int_credential_handles_missing_field():
     """Defensive: credentials.py without the new override fields must not crash.
     Older Pis on a previous deploy lack HTTP_THROUGHPUT_BYTES_OVERRIDE etc.;
