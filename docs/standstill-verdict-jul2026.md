@@ -156,8 +156,10 @@ M6 plan screenshots arrive:
 under load; loss is contention-shaped; and the live Monday-evening retest (~11 Mbps, upload
 > download) is the wrong shape for a hard throttle and shows the holiday floor has partly
 lifted. Plan-throttle is now **unlikely** (not merely unresolved). The overnight latency
-recovery plus the live-retest asymmetry are the two strongest pieces of evidence, both
-pointing away from a hard throttle. Final confirmation still waits on the M6 plan.
+recovery plus the live-retest recovery to ~11 Mbps are the two strongest pieces of evidence,
+both pointing away from a hard throttle (the upload>download asymmetry is congestion-linked
+and corroborates but doesn't independently prove it). Final confirmation still waits on the
+M6 plan.
 
 ---
 
@@ -183,10 +185,16 @@ The download<upload asymmetry is consistent across all three runs.
 - **Not** pinned at 0.5–3 Mbps → clearly above the Jul 3–5 holiday floor (~4× the 0.6–1.2
   Mbps seen then). So the July 4 collapse **was substantially holiday congestion** — it has
   partly lifted on a normal Monday.
-- **Upload (16–18) > download (11).** A classic post-allotment hotspot **throttle caps the
-  downlink hard** (600 Kbps–3 Mbps) — an *upload-faster-than-download* result is the
-  opposite signature. This points away from plan throttle (f) and toward **downlink
-  congestion / capacity limiting** that persists at moderate levels even off-peak.
+- **Upload (16–18) > download (11).** A classic post-allotment hotspot throttle caps the
+  downlink hard (600 Kbps–3 Mbps), so an upload-faster-than-download result is the *opposite*
+  of that signature — **consistent with, not proof of, "no throttle."** The same inversion
+  can come from asymmetric congestion (downlink is the contended direction on a busy cell, so
+  it suffers first), which looks similar. **Firming check (archive):** the M6-link inversion
+  appears *only* in the congested/collapsed runs (Jul 2 evening, Jul 3 midday), never when the
+  link was healthy (Jul 2 06:15 → 56 DL > 42 UL); and the phone's download exceeds upload in
+  the quiet 02–06 window (DL ~39–55 > UL ~33–35). So the inversion is **congestion-linked, not
+  a plan/link characteristic** — it points the same direction as the verdict (congestion) but
+  does not independently kill the throttle hypothesis. That still needs the M6 plan.
 
 **Provisional verdict shift:** hypothesis (f) hard-throttle is **weakened further** — the
 link isn't floored on a normal evening, and the asymmetry is wrong for a throttle. The
