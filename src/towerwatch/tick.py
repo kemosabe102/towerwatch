@@ -237,13 +237,40 @@ def handle_gateway_reresolution(ctx: TickContext) -> str:
     return old_ip
 
 
-def handle_egress_check(ctx: TickContext, state) -> str:
+@dataclass(frozen=True)
+class EgressCheckResult:
+    """Outcome of an egress check, split by Influx role.
+
+    `ip` is a build_info **tag** (a label — high-cardinality-safe here because it
+    changes only on failover); `fields` are metric **fields** merged into the
+    per-tick line. Two roles, two destinations — hence not one dict. A named
+    result rather than a bare tuple: the call site unpacks by attribute, so the
+    two can't be silently swapped.
+    """
+
+    ip: str
+    fields: dict
+
+
+def _held_egress(state) -> EgressCheckResult:
+    """The no-new-reading result: hold both values from state.
+
+    Emitting the held `egress_cgnat` on *every* tick (not just check ticks) is
+    deliberate — it makes the series continuous and plottable, per the invariant
+    in CLAUDE.md. `None` (no reading yet) omits the field entirely rather than
+    fabricating a 0, mirroring the `egress_ip` tag being omitted when unknown.
+    """
+    fields = {} if state.last_egress_cgnat is None else {"egress_cgnat": state.last_egress_cgnat}
+    return EgressCheckResult(ip=state.last_egress_ip, fields=fields)
+
+
+def handle_egress_check(ctx: TickContext, state) -> EgressCheckResult:
     """Run the scheduled egress-IP check; on a real change emit the change-event.
 
-    Returns the current egress IP for `format_build_info_line` — held on
-    `state.last_egress_ip` between scheduled checks so the build_info label is
-    stable every tick (and "" until the first successful check → the tag is
-    omitted). Mirrors `handle_gateway_reresolution`.
+    Returns the current egress IP (for `format_build_info_line`) plus the metric
+    fields (for `format_influx_line`) — both held on `state` between scheduled
+    checks so build_info's label and the `egress_cgnat` series are stable every
+    tick. Mirrors `handle_gateway_reresolution`.
 
     First-observation guard: `state.last_egress_ip == ""` (fresh process / restart)
     → set the value, do NOT fire an event. "" -> X is initialization, not a change.
@@ -251,13 +278,13 @@ def handle_egress_check(ctx: TickContext, state) -> str:
     a transient miss can't fabricate a change.
     """
     if not _config.EGRESS_IP_CHECK_ENABLED:
-        return state.last_egress_ip
+        return _held_egress(state)
     if not (ctx.scheduler and ctx.scheduler.should_run_egress_ip(ctx.clock.time())):
-        return state.last_egress_ip
+        return _held_egress(state)
     result = measure_egress()
     new_ip = result.get("egress_ip")
     if not new_ip:  # fetch failure / no ip= → keep the held value, no event
-        return state.last_egress_ip
+        return _held_egress(state)
     old_ip = state.last_egress_ip
     if old_ip and new_ip != old_ip:  # real change (guard excludes "" -> X)
         ctx.events.egress_ip_changed(
@@ -268,7 +295,10 @@ def handle_egress_check(ctx: TickContext, state) -> str:
             colo=result.get("egress_colo", ""),
         )
     state.last_egress_ip = new_ip
-    return new_ip
+    cgnat = result.get("egress_cgnat")
+    if cgnat is not None:
+        state.last_egress_cgnat = int(cgnat)
+    return _held_egress(state)
 
 
 def collect_probes(ctx: TickContext) -> tuple[dict, bool]:

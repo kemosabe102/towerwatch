@@ -34,6 +34,11 @@ class RuntimeState:
     # build_info label is stable every tick. "" = no reading yet (first check /
     # process restart); the change-detector treats "" -> X as init, not a change.
     last_egress_ip: str = ""
+    # Last-seen CGNAT verdict for that IP (0/1), held on the same cadence so the
+    # metric series is continuous rather than one sample per check interval.
+    # None = no reading yet → the field is omitted rather than sent as a
+    # fabricated 0 ("unknown" must not read as "confirmed not CGNAT").
+    last_egress_cgnat: int | None = None
 
 
 def configure_logging() -> None:

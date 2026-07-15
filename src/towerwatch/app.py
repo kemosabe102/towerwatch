@@ -93,9 +93,12 @@ def run_loop(ctx: TickContext, state: RuntimeState) -> None:
         gateway_ip = handle_gateway_reresolution(ctx)
         # Egress-IP / failover check (scheduled, low cadence); surfaces the public
         # IP on build_info + fires a change-event on a flip (LTE-failover signal).
-        egress_ip = handle_egress_check(ctx, state)
+        # The IP is a build_info tag; egress_cgnat is a metric field on this tick's
+        # line — both held between checks so each series stays continuous.
+        egress = handle_egress_check(ctx, state)
+        fields.update(egress.fields)
         state.metric_batch.append(
-            format_build_info_line(timestamp, gateway_ip=gateway_ip, egress_ip=egress_ip)
+            format_build_info_line(timestamp, gateway_ip=gateway_ip, egress_ip=egress.ip)
         )
         band_sig_line = format_band_sig_line(fields, timestamp)
         if band_sig_line is not None:
