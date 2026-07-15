@@ -246,6 +246,11 @@ class EgressCheckResult:
     per-tick line. Two roles, two destinations — hence not one dict. A named
     result rather than a bare tuple: the call site unpacks by attribute, so the
     two can't be silently swapped.
+
+    `frozen=True` prevents rebinding the attributes; it does NOT deep-freeze
+    `fields`. Callers must treat that dict as read-only (the one call site copies
+    out of it via `dict.update`). `_held_egress` builds a fresh dict per call, so
+    no instance is shared across ticks.
     """
 
     ip: str

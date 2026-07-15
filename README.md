@@ -23,6 +23,7 @@ A continuous network-quality probe for a Raspberry Pi. Ships latency, jitter, pa
 | [`docs/design.md`](docs/design.md) | Per-component code reference (functions, config tables, error patterns) |
 | [`docs/bench-tests.md`](docs/bench-tests.md) | Failure-mode bench test catalog |
 | [`docs/dashboard-sync.md`](docs/dashboard-sync.md) | Auto-sync `grafana/*.json` to Grafana Cloud from CI — token setup |
+| [`docs/standstill-throughput-evidence-jul2026.md`](docs/standstill-throughput-evidence-jul2026.md) | **Shareable evidence pack** — the July 2026 download-throughput collapse + recovery, with the radio exonerated |
 | [`docs/phone-compare.md`](docs/phone-compare.md) | Phone-vs-hotspot cellular comparison over ADB — congestion/deprioritization test |
 | [`docs/phone-rf-logger.md`](docs/phone-rf-logger.md) | Android RF logger companion app (separate repo) — per-cell RSRP/NR/neighbors/CA |
 | [`pi/bench/README.md`](pi/bench/README.md) | Bench harness quick-start — prerequisites, running, adding tests |
