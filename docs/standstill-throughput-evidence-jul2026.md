@@ -10,6 +10,10 @@ LTE-only by configuration. Continuously instrumented by a Raspberry Pi running
 — 40 metrics at 60-second resolution, exported to CSV before Grafana Cloud's 14-day
 retention expired. **Every number in this document is re-derivable from those files.**
 
+**Last updated:** 2026-07-15. Links point into the
+[towerwatch repository](https://github.com/kemosabe102/towerwatch); if you're reading this
+as a standalone file and want the underlying CSVs, ask and they can be sent directly.
+
 ---
 
 ## Summary
@@ -25,8 +29,11 @@ Three things make this worth attention:
 1. **The radio did not change.** Signal quality was statistically identical across both
    periods — same tower, same frequency band, same signal-to-noise ratio, same transmit
    power, same temperature. Whatever changed, it was not the airlink.
-2. **Upload was unaffected.** Upload held steady at ~24–25 Mbps throughout, in both
-   periods. Only download collapsed.
+2. **Upload held steady — only download collapsed.** Upload ran at ~24–25 Mbps before
+   and after the slow period, a difference of about 5%. It could not be measured *inside*
+   the deepest stretch (the download was slow enough to exhaust the test's time limit
+   before the upload leg started — see [limitation 2](#known-gaps-and-limitations)), so
+   the claim rests on the measurements bracketing the trough, not on ones taken within it.
 3. **It was not time-of-day congestion.** During the slow period *every* time of day was
    slow — including 6 AM. During the recovered period *every* time of day is fast. The
    pattern follows the calendar, not the clock.
@@ -54,9 +61,12 @@ Some analogies, since the underlying physics is shared:
 
 The headline finding in ham terms: **the S-meter never moved and the noise floor never
 moved, but the throughput dropped 33×**. If your S/N is unchanged at 15 dB and the path
-is identical, but you suddenly can't pass traffic — the problem is not propagation, not
-the antenna, and not the radio. It is something upstream deciding how much of the pipe
-you get.
+is identical, but you suddenly can't pass traffic, the problem is not propagation, not
+the antenna, and not the radio — it is above the RF layer.
+
+Worth noting for calibration: this is a *fixed* installation. No one moved the antenna,
+changed the feedline, or retuned anything between the two periods. The equipment sat in
+the same place doing the same thing.
 
 ---
 
@@ -106,9 +116,11 @@ apart, with no configuration change, no reboot, and no equipment touched.
 
 ---
 
-## 2. Upload was not affected — only download
+## 2. Upload held steady around the trough — only download collapsed
 
-This is the most diagnostically specific finding in the dataset.
+This is the most diagnostically specific finding in the dataset. Note the scope: upload is
+measured on the days either side of the deep trough, not within it
+([limitation 2](#known-gaps-and-limitations)).
 
 | Period | Median **upload** | n |
 |---|---|---|
@@ -210,7 +222,6 @@ The pattern tracks the **calendar**, not the clock.
 |---|---|---|
 | **The Pi, the cable, the LAN** | Local network is 100× faster than the internet path | Gateway round-trip **1–2 ms** vs internet round-trip **359–440 ms**. The link from the Pi to the hotspot is not the constraint. |
 | **Thermal throttling of the hotspot** | Device never reported thermal stress | Temperature ranged **53–69 °C** across the window (median 58 slow era / 59 recovered — a 1 °C difference); `thermal_state` reported **Normal (0)** at every one of 15,735 samples, never once escalating. |
-| **Our own monitoring using the data allowance** | Probe traffic is a rounding error | Probes consumed **4.68 GB over 14 days** — against a 30 GB/month site allotment and a ~100 GB usage tier. |
 | **Moving between towers / cell reselection** | Static serving cell | Band 66, PCI 81, eNB 1403 at **99.9%** of 15,735 samples. |
 | **Losing carrier aggregation** | Spectrum unchanged | **2 carriers / 30 MHz** median in both eras. |
 | **5G attach/drop flapping** | Link is LTE-only by design | `nr5g_attached` = **0** at all 15,735 samples; `service_type` = **3 (LTE)** with zero variance; `lte_attached` = **1** throughout. This is a deliberate configuration choice made in the hotspot's admin UI (5G was disabled because attach/drop cycling made the connection unreliable), **not** a fault or a coverage gap. |
@@ -233,8 +244,8 @@ The pattern tracks the **calendar**, not the clock.
 | Packet loss | 0.0% | 0.0% |
 
 Latency improved ~20–35% between the eras — real, but nowhere near the 5.2× download
-change. Both eras have high absolute latency (359 ms is poor for a fixed link); that is a
-separate, ongoing characteristic of this connection and not what this document is about.
+change. Both eras show high absolute latency (359 ms is poor for a fixed link) — a separate,
+ongoing characteristic of this connection, out of scope here.
 
 *Source: `standstill__rtt_avg_google.csv`, `standstill__http_latency_ms.csv`,
 `standstill__rtt_avg_gateway.csv`, `standstill__pkt_loss_google.csv`*
@@ -243,20 +254,19 @@ separate, ongoing characteristic of this connection and not what this document i
 
 ## 7. Corroborating event
 
-An automatically-recorded outage annotation, stored separately from the metrics (and so
-not subject to the same retention window):
+An automatically-recorded outage annotation:
 
 ```
   2026-07-03 13:31   Outage: 68 min — network_unreachable
 ```
 
-This sits directly at the onset of the deep trough: the last normal-ish run was **Jul 3
-12:05 (9.06 Mbps)**, and the first trough run was **Jul 3 16:13 (1.12 Mbps)**. The 68-minute
-total loss of connectivity falls between them.
+This sits directly at the onset of the deep trough — the last normal-ish run was **Jul 3
+12:05 (9.06 Mbps)** and the first trough run was **Jul 3 16:13 (1.12 Mbps)**, with the
+68-minute connectivity loss falling between them.
 
-This is **temporal correlation, not causation** — the annotation records that connectivity
-dropped, not why, and a 68-minute outage does not by itself explain a subsequent 3-day
-throughput floor.
+Included for completeness, but it is **weak evidence**: this is temporal correlation only.
+The annotation records *that* connectivity dropped, not why, and a 68-minute outage does not
+by itself explain a subsequent 3-day throughput floor.
 
 ---
 
@@ -310,6 +320,10 @@ network behaviour.
 seconds. These are the modem's own reported values — the same numbers the hotspot's status
 page shows.
 
+**Monitoring's own data use.** The probes consumed **4.68 GB over the 15-day window**
+(measured, not estimated) — against a 30 GB/month budget for the site. The monitoring is
+not itself a meaningful consumer of the line's allowance.
+
 **Retention.** Grafana Cloud's free tier retains 14 days. Verified by probe: data 13 days
 old returns samples; 14 days old returns nothing. The July 3–6 trough was 9–12 days old at
 export time and would have aged out within ~1–2 days. This is why the CSV archive exists,
@@ -334,16 +348,9 @@ python scripts/export_archive.py --host standstill \
     --out data-archive/standstill-jul2026/jul01_15_throttle
 ```
 
-**A naming trap, for anyone re-deriving these figures against the live system.** Scheduled
-throughput lands in Prometheus as `towerwatch_http_throughput_mbps` and
-`towerwatch_http_upload_mbps`. It does **not** land as `download_mbps` (a name that exists
-in the source but never reaches Prometheus) or `speedtest_download_mbps` (which is only
-emitted by the manually-triggered CLI path). Querying the wrong name returns an empty
-result that looks exactly like "no data."
-
-**Step size matters.** A 30-day range query at 1-hour steps returns 5 of the throughput
-points; the same data at 5-minute steps over 14 days returns 45. Prometheus range queries
-sample rather than aggregate, so a coarse step silently hides sparse events like these.
+(Re-deriving these figures against the live Grafana instance rather than the CSVs has two
+known traps — metric naming and query step size. Both are documented in the repo's
+`CLAUDE.md`. Working from the committed CSVs avoids both.)
 
 ---
 
@@ -389,6 +396,21 @@ Stated plainly, because a reader should be able to check them:
 6. **The 0.00 Mbps reading on Jul 5 04:18** is a run that failed outright rather than a
    measurement of zero throughput. It is excluded from the medians (which use only non-zero
    samples).
+
+7. **The billing-cycle date for this line is not known to us**, and it matters. One of the
+   two candidate explanations is an allotment throttle that expired — if the cycle boundary
+   fell between July 6 and July 8, that would be a striking coincidence worth investigating;
+   if it fell nowhere near, the throttle hypothesis weakens considerably. This is one of the
+   few relevant facts that *is* visible from the customer side (it's on the account page),
+   and it simply hasn't been checked against this window. **It should be, before anyone
+   concludes anything.**
+
+8. **It is unknown whether this has happened before.** Monitoring at this site does not
+   reach back beyond the retention window, so there is no way to tell from this data whether
+   the July 3–6 collapse is a one-off or part of a recurring monthly pattern. A recurring
+   pattern aligned to billing cycles would itself be strong evidence — independent of any
+   carrier records — but proving or excluding it requires several months of continuous
+   monitoring, which now exists going forward but did not then.
 
 ---
 
